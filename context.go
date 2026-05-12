@@ -341,7 +341,7 @@ func resolveFamilyAlias(fam string) string {
 	var aliases []string
 	switch runtime.GOOS {
 	case "darwin":
-		aliases = []string{"SF Pro Display", "System Font"}
+		aliases = []string{"SF Pro", "System Font"}
 	case "windows":
 		aliases = []string{"Segoe UI"}
 	default:
