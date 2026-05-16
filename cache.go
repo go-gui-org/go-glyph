@@ -1,3 +1,5 @@
+//go:build !darwin || glyph_pango
+
 package glyph
 
 import "container/list"

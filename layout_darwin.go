@@ -308,7 +308,8 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 	cfg TextConfig,
 	overrides map[int]charFontOverride) Layout {
 
-	ascent, descent, _ := baseFont.metrics()
+	bm := ctx.fontMetrics(cfg.Style, baseFont)
+	ascent, descent := bm.ascent, bm.descent
 	lineHeight := ascent + descent
 	pixelScale := 1.0 / float64(ctx.scaleFactor)
 

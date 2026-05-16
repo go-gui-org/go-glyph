@@ -32,7 +32,7 @@ import (
 type Context struct {
 	scaleFactor float32
 	scaleInv    float32
-	metrics     metricsCache
+	metrics     ctMetricsCache
 }
 
 // NewContext creates an iOS text context.
@@ -43,13 +43,13 @@ func NewContext(scaleFactor float32) (*Context, error) {
 	return &Context{
 		scaleFactor: scaleFactor,
 		scaleInv:    1.0 / scaleFactor,
-		metrics:     newMetricsCache(256),
+		metrics:     newCTMetricsCache(32),
 	}, nil
 }
 
 // Free releases resources.
 func (ctx *Context) Free() {
-	ctx.metrics = metricsCache{}
+	ctx.metrics = ctMetricsCache{}
 }
 
 // ScaleFactor returns the DPI scale factor.
@@ -65,35 +65,66 @@ func (ctx *Context) AddFontFile(path string) error {
 	return nil
 }
 
-// FontHeight returns ascent + descent in logical pixels.
-func (ctx *Context) FontHeight(cfg TextConfig) (float32, error) {
-	font := newCTFont(cfg.Style, ctx.scaleFactor)
+// fontMetrics returns cached ascent/descent/leading for the given
+// style+font in raw Core Text units. On cache miss, queries the
+// CTFont and stores the result. Keying on resolved style params (not
+// the CTFontRef pointer) keeps the cache correct across font
+// create/close cycles that may reuse pointer addresses.
+// Use metricsForStyle when no CTFont has been created yet.
+func (ctx *Context) fontMetrics(style TextStyle, font ctFont) ctFontMetrics {
+	family, size, bold, italic := resolveCTFontParams(style, ctx.scaleFactor)
+	key := ctMetricsKey{family: family, size: size, bold: bold, italic: italic}
+	if m, ok := ctx.metrics.get(key); ok {
+		return m
+	}
+	a, d, l := font.metrics()
+	m := ctFontMetrics{ascent: a, descent: d, leading: l}
+	ctx.metrics.put(key, m)
+	return m
+}
+
+// metricsForStyle returns cached font metrics, creating a temporary CTFont
+// only on cache miss. Avoids the CGo newCTFont allocation on cache hits.
+func (ctx *Context) metricsForStyle(style TextStyle) (ctFontMetrics, error) {
+	family, size, bold, italic := resolveCTFontParams(style, ctx.scaleFactor)
+	key := ctMetricsKey{family: family, size: size, bold: bold, italic: italic}
+	if m, ok := ctx.metrics.get(key); ok {
+		return m, nil
+	}
+	font := newCTFont(style, ctx.scaleFactor)
 	if font.ref == 0 {
-		return 0, fmt.Errorf("failed to create CTFont")
+		return ctFontMetrics{}, fmt.Errorf("failed to create CTFont")
 	}
 	defer font.close()
+	a, d, l := font.metrics()
+	m := ctFontMetrics{ascent: a, descent: d, leading: l}
+	ctx.metrics.put(key, m)
+	return m, nil
+}
 
-	ascent, descent, _ := font.metrics()
-	return float32(ascent+descent) / ctx.scaleFactor, nil
+// FontHeight returns ascent + descent in logical pixels.
+func (ctx *Context) FontHeight(cfg TextConfig) (float32, error) {
+	m, err := ctx.metricsForStyle(cfg.Style)
+	if err != nil {
+		return 0, err
+	}
+	return float32(m.ascent+m.descent) / ctx.scaleFactor, nil
 }
 
 // FontMetrics returns detailed metrics in logical pixels.
 func (ctx *Context) FontMetrics(cfg TextConfig) (TextMetrics, error) {
-	font := newCTFont(cfg.Style, ctx.scaleFactor)
-	if font.ref == 0 {
-		return TextMetrics{}, fmt.Errorf("failed to create CTFont")
+	m, err := ctx.metricsForStyle(cfg.Style)
+	if err != nil {
+		return TextMetrics{}, err
 	}
-	defer font.close()
-
-	ascent, descent, leading := font.metrics()
 	sf := float64(ctx.scaleFactor)
-	asc := float32(ascent / sf)
-	dsc := float32(descent / sf)
+	asc := float32(m.ascent / sf)
+	dsc := float32(m.descent / sf)
 	return TextMetrics{
 		Ascender:  asc,
 		Descender: dsc,
 		Height:    asc + dsc,
-		LineGap:   float32(leading / sf),
+		LineGap:   float32(m.leading / sf),
 	}, nil
 }
 

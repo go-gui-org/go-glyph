@@ -34,73 +34,35 @@ entries (`term/widget.go` `flushRun`). That cut roughly 25% of
 glyph-quad allocations but did nothing for these per-miss costs — the
 miss path itself is the bottleneck.
 
-### Where
+### Status: Darwin — DONE (2026-05-16)
 
-Darwin (highest leverage — most users today):
+Both fixes landed. Uncommitted as of this writing.
 
-- `coretext_types_darwin.go:283` — `ctFont.metrics()` calls into
-  cgo `ctFontGetMetrics` every invocation. Result is a pure function
-  of the `CTFontRef`, which is owned by a `ctFont` value that already
-  lives in a context cache. Memoize on the `ctFont` (or on the cgo
-  ref). The triple `(ascent, descent, leading)` is three `float64`s —
-  a four-word struct.
-- `coretext_types_darwin.go:334` — `parseFamilyFromFontName(name)`
-  is allocation-heavy via `strings.Fields` and `strings.ToLower` in
-  the style-word loop. Same input (`style.FontName`) on every call
-  for a given session.
-- `coretext_types_darwin.go:312` — `parseSizeFromFontName(name)`
-  also calls `strings.Fields`. Same input each call.
-- `coretext_types_darwin.go:289` — `resolveFontFamilyDarwin(fontName)`
-  is the outer wrapper that calls `parseFamilyFromFontName`. Called
-  from `resolveCTFontParams` at line 156, which is in the layout hot
-  path.
+**Fix 1 — font-name parse cache** (`coretext_types_darwin.go`):
+Package-level `fontNameParseCache map[string]parsedFontName` guarded
+by `fontNameParseMu sync.RWMutex`. Hot path is an RLock map read —
+zero allocations. Bounded at 512 entries; overflow is silently dropped
+(set is tiny in practice). `lookupParsedFontName` replaces the
+per-call `parseFamilyFromFontName` + `parseSizeFromFontName` +
+`strings.ToLower` chain throughout `resolveCTFontParams`.
+Cache is process-wide (not per-Context) — faster and safe because the
+parse is a pure function of the font name string.
 
-Existing infra to lean on:
+**Fix 2 — metrics cache** (`cache_darwin.go`, `context_darwin.go`):
+New `ctMetricsCache` keyed by `ctMetricsKey{family, size, bold, italic}`
+(resolved params, not CTFontRef pointer — correct across font
+create/close cycles). Capacity 32, drop-one-on-overflow policy.
+`Context.fontMetrics` and `Context.metricsForStyle` wrap the cache;
+`metricsForStyle` avoids the `newCTFont` CGo call entirely on cache
+hits. Old `metricsCache` (LRU, `uint64`-keyed) is now build-tagged
+`!darwin || glyph_pango`; darwin uses `ctMetricsCache` exclusively.
 
-- `cache.go` defines an LRU `metricsCache` keyed by `uint64`.
-  `context_darwin.go:35` *already declares* `metrics metricsCache` on
-  the darwin Context. It is initialized in `newContext` (line 52) but
-  appears to never be read on darwin — confirm with
-  `grep -n 'ctx\.metrics\.' *_darwin.go layout_darwin.go`. Wire it in.
-
-Other platforms (lower priority but same shape):
-
-- `context_wasm.go:103,109` — same `parseSizeFromFontName` /
-  `parseFamilyFromFontName` per call.
-- `context_android.go:26` — `metrics metricsCache` declared, same
-  question of whether it's wired.
-- `freetype_types_android.go:247,318` — equivalent FreeType path.
-
-### Sketch
-
-Two independent fixes; each can land separately.
-
-**Fix 1 — memoize font-name parsing on `TextStyle.FontName`.**
-
-The parse output is `(family string, size float32)` plus style flags.
-A `map[string]parsedFontName` (or `sync.Map` if contention matters,
-which it shouldn't — these are mostly main-thread) on the `Context`
-keyed by raw `FontName`. The map will hold a handful of entries even
-for long sessions. Place the cache near `resolveCTFontParams` so it
-covers both `parseFamilyFromFontName` and `parseSizeFromFontName` in
-one lookup.
-
-Test plan: existing `coretext_types_darwin_test.go` exercises
-`parseFamilyFromFontName` directly — keep those passing. Add a
-benchmark that calls `resolveCTFontParams` in a tight loop with a
-fixed `TextStyle` and assert zero allocs after warm-up.
-
-**Fix 2 — wire `ctx.metrics` cache into `ctFont.metrics`.**
-
-Key the cache by `ctFont.ref` (CTFontRef is a pointer-sized handle
-suitable for `uint64`). On miss, call `ctFontGetMetrics`; on hit,
-return the stored triple. Cache capacity in `newContext` already
-exists — confirm it's non-zero; if it is hard-coded to 0, set a small
-positive default (16–32 is plenty).
-
-Test plan: `context_test.go:53` (`TestFontMetrics`) already exercises
-the metrics path. Add a benchmark that calls `FontMetrics` repeatedly
-with the same cfg and assert zero allocs after warm-up.
+**Resolved questions:**
+- `ctx.metrics` was declared but unwired on darwin — now wired via the
+  new `ctMetricsCache` type.
+- Font-name parse cache is package-level (process-wide), not per-Context.
+- Eviction policy: cap at 512 with silent drop for parse cache; cap at
+  32 with drop-one for metrics cache.
 
 ### Expected impact
 
@@ -118,13 +80,16 @@ place. Steady-state per-frame heap should be dominated by
   quad struct. That's a different problem (pool the structs in the
   backend), outside go-glyph's scope.
 
-### Unresolved
+### Other platforms — TODO if profiling shows the same shape
 
-- Confirm the `metrics` field on `Context` is unused on darwin (the
-  grep above) rather than wired through a path I missed.
-- Decide whether the font-name parse cache lives on `Context` (per
-  session) or as a package-level `sync.Map` (process-wide). Per-
-  context is safer for tests that build many contexts; package-level
-  is slightly faster.
-- Pick the eviction policy for the font-name parse cache. The set is
-  small; a plain `map` with no eviction is probably fine.
+The same two fixes apply to wasm and android if heap profiles show
+equivalent hot spots. Darwin is done; apply only if measured.
+
+- `context_wasm.go:103,109` — `parseSizeFromFontName` /
+  `parseFamilyFromFontName` per call. Same package-level parse-cache
+  pattern applies.
+- `context_android.go` — `metrics metricsCache` declared; confirm
+  whether wired. `freetype_types_android.go:247,318` has the equivalent
+  FreeType metrics path.
+
+Don't preemptively port — measure first.

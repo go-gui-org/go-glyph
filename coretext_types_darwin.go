@@ -142,8 +142,82 @@ static CTFontRef ctApplyVariationAxes(CTFontRef base,
 import "C"
 import (
 	"strings"
+	"sync"
 	"unsafe"
 )
+
+// parsedFontName memoizes one Pango-style font-name parse.
+// resolvedFamily is post-alias-mapping, ready for CTFontCreateWithName.
+// hasBold / hasItalic capture the embedded " bold" / " italic" hints
+// that drive the trait override at the bottom of resolveCTFontParams.
+type parsedFontName struct {
+	resolvedFamily string
+	size           float32
+	hasBold        bool
+	hasItalic      bool
+}
+
+// fontNameParseCacheMax caps the number of entries in fontNameParseCache.
+// Prevents unbounded growth when callers supply many unique dynamic font names.
+const fontNameParseCacheMax = 512
+
+// fontNameParseCache memoizes parsedFontName by raw TextStyle.FontName.
+// Terminal-style workloads churn one or two unique font names per
+// session; reads use RLock and stay allocation-free.
+var (
+	fontNameParseMu    sync.RWMutex
+	fontNameParseCache = map[string]parsedFontName{}
+)
+
+// lookupParsedFontName returns the cached parse for name, computing
+// and storing it on first miss. Hot path is the RLock'd map read —
+// zero allocations.
+func lookupParsedFontName(name string) parsedFontName {
+	fontNameParseMu.RLock()
+	p, ok := fontNameParseCache[name]
+	fontNameParseMu.RUnlock()
+	if ok {
+		return p
+	}
+	p = computeParsedFontName(name)
+	fontNameParseMu.Lock()
+	if len(fontNameParseCache) < fontNameParseCacheMax {
+		fontNameParseCache[name] = p
+	}
+	fontNameParseMu.Unlock()
+	return p
+}
+
+func computeParsedFontName(name string) parsedFontName {
+	family := parseFamilyFromFontName(name)
+	p := parsedFontName{
+		resolvedFamily: resolveDarwinSystemFamily(family),
+		size:           parseSizeFromFontName(name),
+	}
+	lower := strings.ToLower(name)
+	p.hasBold = strings.Contains(lower, " bold")
+	p.hasItalic = strings.Contains(lower, " italic")
+	return p
+}
+
+// resolveDarwinSystemFamily maps generic Pango family names (sans,
+// serif, monospace, …) to their macOS/iOS counterparts. Called once
+// per unique fontName via the parse cache.
+func resolveDarwinSystemFamily(family string) string {
+	if family == "" {
+		return ".AppleSystemUIFont"
+	}
+	switch strings.ToLower(family) {
+	case "sans", "sans-serif", "system":
+		return ".AppleSystemUIFont"
+	case "serif":
+		return "New York"
+	case "monospace", "mono":
+		return "SF Mono"
+	default:
+		return family
+	}
+}
 
 // ctFont wraps a CTFontRef with a Go-friendly interface.
 type ctFont struct {
@@ -153,11 +227,12 @@ type ctFont struct {
 func resolveCTFontParams(style TextStyle, scaleFactor float32) (
 	family string, size float64, bold, italic bool,
 ) {
-	family = resolveFontFamilyDarwin(style.FontName)
+	parsed := lookupParsedFontName(style.FontName)
+	family = parsed.resolvedFamily
 
 	rawSize := style.Size
 	if rawSize <= 0 {
-		rawSize = parseSizeFromFontName(style.FontName)
+		rawSize = parsed.size
 	}
 	if rawSize <= 0 {
 		rawSize = 16
@@ -169,11 +244,10 @@ func resolveCTFontParams(style TextStyle, scaleFactor float32) (
 	italic = style.Typeface == TypefaceItalic ||
 		style.Typeface == TypefaceBoldItalic
 
-	lower := strings.ToLower(style.FontName)
-	if !bold && strings.Contains(lower, " bold") {
+	if !bold && parsed.hasBold {
 		bold = true
 	}
-	if !italic && strings.Contains(lower, " italic") {
+	if !italic && parsed.hasItalic {
 		italic = true
 	}
 
@@ -197,6 +271,10 @@ func newCTFont(style TextStyle, scaleFactor float32) ctFont {
 	return ctFont{ref: ref}
 }
 
+// maxFontFeatures caps the number of OpenType features or variation axes
+// accepted per font to bound CGo allocation and processing time.
+const maxFontFeatures = 64
+
 // applyOpenTypeFeatures applies user-supplied OpenType feature tags
 // (e.g. liga, tnum, calt) to the font via
 // kCTFontFeatureSettingsAttribute. Returns the styled CTFontRef
@@ -208,6 +286,9 @@ func newCTFont(style TextStyle, scaleFactor float32) ctFont {
 func applyOpenTypeFeatures(base C.CTFontRef, feats []FontFeature) C.CTFontRef {
 	if len(feats) == 0 {
 		return base
+	}
+	if len(feats) > maxFontFeatures {
+		feats = feats[:maxFontFeatures]
 	}
 	tags := make([]byte, 0, len(feats)*4)
 	vals := make([]C.int, 0, len(feats))
@@ -246,6 +327,9 @@ func applyVariationAxes(base C.CTFontRef, axes []FontAxis) C.CTFontRef {
 	if len(axes) == 0 {
 		return base
 	}
+	if len(axes) > maxFontFeatures {
+		axes = axes[:maxFontFeatures]
+	}
 	tags := make([]byte, 0, len(axes)*4)
 	vals := make([]C.float, 0, len(axes))
 	for _, a := range axes {
@@ -280,7 +364,11 @@ func (f *ctFont) close() {
 }
 
 // metrics returns ascent, descent, leading in Core Text units.
+// Returns zeros for a null ref rather than passing nil to CGo.
 func (f ctFont) metrics() (ascent, descent, leading float64) {
+	if f.ref == 0 {
+		return 0, 0, 0
+	}
 	var a, d, l C.CGFloat
 	C.ctFontGetMetrics(f.ref, &a, &d, &l)
 	return float64(a), float64(d), float64(l)
@@ -289,22 +377,10 @@ func (f ctFont) metrics() (ascent, descent, leading float64) {
 // resolveFontFamilyDarwin maps generic Pango-style font names to
 // macOS / iOS system font families. SF Mono ships in 10.15+; older
 // macOS targets fall back to Menlo via CoreText's font matcher when
-// "SF Mono" is unavailable.
+// "SF Mono" is unavailable. Result is memoized on fontName via
+// the package-level parse cache.
 func resolveFontFamilyDarwin(fontName string) string {
-	family := parseFamilyFromFontName(fontName)
-	if family == "" {
-		return ".AppleSystemUIFont"
-	}
-	switch strings.ToLower(family) {
-	case "sans", "sans-serif", "system":
-		return ".AppleSystemUIFont"
-	case "serif":
-		return "New York"
-	case "monospace", "mono":
-		return "SF Mono"
-	default:
-		return family
-	}
+	return lookupParsedFontName(fontName).resolvedFamily
 }
 
 // parseSizeFromFontName extracts trailing numeric size from Pango
