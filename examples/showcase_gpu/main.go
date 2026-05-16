@@ -53,7 +53,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer win.Destroy()
+	defer func() { _ = win.Destroy() }()
 
 	physW, _ := gpu.WindowDrawableSize(unsafe.Pointer(win))
 	winW, _ := win.GetSize()
@@ -158,7 +158,7 @@ func (a *app) render() {
 	a.drawSections()
 	a.shared.TS.Commit()
 	w, h := a.window.GetSize()
-	a.backend.EndFrame(
+	_ = a.backend.EndFrame(
 		float32(ss.BgColor.R)/255, float32(ss.BgColor.G)/255,
 		float32(ss.BgColor.B)/255, 1.0,
 		int(w), int(h))
