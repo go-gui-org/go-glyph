@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-05-16
+
+### Fixed
+
+- Darwin: wrap CGo entry points in `@autoreleasepool` to drain Apple-framework autoreleases
+- Darwin: memoize font-name parsing; wire metrics cache to eliminate per-miss CGo allocs
+
+### Changed
+
+- examples/showcase_gpu: discard `Destroy`/`EndFrame` errors explicitly (errcheck)
+
 ## [1.7.0] - 2026-04-30
 
 ### Added
