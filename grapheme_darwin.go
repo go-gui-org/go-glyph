@@ -9,34 +9,36 @@ package glyph
 // grapheme cluster segmentation. Returns cluster count.
 static int cfSegmentGraphemes(const char *text, int textLen,
     int *outByteOffsets, int *outByteLengths, int maxClusters) {
-    CFStringRef str = CFStringCreateWithBytes(NULL,
-        (const UInt8 *)text, textLen,
-        kCFStringEncodingUTF8, false);
-    if (!str) return 0;
+    @autoreleasepool {
+        CFStringRef str = CFStringCreateWithBytes(NULL,
+            (const UInt8 *)text, textLen,
+            kCFStringEncodingUTF8, false);
+        if (!str) return 0;
 
-    CFIndex len = CFStringGetLength(str);
-    int count = 0;
-    CFIndex utf16Idx = 0;
-    int byteOffset = 0;
+        CFIndex len = CFStringGetLength(str);
+        int count = 0;
+        CFIndex utf16Idx = 0;
+        int byteOffset = 0;
 
-    while (utf16Idx < len && count < maxClusters) {
-        CFRange r = CFStringGetRangeOfComposedCharactersAtIndex(
-            str, utf16Idx);
+        while (utf16Idx < len && count < maxClusters) {
+            CFRange r = CFStringGetRangeOfComposedCharactersAtIndex(
+                str, utf16Idx);
 
-        CFIndex byteLen = 0;
-        CFStringGetBytes(str, r, kCFStringEncodingUTF8,
-            '?', false, NULL, 0, &byteLen);
+            CFIndex byteLen = 0;
+            CFStringGetBytes(str, r, kCFStringEncodingUTF8,
+                '?', false, NULL, 0, &byteLen);
 
-        outByteOffsets[count] = byteOffset;
-        outByteLengths[count] = (int)byteLen;
-        count++;
+            outByteOffsets[count] = byteOffset;
+            outByteLengths[count] = (int)byteLen;
+            count++;
 
-        byteOffset += (int)byteLen;
-        utf16Idx = r.location + r.length;
+            byteOffset += (int)byteLen;
+            utf16Idx = r.location + r.length;
+        }
+
+        CFRelease(str);
+        return count;
     }
-
-    CFRelease(str);
-    return count;
 }
 */
 import "C"

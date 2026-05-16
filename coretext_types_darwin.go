@@ -11,23 +11,25 @@ package glyph
 // and symbolic traits.
 static CTFontRef ctCreateFont(const char *family, CGFloat size,
     bool bold, bool italic) {
-    CFStringRef fam = CFStringCreateWithCString(NULL, family,
-        kCFStringEncodingUTF8);
-    CTFontRef base = CTFontCreateWithName(fam, size, NULL);
-    CFRelease(fam);
-    if (!bold && !italic) return base;
+    @autoreleasepool {
+        CFStringRef fam = CFStringCreateWithCString(NULL, family,
+            kCFStringEncodingUTF8);
+        CTFontRef base = CTFontCreateWithName(fam, size, NULL);
+        CFRelease(fam);
+        if (!bold && !italic) return base;
 
-    CTFontSymbolicTraits traits = 0;
-    if (bold) traits |= kCTFontBoldTrait;
-    if (italic) traits |= kCTFontItalicTrait;
-    CTFontRef styled = CTFontCreateCopyWithSymbolicTraits(
-        base, size, NULL, traits, traits);
-    if (styled) {
-        CFRelease(base);
-        return styled;
+        CTFontSymbolicTraits traits = 0;
+        if (bold) traits |= kCTFontBoldTrait;
+        if (italic) traits |= kCTFontItalicTrait;
+        CTFontRef styled = CTFontCreateCopyWithSymbolicTraits(
+            base, size, NULL, traits, traits);
+        if (styled) {
+            CFRelease(base);
+            return styled;
+        }
+        // Trait application failed; return base font as-is.
+        return base;
     }
-    // Trait application failed; return base font as-is.
-    return base;
 }
 
 // ctFontGetMetrics returns ascent, descent, leading.
@@ -48,6 +50,7 @@ static CTFontRef ctApplyOpenTypeFeatures(CTFontRef base,
     if (!base || count <= 0) {
         return base;
     }
+    @autoreleasepool {
     CFMutableArrayRef arr = CFArrayCreateMutable(NULL, count,
         &kCFTypeArrayCallBacks);
     for (int i = 0; i < count; i++) {
@@ -90,6 +93,7 @@ static CTFontRef ctApplyOpenTypeFeatures(CTFontRef base,
         return styled;
     }
     return base;
+    } // @autoreleasepool
 }
 
 // ctApplyVariationAxes returns a copy of base with variable-font axis
@@ -102,6 +106,7 @@ static CTFontRef ctApplyVariationAxes(CTFontRef base,
     if (!base || count <= 0) {
         return base;
     }
+    @autoreleasepool {
     CFMutableDictionaryRef dict = CFDictionaryCreateMutable(NULL, count,
         &kCFTypeDictionaryKeyCallBacks,
         &kCFTypeDictionaryValueCallBacks);
@@ -137,6 +142,7 @@ static CTFontRef ctApplyVariationAxes(CTFontRef base,
         return styled;
     }
     return base;
+    } // @autoreleasepool
 }
 */
 import "C"

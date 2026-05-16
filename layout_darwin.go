@@ -8,31 +8,38 @@ package glyph
 #include <CoreFoundation/CoreFoundation.h>
 
 // ctMeasureString measures a string's width with the given font.
+// @autoreleasepool drains the per-call helpers CoreText autoreleases
+// internally (NSURL, NSDictionary, Swift URLComponents on macOS 26);
+// without it they pile up forever on the Go-locked OS thread.
 static CGFloat ctMeasureString(CTFontRef font, CFStringRef str) {
-    CFStringRef keys[] = { kCTFontAttributeName };
-    CFTypeRef vals[] = { font };
-    CFDictionaryRef attrs = CFDictionaryCreate(NULL,
-        (const void **)keys, (const void **)vals, 1,
-        &kCFTypeDictionaryKeyCallBacks,
-        &kCFTypeDictionaryValueCallBacks);
-    CFAttributedStringRef astr = CFAttributedStringCreate(
-        NULL, str, attrs);
-    CTLineRef line = CTLineCreateWithAttributedString(astr);
-    CGFloat width = CTLineGetTypographicBounds(line, NULL, NULL, NULL);
-    CFRelease(line);
-    CFRelease(astr);
-    CFRelease(attrs);
-    return width;
+    @autoreleasepool {
+        CFStringRef keys[] = { kCTFontAttributeName };
+        CFTypeRef vals[] = { font };
+        CFDictionaryRef attrs = CFDictionaryCreate(NULL,
+            (const void **)keys, (const void **)vals, 1,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        CFAttributedStringRef astr = CFAttributedStringCreate(
+            NULL, str, attrs);
+        CTLineRef line = CTLineCreateWithAttributedString(astr);
+        CGFloat width = CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+        CFRelease(line);
+        CFRelease(astr);
+        CFRelease(attrs);
+        return width;
+    }
 }
 
 // ctMeasureCString is a convenience wrapper for C strings.
 static CGFloat ctMeasureCString(CTFontRef font, const char *text) {
-    CFStringRef str = CFStringCreateWithCString(NULL, text,
-        kCFStringEncodingUTF8);
-    if (!str) return 0;
-    CGFloat w = ctMeasureString(font, str);
-    CFRelease(str);
-    return w;
+    @autoreleasepool {
+        CFStringRef str = CFStringCreateWithCString(NULL, text,
+            kCFStringEncodingUTF8);
+        if (!str) return 0;
+        CGFloat w = ctMeasureString(font, str);
+        CFRelease(str);
+        return w;
+    }
 }
 */
 import "C"

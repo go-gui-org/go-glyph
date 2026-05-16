@@ -8,16 +8,18 @@ package glyph
 
 // ctRegisterFontURL registers a font file with Core Text.
 static bool ctRegisterFontFile(const char *path) {
-    CFStringRef pathStr = CFStringCreateWithCString(NULL, path,
-        kCFStringEncodingUTF8);
-    CFURLRef url = CFURLCreateWithFileSystemPath(NULL, pathStr,
-        kCFURLPOSIXPathStyle, false);
-    CFRelease(pathStr);
-    if (!url) return false;
-    bool ok = CTFontManagerRegisterFontsForURL(
-        url, kCTFontManagerScopeProcess, NULL);
-    CFRelease(url);
-    return ok;
+    @autoreleasepool {
+        CFStringRef pathStr = CFStringCreateWithCString(NULL, path,
+            kCFStringEncodingUTF8);
+        CFURLRef url = CFURLCreateWithFileSystemPath(NULL, pathStr,
+            kCFURLPOSIXPathStyle, false);
+        CFRelease(pathStr);
+        if (!url) return false;
+        bool ok = CTFontManagerRegisterFontsForURL(
+            url, kCTFontManagerScopeProcess, NULL);
+        CFRelease(url);
+        return ok;
+    }
 }
 */
 import "C"

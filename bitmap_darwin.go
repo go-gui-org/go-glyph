@@ -28,6 +28,7 @@ static GlyphRenderCtx cgSetupGlyph(const char *text,
     int pad, int *outW, int *outH, int *outLeft, int *outTop) {
 
     GlyphRenderCtx r = {0};
+    @autoreleasepool {
 
     CFStringRef fam = CFStringCreateWithCString(NULL, family,
         kCFStringEncodingUTF8);
@@ -122,6 +123,7 @@ static GlyphRenderCtx cgSetupGlyph(const char *text,
     r.minX = minX;
     r.minY = minY;
     return r;
+    } // @autoreleasepool
 }
 
 static void cgCleanupGlyph(GlyphRenderCtx *r) {
@@ -138,6 +140,7 @@ static void cgCleanupGlyph(GlyphRenderCtx *r) {
 static void* cgRenderGlyph(const char *text, const char *family,
     CGFloat fontSize, bool bold, bool italic, CGFloat subpixelShift,
     int *outW, int *outH, int *outLeft, int *outTop) {
+    @autoreleasepool {
 
     const int pad = 2;
     GlyphRenderCtx r = cgSetupGlyph(text, family, fontSize,
@@ -154,6 +157,7 @@ static void* cgRenderGlyph(const char *text, const char *family,
 
     cgCleanupGlyph(&r);
     return r.data;
+    } // @autoreleasepool
 }
 
 // cgRenderStrokedGlyph rasterizes a stroked text string.
@@ -161,6 +165,7 @@ static void* cgRenderStrokedGlyph(const char *text,
     const char *family, CGFloat fontSize,
     bool bold, bool italic, CGFloat strokeWidth, CGFloat subpixelShift,
     int *outW, int *outH, int *outLeft, int *outTop) {
+    @autoreleasepool {
 
     int pad = (int)ceil(strokeWidth) + 4;
     GlyphRenderCtx r = cgSetupGlyph(text, family, fontSize,
@@ -181,6 +186,7 @@ static void* cgRenderStrokedGlyph(const char *text,
 
     cgCleanupGlyph(&r);
     return r.data;
+    } // @autoreleasepool
 }
 */
 import "C"

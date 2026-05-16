@@ -13,18 +13,20 @@ package glyph
 // getFontFamily returns the family name of a CTFont as a
 // malloc'd C string. Caller must free.
 static char* ctFontCopyFamilyNameC(CTFontRef font) {
-    CFStringRef name = CTFontCopyFamilyName(font);
-    if (!name) return NULL;
-    CFIndex len = CFStringGetLength(name);
-    CFIndex maxSize = CFStringGetMaximumSizeForEncoding(len, kCFStringEncodingUTF8) + 1;
-    char *buf = (char *)malloc(maxSize);
-    if (!CFStringGetCString(name, buf, maxSize, kCFStringEncodingUTF8)) {
-        free(buf);
+    @autoreleasepool {
+        CFStringRef name = CTFontCopyFamilyName(font);
+        if (!name) return NULL;
+        CFIndex len = CFStringGetLength(name);
+        CFIndex maxSize = CFStringGetMaximumSizeForEncoding(len, kCFStringEncodingUTF8) + 1;
+        char *buf = (char *)malloc(maxSize);
+        if (!CFStringGetCString(name, buf, maxSize, kCFStringEncodingUTF8)) {
+            free(buf);
+            CFRelease(name);
+            return NULL;
+        }
         CFRelease(name);
-        return NULL;
+        return buf;
     }
-    CFRelease(name);
-    return buf;
 }
 */
 import "C"

@@ -145,31 +145,37 @@ MetalCtx* metalInit(void *sdlWindow, float dpiScale) {
 }
 
 uint64_t metalNewTex(MetalCtx *ctx, int w, int h) {
-	MTLTextureDescriptor *td = [MTLTextureDescriptor
-		texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
-		                             width:w
-		                            height:h
-		                         mipmapped:NO];
-	td.usage = MTLTextureUsageShaderRead;
-	id<MTLTexture> tex = [ctx->device newTextureWithDescriptor:td];
-	ctx->nextTexID++;
-	uint64_t tid = ctx->nextTexID;
-	ctx->textures[@(tid)] = tex;
-	return tid;
+	@autoreleasepool {
+		MTLTextureDescriptor *td = [MTLTextureDescriptor
+			texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+			                             width:w
+			                            height:h
+			                         mipmapped:NO];
+		td.usage = MTLTextureUsageShaderRead;
+		id<MTLTexture> tex = [ctx->device newTextureWithDescriptor:td];
+		ctx->nextTexID++;
+		uint64_t tid = ctx->nextTexID;
+		ctx->textures[@(tid)] = tex;
+		return tid;
+	}
 }
 
 void metalUpdateTex(MetalCtx *ctx, uint64_t tid,
                     void *data, int w, int h) {
-	id<MTLTexture> tex = ctx->textures[@(tid)];
-	if (!tex) return;
-	[tex replaceRegion:MTLRegionMake2D(0, 0, w, h)
-	       mipmapLevel:0
-	         withBytes:data
-	       bytesPerRow:w * 4];
+	@autoreleasepool {
+		id<MTLTexture> tex = ctx->textures[@(tid)];
+		if (!tex) return;
+		[tex replaceRegion:MTLRegionMake2D(0, 0, w, h)
+		       mipmapLevel:0
+		         withBytes:data
+		       bytesPerRow:w * 4];
+	}
 }
 
 void metalDeleteTex(MetalCtx *ctx, uint64_t tid) {
-	[ctx->textures removeObjectForKey:@(tid)];
+	@autoreleasepool {
+		[ctx->textures removeObjectForKey:@(tid)];
+	}
 }
 
 int metalRender(MetalCtx *ctx,
@@ -179,6 +185,13 @@ int metalRender(MetalCtx *ctx,
                 float clearB, float clearA,
                 int logicalW, int logicalH) {
 	if (!ctx) return -1;
+
+	// Wrap the entire frame in an autorelease pool. Without this,
+	// per-frame autoreleased objects (vertex MTLBuffer, command
+	// buffer, encoder, drawable, NSNumber boxes for @(tid)) pile
+	// up forever — the Go-locked OS thread has no NSRunLoop to
+	// drain the outer pool. ARC does not save us here.
+	@autoreleasepool {
 
 	// Read current drawable size.
 	CGSize sz = ctx->layer.drawableSize;
@@ -252,6 +265,7 @@ int metalRender(MetalCtx *ctx,
 	[drawable present];
 
 	return 0;
+	} // @autoreleasepool
 }
 
 void metalDestroy(MetalCtx *ctx) {
