@@ -152,8 +152,9 @@ func (r *Renderer) Atlas() *GlyphAtlas { return r.atlas }
 func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 	bin int, strokeWidth float32) CachedGlyph {
 
-	// On iOS, g.Index is a byte offset (not a glyph ID). Cache
-	// key must include the actual character content.
+	// g.Index is a byte offset into layout.Text (not a glyph ID).
+	// g.GlyphID is the resolved CGGlyph after GSUB shaping; when non-zero
+	// it uniquely identifies the glyph bitmap so we skip feature hashing.
 	ch := glyphText(text, g)
 	if ch == "" {
 		return CachedGlyph{}
@@ -161,7 +162,18 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 	targetH := int(float32(item.Ascent) * r.scaleFactor)
 
 	key := fnvOffsetBasis
-	key = fnvHashString(key, ch)
+	if g.GlyphID != 0 {
+		// GlyphID already encodes the post-substitution glyph uniquely.
+		key = fnvHashU64(key, uint64(g.GlyphID))
+	} else {
+		key = fnvHashString(key, ch)
+		if item.Style.Features != nil {
+			for _, f := range item.Style.Features.OpenTypeFeatures {
+				key = fnvHashString(key, f.Tag)
+				key = fnvHashU64(key, uint64(f.Value))
+			}
+		}
+	}
 	key = fnvHashU64(key, uint64(bin))
 	key = fnvHashU64(key, uint64(targetH))
 	key = fnvHashF32(key, strokeWidth)
@@ -182,9 +194,10 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 	var err error
 	if strokeWidth > 0 {
 		result, err = loadStrokedGlyphCG(r.atlas, ch, item,
-			strokeWidth, bin, r.scaleFactor)
+			g.GlyphID, strokeWidth, bin, r.scaleFactor)
 	} else {
-		result, err = loadGlyphCG(r.atlas, ch, item, bin, r.scaleFactor)
+		result, err = loadGlyphCG(r.atlas, ch, item,
+			g.GlyphID, bin, r.scaleFactor)
 	}
 	if err != nil {
 		failed := CachedGlyph{Page: -1}

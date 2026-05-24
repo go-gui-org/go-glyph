@@ -106,6 +106,7 @@ type Glyph struct {
 	XAdvance  float64
 	YAdvance  float64
 	Codepoint uint32 // Cluster byte length (use with Index as byte offset).
+	GlyphID   uint16 // Resolved CGGlyph/HB glyph ID (0 = unknown, use text).
 }
 
 // GlyphPlacement specifies absolute screen position and rotation

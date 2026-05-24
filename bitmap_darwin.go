@@ -21,6 +21,13 @@ typedef struct {
     CGFloat minX, minY;
 } GlyphRenderCtx;
 
+// Maximum bitmap dimensions for rasterized glyphs.
+// cgRenderGlyphByID uses CG_GLYPH_MAX_W_LIGATURE to accommodate
+// multi-cell ligature glyphs whose ink spans more than one cell.
+#define CG_GLYPH_MAX_W_LIGATURE 512
+#define CG_GLYPH_MAX_W          256
+#define CG_GLYPH_MAX_H          256
+
 // cgSetupGlyph creates font, attributed string, measures bounds,
 // and allocates a bitmap context. Returns zeroed ctx on failure.
 static GlyphRenderCtx cgSetupGlyph(const char *text,
@@ -76,8 +83,8 @@ static GlyphRenderCtx cgSetupGlyph(const char *text,
     int h = (int)(maxY - minY) + pad * 2;
     if (w < 1) w = 1;
     if (h < 1) h = 1;
-    if (w > 256) w = 256;
-    if (h > 256) h = 256;
+    if (w > CG_GLYPH_MAX_W) w = CG_GLYPH_MAX_W;
+    if (h > CG_GLYPH_MAX_H) h = CG_GLYPH_MAX_H;
 
     *outW = w;
     *outH = h;
@@ -188,31 +195,268 @@ static void* cgRenderStrokedGlyph(const char *text,
     return r.data;
     } // @autoreleasepool
 }
+
+// cgSetupGlyphFont is like cgSetupGlyph but accepts a pre-built CTFont
+// (with OpenType features already applied). Retains the font so that
+// cgCleanupGlyph can release it uniformly.
+static GlyphRenderCtx cgSetupGlyphFont(const char *text, CTFontRef font,
+    int pad, int *outW, int *outH, int *outLeft, int *outTop) {
+
+    GlyphRenderCtx r = {0};
+    @autoreleasepool {
+
+    CFRetain(font); // paired with CFRelease in cgCleanupGlyph
+
+    CFStringRef str = CFStringCreateWithCString(NULL, text,
+        kCFStringEncodingUTF8);
+    if (!str) {
+        CFRelease(font);
+        *outW = 0; *outH = 0;
+        return r;
+    }
+
+    CFStringRef keys[] = { kCTFontAttributeName };
+    CFTypeRef vals[] = { font };
+    CFDictionaryRef attrs = CFDictionaryCreate(NULL,
+        (const void **)keys, (const void **)vals, 1,
+        &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    if (!attrs) {
+        CFRelease(str);
+        CFRelease(font);
+        *outW = 0; *outH = 0;
+        return r;
+    }
+    CFAttributedStringRef astr = CFAttributedStringCreate(NULL, str, attrs);
+    if (!astr) {
+        CFRelease(attrs);
+        CFRelease(str);
+        CFRelease(font);
+        *outW = 0; *outH = 0;
+        return r;
+    }
+    CTLineRef line = CTLineCreateWithAttributedString(astr);
+    if (!line) {
+        CFRelease(astr);
+        CFRelease(attrs);
+        CFRelease(str);
+        CFRelease(font);
+        *outW = 0; *outH = 0;
+        return r;
+    }
+
+    CGRect bounds = CTLineGetBoundsWithOptions(line,
+        kCTLineBoundsUseGlyphPathBounds);
+    CGFloat minX = floor(CGRectGetMinX(bounds));
+    CGFloat maxX = ceil(CGRectGetMaxX(bounds));
+    CGFloat minY = floor(CGRectGetMinY(bounds));
+    CGFloat maxY = ceil(CGRectGetMaxY(bounds));
+    int w = (int)(maxX - minX) + pad * 2;
+    int h = (int)(maxY - minY) + pad * 2;
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    if (w > CG_GLYPH_MAX_W) w = CG_GLYPH_MAX_W;
+    if (h > CG_GLYPH_MAX_H) h = CG_GLYPH_MAX_H;
+
+    *outW = w;
+    *outH = h;
+    *outLeft = (int)minX - pad;
+    *outTop = (int)maxY + pad;
+
+    size_t bytesPerRow = w * 4;
+    void *data = calloc(h, bytesPerRow);
+    if (!data) {
+        CFRelease(line);
+        CFRelease(astr);
+        CFRelease(attrs);
+        CFRelease(str);
+        CFRelease(font);
+        *outW = 0; *outH = 0;
+        return r;
+    }
+
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGContextRef ctx = CGBitmapContextCreate(data, w, h, 8,
+        bytesPerRow, cs,
+        kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(cs);
+
+    if (!ctx) {
+        free(data);
+        CFRelease(line);
+        CFRelease(astr);
+        CFRelease(attrs);
+        CFRelease(str);
+        CFRelease(font);
+        *outW = 0; *outH = 0;
+        return r;
+    }
+
+    r.ctx = ctx;
+    r.data = data;
+    r.line = line;
+    r.astr = astr;
+    r.attrs = attrs;
+    r.str = str;
+    r.font = font;
+    r.minX = minX;
+    r.minY = minY;
+    return r;
+    } // @autoreleasepool
+}
+
+// cgRenderGlyphFont rasterizes text using a pre-built CTFont.
+static void* cgRenderGlyphFont(const char *text, CTFontRef font,
+    CGFloat subpixelShift,
+    int *outW, int *outH, int *outLeft, int *outTop) {
+    @autoreleasepool {
+
+    const int pad = 2;
+    GlyphRenderCtx r = cgSetupGlyphFont(text, font, pad,
+        outW, outH, outLeft, outTop);
+    if (!r.ctx) return NULL;
+
+    CGContextSetRGBFillColor(r.ctx, 1, 1, 1, 1);
+    CGContextSetTextDrawingMode(r.ctx, kCGTextFill);
+    CGFloat baselineY = -r.minY + pad;
+    CGFloat baselineX = -r.minX + pad + subpixelShift;
+    CGContextSetTextPosition(r.ctx, baselineX, baselineY);
+    CTLineDraw(r.line, r.ctx);
+
+    cgCleanupGlyph(&r);
+    return r.data;
+    } // @autoreleasepool
+}
+
+// cgRenderStrokedGlyphFont rasterizes stroked text using a pre-built CTFont.
+static void* cgRenderStrokedGlyphFont(const char *text, CTFontRef font,
+    CGFloat strokeWidth, CGFloat subpixelShift,
+    int *outW, int *outH, int *outLeft, int *outTop) {
+    @autoreleasepool {
+
+    int pad = (int)ceil(strokeWidth) + 4;
+    GlyphRenderCtx r = cgSetupGlyphFont(text, font, pad,
+        outW, outH, outLeft, outTop);
+    if (!r.ctx) return NULL;
+
+    CGContextSetRGBStrokeColor(r.ctx, 1, 1, 1, 1);
+    CGContextSetRGBFillColor(r.ctx, 0, 0, 0, 0);
+    CGContextSetLineWidth(r.ctx, strokeWidth);
+    CGContextSetLineJoin(r.ctx, kCGLineJoinRound);
+    CGContextSetLineCap(r.ctx, kCGLineCapRound);
+    CGContextSetTextDrawingMode(r.ctx, kCGTextStroke);
+    CGFloat baselineY = -r.minY + pad;
+    CGFloat baselineX = -r.minX + pad + subpixelShift;
+    CGContextSetTextPosition(r.ctx, baselineX, baselineY);
+    CTLineDraw(r.line, r.ctx);
+
+    cgCleanupGlyph(&r);
+    return r.data;
+    } // @autoreleasepool
+}
+
+// cgRenderGlyphByID rasterizes a single glyph by its CGGlyph ID using
+// CTFontDrawGlyphs. Bounds come from CTFontGetBoundingRectsForGlyphs so
+// the bitmap exactly contains the shaped glyph (including wide ligatures
+// whose visual extent exceeds a single character's advance).
+static void* cgRenderGlyphByID(CTFontRef font, CGGlyph glyphID,
+    CGFloat subpixelShift,
+    int *outW, int *outH, int *outLeft, int *outTop) {
+    @autoreleasepool {
+
+    const int pad = 2;
+    CGRect bounds;
+    CTFontGetBoundingRectsForGlyphs(font,
+        kCTFontOrientationHorizontal, &glyphID, &bounds, 1);
+
+    // Empty bounds → invisible glyph (spacer). Return nil so no quad
+    // is emitted; the advance still consumes the cell space.
+    if (CGRectIsEmpty(bounds) || CGRectIsInfinite(bounds) ||
+        CGRectIsNull(bounds)) {
+        *outW = 0; *outH = 0;
+        return NULL;
+    }
+
+    CGFloat minX = floor(CGRectGetMinX(bounds));
+    CGFloat maxX = ceil(CGRectGetMaxX(bounds));
+    CGFloat minY = floor(CGRectGetMinY(bounds));
+    CGFloat maxY = ceil(CGRectGetMaxY(bounds));
+
+    int w = (int)(maxX - minX) + pad * 2;
+    int h = (int)(maxY - minY) + pad * 2;
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    if (w > CG_GLYPH_MAX_W_LIGATURE) w = CG_GLYPH_MAX_W_LIGATURE;
+    if (h > CG_GLYPH_MAX_H) h = CG_GLYPH_MAX_H;
+
+    *outW    = w;
+    *outH    = h;
+    *outLeft = (int)minX - pad;
+    *outTop  = (int)maxY + pad;
+
+    size_t bytesPerRow = (size_t)w * 4;
+    void *data = calloc((size_t)h, bytesPerRow);
+    if (!data) { *outW = 0; *outH = 0; return NULL; }
+
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGContextRef ctx = CGBitmapContextCreate(data, w, h, 8, bytesPerRow, cs,
+        kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(cs);
+    if (!ctx) { free(data); *outW = 0; *outH = 0; return NULL; }
+
+    CGContextSetRGBFillColor(ctx, 1, 1, 1, 1);
+    CGContextSetTextDrawingMode(ctx, kCGTextFill);
+
+    CGPoint pos = CGPointMake(-minX + pad + subpixelShift, -minY + pad);
+    CTFontDrawGlyphs(font, &glyphID, &pos, 1, ctx);
+
+    CGContextRelease(ctx);
+    return data;
+    } // @autoreleasepool
+}
 */
 import "C"
 import (
 	"unsafe"
 )
 
-// loadGlyphCG rasterizes a character using Core Graphics.
+// loadGlyphCG rasterizes a character using Core Graphics. When glyphID
+// is non-zero it renders that CGGlyph directly (preserving calt/liga
+// substitutions); otherwise it renders ch as a CTLine.
 func loadGlyphCG(atlas *GlyphAtlas, ch string, item Item,
-	subpixelBin int, scaleFactor float32) (LoadGlyphResult, error) {
+	glyphID uint16, subpixelBin int, scaleFactor float32) (LoadGlyphResult, error) {
 
-	family, fontSize, bold, italic := resolveCTFontParams(
-		item.Style, scaleFactor)
-
-	cText := C.CString(ch)
-	defer C.free(unsafe.Pointer(cText))
-	cFamily := C.CString(family)
-	defer C.free(unsafe.Pointer(cFamily))
+	font := newCTFont(item.Style, scaleFactor)
+	defer font.close()
 
 	var w, h, left, top C.int
 	subpixelShift := C.CGFloat(float64(subpixelBin) / 4.0)
 
-	data := C.cgRenderGlyph(cText, cFamily,
-		C.CGFloat(fontSize), C.bool(bold), C.bool(italic),
-		subpixelShift,
-		&w, &h, &left, &top)
+	var data unsafe.Pointer
+	if glyphID != 0 {
+		data = C.cgRenderGlyphByID(font.ref, C.CGGlyph(glyphID),
+			subpixelShift, &w, &h, &left, &top)
+		// Empty-bounds glyph from the primary font: this is an
+		// intentional zero-width placeholder (e.g. the first half of a
+		// JetBrainsMono/Fira-style calt ligature, where the visible
+		// composite glyph sits at the second position and extends back
+		// leftward across both cells). Falling back to text rendering
+		// here would re-draw the literal character (e.g. "!") on top of
+		// the ligature. Cluster shaping already zeroes glyphID for
+		// fallback-font runs (see ctShapeGlyphClusters isFallback), so
+		// non-zero glyphID is always a primary-font glyph.
+		if data == nil {
+			return LoadGlyphResult{}, nil
+		}
+	} else {
+		// glyphID==0: cluster shaping flagged this as a fallback-font
+		// run, so the primary-font CGGlyph ID would be wrong. Render
+		// via CTLine so CoreText's cascade picks the right font.
+		cText := C.CString(ch)
+		data = C.cgRenderGlyphFont(cText, font.ref, subpixelShift,
+			&w, &h, &left, &top)
+		C.free(unsafe.Pointer(cText))
+	}
 
 	if data == nil || w == 0 || h == 0 {
 		return LoadGlyphResult{}, nil
@@ -273,25 +517,27 @@ func loadGlyphCG(atlas *GlyphAtlas, ch string, item Item,
 
 // loadStrokedGlyphCG rasterizes a stroked character.
 func loadStrokedGlyphCG(atlas *GlyphAtlas, ch string, item Item,
-	strokeWidth float32, subpixelBin int,
+	glyphID uint16, strokeWidth float32, subpixelBin int,
 	scaleFactor float32) (LoadGlyphResult, error) {
 
-	family, fontSize, bold, italic := resolveCTFontParams(
-		item.Style, scaleFactor)
-
-	cText := C.CString(ch)
-	defer C.free(unsafe.Pointer(cText))
-	cFamily := C.CString(family)
-	defer C.free(unsafe.Pointer(cFamily))
+	font := newCTFont(item.Style, scaleFactor)
+	defer font.close()
 
 	var w, h, left, top C.int
 	subpixelShift := C.CGFloat(float64(subpixelBin) / 4.0)
+	physStroke := C.CGFloat(float64(strokeWidth) * float64(scaleFactor))
+	if physStroke > 1e6 {
+		return LoadGlyphResult{}, nil
+	}
 
-	data := C.cgRenderStrokedGlyph(cText, cFamily,
-		C.CGFloat(fontSize), C.bool(bold), C.bool(italic),
-		C.CGFloat(float64(strokeWidth)*float64(scaleFactor)),
-		subpixelShift,
-		&w, &h, &left, &top)
+	// Stroke rendering always uses the text-based path (cgRenderStrokedGlyphFont).
+	// Shaped glyph IDs are not used here: stroked ligatures are rare in terminal
+	// use, and cgRenderStrokedGlyphFont already applies GSUB via a CTLine pass,
+	// so the result is visually consistent with fill rendering for all common cases.
+	cText := C.CString(ch)
+	data := C.cgRenderStrokedGlyphFont(cText, font.ref, physStroke,
+		subpixelShift, &w, &h, &left, &top)
+	C.free(unsafe.Pointer(cText))
 
 	if data == nil || w == 0 || h == 0 {
 		return LoadGlyphResult{}, nil

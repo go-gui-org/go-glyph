@@ -41,6 +41,141 @@ static CGFloat ctMeasureCString(CTFontRef font, const char *text) {
         return w;
     }
 }
+
+// CTGlyphCluster describes one shaped glyph's character cluster span
+// (in UTF-16 code-unit indices), typographic advance, and resolved
+// glyph ID (after GSUB substitutions like calt/liga).
+typedef struct {
+    int     utf16Start;  // inclusive
+    int     utf16End;    // exclusive
+    CGFloat advance;
+    CGGlyph glyphID;     // resolved CGGlyph after shaping
+} CTGlyphCluster;
+
+// ctShapeGlyphClusters shapes utf8Text with font and fills out[] with
+// per-glyph cluster info. Returns the number of shaped glyphs, which may
+// be less than utf16Len when ligatures collapse multiple code units into
+// one glyph. out must have capacity >= utf16Len.
+static int ctShapeGlyphClusters(CTFontRef font, const char *utf8Text,
+    int utf16Len, CTGlyphCluster *out) {
+    @autoreleasepool {
+    if (!font || !utf8Text || utf16Len <= 0 || !out) return 0;
+
+    CFStringRef str = CFStringCreateWithCString(NULL, utf8Text,
+        kCFStringEncodingUTF8);
+    if (!str) return 0;
+
+    CFStringRef attrKeys[] = { kCTFontAttributeName };
+    CFTypeRef   attrVals[] = { font };
+    CFDictionaryRef attrs = CFDictionaryCreate(NULL,
+        (const void **)attrKeys, (const void **)attrVals, 1,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    if (!attrs) { CFRelease(str); return 0; }
+    CFAttributedStringRef astr = CFAttributedStringCreate(NULL, str, attrs);
+    CFRelease(str);
+    CFRelease(attrs);
+    if (!astr) return 0;
+    CTLineRef line = CTLineCreateWithAttributedString(astr);
+    CFRelease(astr);
+    if (!line) return 0;
+
+    CFArrayRef runs = CTLineGetGlyphRuns(line);
+    int runCount = (int)CFArrayGetCount(runs);
+    int total = 0;
+
+    // Primary font family name for fallback detection.
+    CFStringRef primaryFamily = CTFontCopyFamilyName(font);
+
+    for (int ri = 0; ri < runCount && total < utf16Len; ri++) {
+        CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(runs, ri);
+        int gc = (int)CTRunGetGlyphCount(run);
+        if (gc == 0) continue;
+
+        // Detect fallback font runs. When CoreText substitutes a glyph
+        // from a different font, the run's font attribute differs from the
+        // requested font. Glyph IDs from fallback fonts are meaningless in
+        // the primary font (wrong glyph-ID space), so we clear them to
+        // force the text-based rendering path and correct cache keys.
+        bool isFallback = false;
+        CFDictionaryRef runAttrs = CTRunGetAttributes(run);
+        if (runAttrs && primaryFamily) {
+            CTFontRef runFont = (CTFontRef)CFDictionaryGetValue(
+                runAttrs, kCTFontAttributeName);
+            if (runFont) {
+                CFStringRef runFamily = CTFontCopyFamilyName(runFont);
+                if (runFamily) {
+                    isFallback = !CFEqual(primaryFamily, runFamily);
+                    CFRelease(runFamily);
+                }
+            }
+        }
+
+        CFIndex  *idx    = (CFIndex  *)malloc(gc * sizeof(CFIndex));
+        CGSize   *adv    = (CGSize   *)malloc(gc * sizeof(CGSize));
+        CGGlyph  *glyphs = (CGGlyph  *)malloc(gc * sizeof(CGGlyph));
+        if (!idx || !adv || !glyphs) {
+            free(idx); free(adv); free(glyphs); continue;
+        }
+
+        CTRunGetStringIndices(run, CFRangeMake(0, 0), idx);
+        CTRunGetAdvances(run,      CFRangeMake(0, 0), adv);
+        CTRunGetGlyphs(run,        CFRangeMake(0, 0), glyphs);
+
+        // Use the run's own string range for cluster boundaries.
+        // This is more reliable than the next-run's first-glyph index,
+        // especially for RTL runs where the first visual glyph has the
+        // highest string index (making the old nextRunStart formula
+        // produce inverted spans for every glyph in the run).
+        CFRange runRange = CTRunGetStringRange(run);
+        int runStart = (int)runRange.location;
+        int runEnd   = (int)(runRange.location + runRange.length);
+        if (runStart < 0)      runStart = 0;
+        if (runEnd > utf16Len) runEnd   = utf16Len;
+
+        // Sort glyph positions by ascending string index so the
+        // cluster-end formula (end = next cluster's start) is correct
+        // for both LTR and RTL.  For LTR indices are already ascending;
+        // for RTL they are in descending visual order.
+        // Insertion sort — gc is typically < 20.
+        int *sortOrder = (int *)malloc(gc * sizeof(int));
+        if (!sortOrder) { free(idx); free(adv); free(glyphs); continue; }
+        for (int k = 0; k < gc; k++) sortOrder[k] = k;
+        for (int k = 1; k < gc; k++) {
+            int key = sortOrder[k];
+            int j = k - 1;
+            while (j >= 0 && idx[sortOrder[j]] > idx[key]) {
+                sortOrder[j + 1] = sortOrder[j];
+                j--;
+            }
+            sortOrder[j + 1] = key;
+        }
+
+        for (int k = 0; k < gc && total < utf16Len; k++) {
+            int gi    = sortOrder[k];
+            // Anchor the first sorted cluster to runStart so that RTL
+            // ligatures (where idx[gi] > runStart) get the full span.
+            int start = (k == 0) ? runStart : (int)idx[gi];
+            int end   = (k + 1 < gc) ? (int)idx[sortOrder[k + 1]] : runEnd;
+            if (end <= start) end = start + 1;
+            if (end > utf16Len) end = utf16Len;
+            out[total].utf16Start = start;
+            out[total].utf16End   = end;
+            out[total].advance    = adv[gi].width;
+            out[total].glyphID    = isFallback ? 0 : glyphs[gi];
+            total++;
+        }
+        free(sortOrder);
+        free(idx);
+        free(adv);
+        free(glyphs);
+    }
+
+    if (primaryFamily) CFRelease(primaryFamily);
+
+    CFRelease(line);
+    return total;
+    } // @autoreleasepool
+}
 */
 import "C"
 import (
@@ -310,6 +445,95 @@ func mergeStyles(base, run TextStyle) TextStyle {
 	return result
 }
 
+// shapedCluster holds one shaped glyph's byte range, advance, and
+// resolved CGGlyph ID from a full-text CTLine shaping pass.
+type shapedCluster struct {
+	byteStart int
+	byteLen   int
+	advance   float64
+	glyphID   uint16 // CGGlyph after GSUB (calt/liga) substitution
+}
+
+// buildUTF16ToByteSlice builds a mapping where result[utf16Pos] = UTF-8 byte
+// offset for that UTF-16 code unit. The final element is len(text) (sentinel).
+// Supplementary-plane runes (U+10000..U+10FFFF) use two UTF-16 code units
+// (surrogate pair) and both entries point to the same byte offset.
+func buildUTF16ToByteSlice(text string) []int {
+	m := make([]int, 0, len(text)+1)
+	for i := 0; i < len(text); {
+		r, sz := utf8.DecodeRuneInString(text[i:])
+		m = append(m, i)
+		if r > 0xFFFF { // surrogate pair: two UTF-16 code units
+			m = append(m, i)
+		}
+		i += sz
+	}
+	m = append(m, len(text)) // sentinel: byte offset of string end
+	return m
+}
+
+// shapeTextClusters shapes text with CoreText (via CTLine) and returns
+// per-glyph clusters with UTF-8 byte ranges and physical-pixel advances.
+// Returns nil on failure; callers fall back to per-grapheme measurement.
+func shapeTextClusters(font ctFont, text string) []shapedCluster {
+	if len(text) == 0 || font.ref == 0 {
+		return nil
+	}
+	utf16Map := buildUTF16ToByteSlice(text)
+	utf16Len := len(utf16Map) - 1
+	if utf16Len <= 0 {
+		return nil
+	}
+
+	cText := C.CString(text)
+	defer C.free(unsafe.Pointer(cText))
+
+	out := make([]C.CTGlyphCluster, utf16Len)
+	n := int(C.ctShapeGlyphClusters(font.ref, cText, C.int(utf16Len), &out[0]))
+	if n <= 0 {
+		return nil
+	}
+
+	// Fill byte-range gaps (e.g. newlines that CoreText emits no glyph for)
+	// so every character in text is represented in chars.
+	result := make([]shapedCluster, 0, n+4)
+	pos := 0
+	for i := range n {
+		us := int(out[i].utf16Start)
+		ue := int(out[i].utf16End)
+		if us < 0 {
+			us = 0
+		} else if us > utf16Len {
+			us = utf16Len
+		}
+		if ue > utf16Len {
+			ue = utf16Len
+		}
+		if ue < us {
+			ue = us
+		}
+		sc := shapedCluster{
+			byteStart: utf16Map[us],
+			byteLen:   utf16Map[ue] - utf16Map[us],
+			advance:   float64(out[i].advance),
+			glyphID:   uint16(out[i].glyphID),
+		}
+		for pos < sc.byteStart {
+			_, sz := utf8.DecodeRuneInString(text[pos:])
+			result = append(result, shapedCluster{byteStart: pos, byteLen: sz})
+			pos += sz
+		}
+		result = append(result, sc)
+		pos = sc.byteStart + sc.byteLen
+	}
+	for pos < len(text) {
+		_, sz := utf8.DecodeRuneInString(text[pos:])
+		result = append(result, shapedCluster{byteStart: pos, byteLen: sz})
+		pos += sz
+	}
+	return result
+}
+
 // buildLayout creates a Layout from measured text with word wrapping.
 func (ctx *Context) buildLayout(text string, baseFont ctFont,
 	cfg TextConfig,
@@ -325,53 +549,81 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 			ascent, descent, lineHeight, pixelScale)
 	}
 
-	// Measure each grapheme cluster.
+	// Measure each grapheme cluster, producing a charInfo per visual unit.
+	// When no per-character overrides are active, use full-text CTLine
+	// shaping so CoreText can apply ligature substitutions (liga, calt)
+	// across adjacent characters. The shaped clusters may span multiple
+	// code points when a ligature was formed.
 	type charInfo struct {
-		text   string
-		width  float64
-		byteI  int
-		byteL  int
-		yShift float64
-		xPad   float64
+		text    string
+		width   float64
+		byteI   int
+		byteL   int
+		yShift  float64
+		xPad    float64
+		glyphID uint16 // resolved CGGlyph after shaping (0 = use text)
 	}
-	clusters := segmentGraphemes(text)
-	chars := make([]charInfo, 0, len(clusters))
-	for _, cl := range clusters {
-		var yShift, xPad, objectWidth float64
-		measureFont := baseFont
-		if overrides != nil {
-			if ov, ok := overrides[cl.byteI]; ok {
-				if ov.font.ref != 0 {
-					measureFont = ov.font
+	var chars []charInfo
+	if overrides == nil {
+		if sc := shapeTextClusters(baseFont, text); len(sc) > 0 {
+			chars = make([]charInfo, 0, len(sc))
+			for _, cl := range sc {
+				clText := text[cl.byteStart : cl.byteStart+cl.byteLen]
+				var w float64
+				if clText != "\n" && clText != "\r" {
+					w = cl.advance
 				}
-				yShift = ov.yShift
-				xPad = ov.xPad
-				objectWidth = ov.objectWidth
+				chars = append(chars, charInfo{
+					text:    clText,
+					width:   w,
+					byteI:   cl.byteStart,
+					byteL:   cl.byteLen,
+					glyphID: cl.glyphID,
+				})
 			}
 		}
+	}
+	if chars == nil {
+		// Fall back: per-grapheme measurement (overrides path, or shaping failure).
+		clusters := segmentGraphemes(text)
+		chars = make([]charInfo, 0, len(clusters))
+		for _, cl := range clusters {
+			var yShift, xPad, objectWidth float64
+			measureFont := baseFont
+			if overrides != nil {
+				if ov, ok := overrides[cl.byteI]; ok {
+					if ov.font.ref != 0 {
+						measureFont = ov.font
+					}
+					yShift = ov.yShift
+					xPad = ov.xPad
+					objectWidth = ov.objectWidth
+				}
+			}
 
-		var w float64
-		switch {
-		case cl.text == "\n" || cl.text == "\r":
-			w = 0
-		case objectWidth > 0:
-			// Inline object: skip CT measurement, use the
-			// caller-supplied reservation width directly.
-			w = objectWidth
-		default:
-			cs := C.CString(cl.text)
-			w = float64(C.ctMeasureCString(measureFont.ref, cs))
-			C.free(unsafe.Pointer(cs))
+			var w float64
+			switch {
+			case cl.text == "\n" || cl.text == "\r":
+				w = 0
+			case objectWidth > 0:
+				// Inline object: skip CT measurement, use the
+				// caller-supplied reservation width directly.
+				w = objectWidth
+			default:
+				cs := C.CString(cl.text)
+				w = float64(C.ctMeasureCString(measureFont.ref, cs))
+				C.free(unsafe.Pointer(cs))
+			}
+			totalW := w
+			if objectWidth == 0 {
+				totalW = w + xPad*float64(ctx.scaleFactor)
+			}
+			chars = append(chars, charInfo{
+				text: cl.text, width: totalW,
+				byteI: cl.byteI, byteL: cl.byteL,
+				yShift: yShift, xPad: xPad,
+			})
 		}
-		totalW := w
-		if objectWidth == 0 {
-			totalW = w + xPad*float64(ctx.scaleFactor)
-		}
-		chars = append(chars, charInfo{
-			text: cl.text, width: totalW,
-			byteI: cl.byteI, byteL: cl.byteL,
-			yShift: yShift, xPad: xPad,
-		})
 	}
 
 	if cfg.Style.LetterSpacing != 0 {
@@ -550,7 +802,7 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 
 		for ci := li.startChar; ci < li.endChar; ci++ {
 			ch := chars[ci]
-			if ch.text == "\n" {
+			if ch.text == "\n" || ch.text == "\r" {
 				continue
 			}
 
@@ -560,6 +812,7 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 				XOffset:   ch.xPad * pixelScale,
 				XAdvance:  ch.width * pixelScale,
 				YOffset:   ch.yShift * pixelScale,
+				GlyphID:   ch.glyphID,
 			})
 
 			crIdx := len(charRects)
@@ -657,6 +910,24 @@ func (ctx *Context) buildVerticalLayout(text string, baseFont ctFont,
 	penY := fontAscent
 	clusters := segmentGraphemes(text)
 
+	// Shape the full text to obtain post-GSUB glyph IDs, matching what
+	// buildLayout does for horizontal text. Advances are discarded because
+	// vertical spacing is lineHeight-derived. Only single-grapheme clusters
+	// receive a shaped ID; ligatures that collapse multiple graphemes into
+	// one glyph are skipped — vertical layout emits one Glyph per grapheme
+	// and cannot correctly render a combined form across two glyph slots.
+	var shapedMap map[int]shapedCluster
+	if overrides == nil {
+		if sc := shapeTextClusters(baseFont, text); len(sc) > 0 {
+			shapedMap = make(map[int]shapedCluster, len(sc))
+			for _, cl := range sc {
+				if cl.glyphID != 0 {
+					shapedMap[cl.byteStart] = cl
+				}
+			}
+		}
+	}
+
 	for _, cl := range clusters {
 		if cl.text == "\n" || cl.text == "\r" {
 			continue
@@ -674,12 +945,17 @@ func (ctx *Context) buildVerticalLayout(text string, baseFont ctFont,
 		C.free(unsafe.Pointer(cs))
 		centerX := (lineHeight - charW) / 2.0
 
+		var gid uint16
+		if s, ok := shapedMap[cl.byteI]; ok && s.byteLen == cl.byteL {
+			gid = s.glyphID
+		}
 		allGlyphs = append(allGlyphs, Glyph{
 			Index:     uint32(cl.byteI),
 			Codepoint: uint32(cl.byteL),
 			XOffset:   centerX * pixelScale,
 			XAdvance:  0,
 			YAdvance:  -lineHeight * pixelScale,
+			GlyphID:   gid,
 		})
 
 		crIdx := len(charRects)
