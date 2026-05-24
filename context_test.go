@@ -2,7 +2,11 @@
 
 package glyph
 
-import "testing"
+import (
+	"runtime"
+	"strings"
+	"testing"
+)
 
 func TestContextCreation(t *testing.T) {
 	ctx, err := NewContext(1.0)
@@ -111,5 +115,118 @@ func TestResolveFontName(t *testing.T) {
 	}
 	if name == "" {
 		t.Error("resolved name is empty")
+	}
+}
+
+func TestResolveFontName_MonospaceDescriptor(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Skip("Pango/FreeType not available")
+	}
+	defer ctx.Free()
+
+	name, err := ctx.ResolveFontName("Monospace 12")
+	if err != nil {
+		t.Fatalf("ResolveFontName monospace: %v", err)
+	}
+	if name == "" {
+		t.Error("resolved monospace name is empty")
+	}
+}
+
+func TestIsMonospaceName_KnownKeywords(t *testing.T) {
+	cases := []struct {
+		family string
+		want   bool
+	}{
+		{"JetBrains Mono", true},
+		{"Courier New", true},
+		{"Consolas", true},
+		{"VS Code", true},
+		{"Terminal", true},
+		{"Typewriter Pro", true},
+		{"Fixed Sys", true},
+		{"Menlo", true},
+		{"Monaco", true},
+		{"Arial", false},
+		{"Helvetica", false},
+		{"Times New Roman", false},
+		{"Georgia", false},
+	}
+	for _, c := range cases {
+		if got := isMonospaceName(c.family); got != c.want {
+			t.Errorf("isMonospaceName(%q) = %v, want %v", c.family, got, c.want)
+		}
+	}
+}
+
+func TestIsMonospaceName_CaseInsensitive(t *testing.T) {
+	cases := []string{"JETBRAINS MONO", "jetbrains mono", "JetBrains Mono", "MENLO", "menlo"}
+	for _, fam := range cases {
+		if !isMonospaceName(fam) {
+			t.Errorf("isMonospaceName(%q) = false, want true", fam)
+		}
+	}
+}
+
+func TestIsMonospaceName_Empty(t *testing.T) {
+	if isMonospaceName("") {
+		t.Error("isMonospaceName(\"\") = true, want false")
+	}
+}
+
+func TestResolveFamilyAlias_MonospaceAppendsFallback(t *testing.T) {
+	result := resolveFamilyAlias("MyFont", true)
+	if !strings.HasPrefix(result, "MyFont") {
+		t.Errorf("result %q does not start with primary family", result)
+	}
+	if !strings.Contains(result, ",") {
+		t.Errorf("result %q has no fallback appended", result)
+	}
+	// Monospace fallbacks must not include proportional families.
+	proportional := map[string]bool{"SF Pro": true, "System Font": true, "Segoe UI": true, "Sans": true}
+	for fam := range proportional {
+		if strings.Contains(result, fam) {
+			t.Errorf("monospace result %q contains proportional fallback %q", result, fam)
+		}
+	}
+}
+
+func TestResolveFamilyAlias_ProportionalAppendsFallback(t *testing.T) {
+	result := resolveFamilyAlias("MyFont", false)
+	if !strings.HasPrefix(result, "MyFont") {
+		t.Errorf("result %q does not start with primary family", result)
+	}
+	if !strings.Contains(result, ",") {
+		t.Errorf("result %q has no fallback appended", result)
+	}
+	// Proportional fallbacks must not include monospace families.
+	monospace := map[string]bool{"Menlo": true, "Consolas": true, "monospace": true}
+	for fam := range monospace {
+		if strings.Contains(result, fam) {
+			t.Errorf("proportional result %q contains monospace fallback %q", result, fam)
+		}
+	}
+}
+
+func TestResolveFamilyAlias_NoDuplicateWhenFamilyMatchesFallback(t *testing.T) {
+	// Pick the first fallback for the current platform so we can test
+	// that it is not appended a second time when fam already names it.
+	var primary string
+	switch runtime.GOOS {
+	case "darwin":
+		primary = "Menlo"
+	default:
+		primary = "monospace"
+	}
+	result := resolveFamilyAlias(primary, true)
+	parts := strings.Split(result, ", ")
+	seen := map[string]int{}
+	for _, p := range parts {
+		seen[strings.TrimSpace(p)]++
+	}
+	if seen[primary] > 1 {
+		t.Errorf("resolveFamilyAlias(%q, true) = %q: %q appears %d times, want 1",
+			primary, result, primary, seen[primary])
 	}
 }

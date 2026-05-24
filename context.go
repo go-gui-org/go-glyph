@@ -269,7 +269,7 @@ func (ctx *Context) ResolveFontName(fontDescStr string) (string, error) {
 	defer desc.Close()
 
 	fam := PangoFontDescGetFamily(desc.ptr)
-	resolved := resolveFamilyAlias(fam)
+	resolved := resolveFamilyAlias(fam, isMonospaceName(fam))
 	PangoFontDescSetFamily(desc.ptr, resolved)
 
 	font := PangoContextLoadFont(ctx.pangoCtx.ptr, desc.ptr)
@@ -295,7 +295,7 @@ func (ctx *Context) createFontDescription(style TextStyle) PangoFontDescW {
 
 	// Resolve family aliases.
 	fam := PangoFontDescGetFamily(desc.ptr)
-	resolved := resolveFamilyAlias(fam)
+	resolved := resolveFamilyAlias(fam, isMonospaceName(fam))
 	PangoFontDescSetFamily(desc.ptr, resolved)
 
 	// Typeface override.
@@ -336,25 +336,57 @@ func applyTypeface(desc *C.PangoFontDescription, tf Typeface) {
 	}
 }
 
-// resolveFamilyAlias appends platform fallback families.
-func resolveFamilyAlias(fam string) string {
+// resolveFamilyAlias appends platform fallback families. When monospace
+// is true, only monospace fallbacks are appended so mixed-pitch rendering
+// is avoided for code/terminal fonts.
+func resolveFamilyAlias(fam string, monospace bool) string {
 	var aliases []string
 	switch runtime.GOOS {
 	case "darwin":
-		aliases = []string{"SF Pro", "System Font"}
+		if monospace {
+			aliases = []string{"Menlo", "Courier New"}
+		} else {
+			aliases = []string{"SF Pro", "System Font"}
+		}
 	case "windows":
-		aliases = []string{"Segoe UI"}
+		if monospace {
+			aliases = []string{"Consolas", "Courier New"}
+		} else {
+			aliases = []string{"Segoe UI"}
+		}
 	default:
-		aliases = []string{"Sans"}
+		if monospace {
+			aliases = []string{"monospace"}
+		} else {
+			aliases = []string{"Sans"}
+		}
 	}
 	result := fam
 	for _, a := range aliases {
+		if strings.Contains(result, a) {
+			continue
+		}
 		if len(result) > 0 {
 			result += ", "
 		}
 		result += a
 	}
 	return result
+}
+
+// isMonospaceName reports whether the font family name is a known
+// monospace font based on common naming conventions.
+func isMonospaceName(family string) bool {
+	lower := strings.ToLower(family)
+	for _, kw := range []string{
+		"mono", "courier", "consol", "code", "terminal",
+		"typewriter", "fixed", "menlo", "monaco",
+	} {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 func (ctx *Context) registerMacOSFonts() {

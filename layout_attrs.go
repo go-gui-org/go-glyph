@@ -144,7 +144,7 @@ func applyRichTextStyle(ctx *Context, list PangoAttrListW, style TextStyle,
 		if desc.ptr != nil {
 			if style.FontName != "" {
 				fam := PangoFontDescGetFamily(desc.ptr)
-				resolved := resolveFamilyAlias(fam)
+				resolved := resolveFamilyAlias(fam, isMonospaceName(fam))
 				PangoFontDescSetFamily(desc.ptr, resolved)
 			}
 			applyTypeface(desc.ptr, style.Typeface)
