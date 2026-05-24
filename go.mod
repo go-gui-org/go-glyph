@@ -8,6 +8,7 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	github.com/veandco/go-sdl2 v0.4.40
 	golang.org/x/pkgsite v0.0.0-20260306132053-fd3717b20fe8
+	golang.org/x/text v0.34.0
 )
 
 require (
@@ -61,7 +62,6 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/term v0.40.0 // indirect
-	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect

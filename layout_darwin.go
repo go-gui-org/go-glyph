@@ -187,6 +187,8 @@ import (
 	"strings"
 	"unicode/utf8"
 	"unsafe"
+
+	xbidi "golang.org/x/text/unicode/bidi"
 )
 
 // charFontOverride holds per-character font and position adjustments
@@ -455,6 +457,17 @@ type shapedCluster struct {
 	byteLen   int
 	advance   float64
 	glyphID   uint16 // CGGlyph after GSUB (calt/liga) substitution
+	isRTL     bool
+}
+
+type charInfo struct {
+	text    string
+	width   float64
+	byteI   int
+	byteL   int
+	yShift  float64
+	xPad    float64
+	glyphID uint16 // resolved CGGlyph after shaping (0 = use text)
 }
 
 // buildUTF16ToByteSlice builds a mapping where result[utf16Pos] = UTF-8 byte
@@ -473,6 +486,115 @@ func buildUTF16ToByteSlice(text string) []int {
 	}
 	m = append(m, len(text)) // sentinel: byte offset of string end
 	return m
+}
+
+// buildByteToRuneIndexSlice maps each byte offset to its rune index.
+// Non-rune-start positions are -1. Index len(text) holds the total rune count.
+func buildByteToRuneIndexSlice(text string) []int {
+	m := make([]int, len(text)+1)
+	for i := range m {
+		m[i] = -1
+	}
+	runeIdx := 0
+	for i := 0; i < len(text); {
+		m[i] = runeIdx
+		_, sz := utf8.DecodeRuneInString(text[i:])
+		i += sz
+		runeIdx++
+	}
+	m[len(text)] = runeIdx
+	return m
+}
+
+// visualOrderForLine returns the char indices for one line in visual order.
+// Within an RTL bidi run, char clusters are emitted in reverse logical order.
+func visualOrderForLine(text string, chars []charInfo, startChar, endChar int) []int {
+	if startChar < 0 || endChar > len(chars) || startChar >= endChar {
+		return nil
+	}
+
+	startByte := chars[startChar].byteI
+	endByte := chars[endChar-1].byteI + chars[endChar-1].byteL
+	if startByte < 0 || endByte < startByte || endByte > len(text) {
+		return nil
+	}
+	lineText := text[startByte:endByte]
+	runeMap := buildByteToRuneIndexSlice(lineText)
+
+	type span struct {
+		charIndex          int
+		runeStart, runeEnd int
+	}
+	spans := make([]span, 0, endChar-startChar)
+	for i := startChar; i < endChar; i++ {
+		relStart := chars[i].byteI - startByte
+		relEnd := relStart + chars[i].byteL
+		if relStart < 0 || relEnd < relStart || relStart >= len(runeMap) || relEnd >= len(runeMap) {
+			return nil
+		}
+		rs, re := runeMap[relStart], runeMap[relEnd]
+		if rs < 0 || re < 0 {
+			return nil
+		}
+		spans = append(spans, span{
+			charIndex: i,
+			runeStart: rs,
+			runeEnd:   re,
+		})
+	}
+
+	var para xbidi.Paragraph
+	if _, err := para.SetString(lineText); err != nil {
+		return nil
+	}
+	ordering, err := para.Order()
+	if err != nil || ordering.NumRuns() == 0 {
+		return nil
+	}
+
+	order := make([]int, 0, len(spans))
+	used := make([]bool, len(spans))
+	runChars := make([]int, 0, len(spans))
+	runSpanIdx := make([]int, 0, len(spans))
+	for ri := 0; ri < ordering.NumRuns(); ri++ {
+		run := ordering.Run(ri)
+		runStart, runEndInclusive := run.Pos()
+		runEnd := runEndInclusive + 1
+
+		runChars = runChars[:0]
+		runSpanIdx = runSpanIdx[:0]
+		for si, sp := range spans {
+			if used[si] {
+				continue
+			}
+			if sp.runeStart >= runStart && sp.runeEnd <= runEnd {
+				runChars = append(runChars, sp.charIndex)
+				runSpanIdx = append(runSpanIdx, si)
+			}
+		}
+		if len(runChars) == 0 {
+			continue
+		}
+
+		if run.Direction() == xbidi.RightToLeft {
+			for i := len(runChars) - 1; i >= 0; i-- {
+				order = append(order, runChars[i])
+				used[runSpanIdx[i]] = true
+			}
+		} else {
+			order = append(order, runChars...)
+			for _, si := range runSpanIdx {
+				used[si] = true
+			}
+		}
+	}
+
+	for si, sp := range spans {
+		if !used[si] {
+			order = append(order, sp.charIndex)
+		}
+	}
+	return order
 }
 
 // shapeTextClusters shapes text with CoreText (via CTLine) and returns
@@ -526,6 +648,7 @@ func shapeTextClusters(font ctFont, text string) []shapedCluster {
 			byteLen:   utf16Map[ue] - utf16Map[us],
 			advance:   float64(out[i].advance),
 			glyphID:   uint16(out[i].glyphID),
+			isRTL:     out[i].isRTL != 0,
 		}
 		if sc.byteLen > 0 {
 			clusterMap[sc.byteStart] = sc
@@ -549,7 +672,47 @@ func shapeTextClusters(font ctFont, text string) []shapedCluster {
 			pos += sz
 		}
 	}
-	return result
+
+	// Merge consecutive non-space RTL clusters into word-level clusters.
+	// Arabic and other RTL scripts require full-word context for correct
+	// contextual shaping; per-glyph CTLine rendering produces isolated
+	// letter forms instead of the correct initial/medial/final forms.
+	merged := make([]shapedCluster, 0, len(result))
+	for i := 0; i < len(result); {
+		sc := result[i]
+		clText := text[sc.byteStart : sc.byteStart+sc.byteLen]
+		if !sc.isRTL || clText == " " || clText == "\t" {
+			merged = append(merged, sc)
+			i++
+			continue
+		}
+		j := i + 1
+		totalAdv := sc.advance
+		for j < len(result) {
+			nx := result[j]
+			nt := text[nx.byteStart : nx.byteStart+nx.byteLen]
+			if !nx.isRTL || nt == " " || nt == "\t" {
+				break
+			}
+			totalAdv += nx.advance
+			j++
+		}
+		if j > i+1 {
+			last := result[j-1]
+			// glyphID intentionally zero: the whole merged word is rendered as
+			// a text run by CTLine so per-glyph IDs are irrelevant here.
+			merged = append(merged, shapedCluster{
+				byteStart: sc.byteStart,
+				byteLen:   last.byteStart + last.byteLen - sc.byteStart,
+				advance:   totalAdv,
+				isRTL:     true,
+			})
+		} else {
+			merged = append(merged, sc)
+		}
+		i = j
+	}
+	return merged
 }
 
 // buildLayout creates a Layout from measured text with word wrapping.
@@ -572,15 +735,6 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 	// shaping so CoreText can apply ligature substitutions (liga, calt)
 	// across adjacent characters. The shaped clusters may span multiple
 	// code points when a ligature was formed.
-	type charInfo struct {
-		text    string
-		width   float64
-		byteI   int
-		byteL   int
-		yShift  float64
-		xPad    float64
-		glyphID uint16 // resolved CGGlyph after shaping (0 = use text)
-	}
 	var chars []charInfo
 	if overrides == nil {
 		if sc := shapeTextClusters(baseFont, text); len(sc) > 0 {
@@ -818,12 +972,7 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 			itemStart = len(allGlyphs)
 		}
 
-		for ci := li.startChar; ci < li.endChar; ci++ {
-			ch := chars[ci]
-			if ch.text == "\n" || ch.text == "\r" {
-				continue
-			}
-
+		emitChar := func(ch charInfo, ci int) {
 			allGlyphs = append(allGlyphs, Glyph{
 				Index:     uint32(ch.byteI),
 				Codepoint: uint32(ch.byteL),
@@ -832,7 +981,6 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 				YOffset:   ch.yShift * pixelScale,
 				GlyphID:   ch.glyphID,
 			})
-
 			crIdx := len(charRects)
 			charRects = append(charRects, CharRect{
 				Rect: Rect{
@@ -844,7 +992,6 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 				Index: ch.byteI,
 			})
 			charRectByIndex[ch.byteI] = crIdx
-
 			attrIdx := len(logAttrs)
 			isWS := ch.text == " " || ch.text == "\t"
 			prevWS := ci > 0 && (chars[ci-1].text == " " ||
@@ -860,6 +1007,21 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 			})
 			logAttrByIndex[ch.byteI] = attrIdx
 			cx += ch.width
+		}
+
+		order := visualOrderForLine(text, chars, li.startChar, li.endChar)
+		if len(order) == 0 {
+			order = make([]int, 0, li.endChar-li.startChar)
+			for ci := li.startChar; ci < li.endChar; ci++ {
+				order = append(order, ci)
+			}
+		}
+		for _, ci := range order {
+			ch := chars[ci]
+			if ch.text == "\n" || ch.text == "\r" {
+				continue
+			}
+			emitChar(ch, ci)
 		}
 
 		flushItem(endByteIdx)
