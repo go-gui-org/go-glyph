@@ -9,4 +9,7 @@ require (
 
 replace github.com/mike-ward/go-glyph => ../..
 
-require github.com/rivo/uniseg v0.4.7 // indirect
+require (
+	github.com/rivo/uniseg v0.4.7 // indirect
+	golang.org/x/text v0.34.0 // indirect
+)
