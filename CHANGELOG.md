@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-05-24
+
+### Added
+
+- Darwin: shaped glyph rendering via CTLine cluster shaping with OpenType calt/liga support
+- Darwin: paragraph-level bidirectional reordering via `golang.org/x/text/unicode/bidi`
+- Context: monospace-aware fallback font families with deduplication
+
+### Fixed
+
+- Darwin: duplicate-glyph bug in RTL shapeTextClusters
+
+### Changed
+
+- examples: add `golang.org/x/text` to go.mod/go.sum for all example modules
+
 ## [1.7.1] - 2026-05-16
 
 ### Fixed
