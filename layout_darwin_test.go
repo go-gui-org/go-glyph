@@ -241,3 +241,43 @@ func TestLayoutDarwin_SimpleASCII_GlyphCountMatchesChars(t *testing.T) {
 		t.Errorf("glyphs=%d, want 3", len(l.Glyphs))
 	}
 }
+
+func TestLayoutDarwin_RTL_LogicalOrder(t *testing.T) {
+	ctx := newDarwinTestContext(t)
+	defer ctx.Free()
+
+	// Hebrew "שלום" — 4 RTL characters. shapeTextClusters walks text in
+	// logical byte order (ascending), so the first logical character (ש,
+	// byte 0) is placed leftmost (smallest X) and the last (ם, byte 6)
+	// rightmost (largest X). Full paragraph-level bidi reordering is not
+	// yet implemented; this test documents the current behaviour.
+	const text = "שלום" // שלום
+	cfg := TextConfig{Style: TextStyle{FontName: "Sans 16"}}
+	l, err := ctx.LayoutText(text, cfg)
+	if err != nil {
+		t.Fatalf("LayoutText: %v", err)
+	}
+	if len(l.CharRects) < 2 {
+		t.Fatalf("too few CharRects (%d)", len(l.CharRects))
+	}
+
+	var xFirst, xLast float32
+	firstFound, lastFound := false, false
+	for _, cr := range l.CharRects {
+		if cr.Index == 0 { // ש — first logical character
+			xFirst = cr.Rect.X
+			firstFound = true
+		}
+		if cr.Index == 6 { // ם — last logical character
+			xLast = cr.Rect.X
+			lastFound = true
+		}
+	}
+	if !firstFound || !lastFound {
+		t.Fatalf("could not find expected CharRects (first=%v last=%v)", firstFound, lastFound)
+	}
+	if xFirst >= xLast {
+		t.Errorf("logical order: first char (byte 0) x=%.1f should be < last char (byte 6) x=%.1f",
+			xFirst, xLast)
+	}
+}

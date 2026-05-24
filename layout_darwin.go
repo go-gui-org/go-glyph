@@ -50,6 +50,7 @@ typedef struct {
     int     utf16End;    // exclusive
     CGFloat advance;
     CGGlyph glyphID;     // resolved CGGlyph after shaping
+    int     isRTL;       // 1 if glyph is from a right-to-left run
 } CTGlyphCluster;
 
 // ctShapeGlyphClusters shapes utf8Text with font and fills out[] with
@@ -150,6 +151,7 @@ static int ctShapeGlyphClusters(CTFontRef font, const char *utf8Text,
             sortOrder[j + 1] = key;
         }
 
+        int isRTL = (CTRunGetStatus(run) & kCTRunStatusRightToLeft) ? 1 : 0;
         for (int k = 0; k < gc && total < utf16Len; k++) {
             int gi    = sortOrder[k];
             // Anchor the first sorted cluster to runStart so that RTL
@@ -162,6 +164,7 @@ static int ctShapeGlyphClusters(CTFontRef font, const char *utf8Text,
             out[total].utf16End   = end;
             out[total].advance    = adv[gi].width;
             out[total].glyphID    = isFallback ? 0 : glyphs[gi];
+            out[total].isRTL      = isRTL;
             total++;
         }
         free(sortOrder);
@@ -473,8 +476,16 @@ func buildUTF16ToByteSlice(text string) []int {
 }
 
 // shapeTextClusters shapes text with CoreText (via CTLine) and returns
-// per-glyph clusters with UTF-8 byte ranges and physical-pixel advances.
-// Returns nil on failure; callers fall back to per-grapheme measurement.
+// per-glyph clusters with UTF-8 byte ranges and physical-pixel advances,
+// in logical (ascending byte) order. Returns nil on failure; callers fall
+// back to per-grapheme measurement.
+//
+// CTLineGetGlyphRuns returns runs in visual order, not byte order. For RTL
+// paragraphs visual order is the reverse of byte order, so a sequential
+// gap-fill across run boundaries produces duplicate entries. Instead we
+// build a byteStart→cluster map and walk the text in byte order, which is
+// correct for both LTR and RTL scripts and correctly handles ligatures (the
+// walker jumps past all bytes consumed by a multi-char cluster).
 func shapeTextClusters(font ctFont, text string) []shapedCluster {
 	if len(text) == 0 || font.ref == 0 {
 		return nil
@@ -494,10 +505,8 @@ func shapeTextClusters(font ctFont, text string) []shapedCluster {
 		return nil
 	}
 
-	// Fill byte-range gaps (e.g. newlines that CoreText emits no glyph for)
-	// so every character in text is represented in chars.
-	result := make([]shapedCluster, 0, n+4)
-	pos := 0
+	// Build map: UTF-8 byte start → shaped cluster.
+	clusterMap := make(map[int]shapedCluster, n)
 	for i := range n {
 		us := int(out[i].utf16Start)
 		ue := int(out[i].utf16End)
@@ -518,18 +527,27 @@ func shapeTextClusters(font ctFont, text string) []shapedCluster {
 			advance:   float64(out[i].advance),
 			glyphID:   uint16(out[i].glyphID),
 		}
-		for pos < sc.byteStart {
-			_, sz := utf8.DecodeRuneInString(text[pos:])
+		if sc.byteLen > 0 {
+			clusterMap[sc.byteStart] = sc
+		}
+	}
+
+	// Walk text in logical byte order. For each position:
+	//   - shaped cluster found → use it; jump past the full cluster span
+	//     (skipping any subsequent graphemes consumed by a ligature)
+	//   - not found (newline, control char CoreText skips) → zero-advance
+	//     placeholder so every byte is represented in the result
+	result := make([]shapedCluster, 0, n+4)
+	pos := 0
+	for pos < len(text) {
+		_, sz := utf8.DecodeRuneInString(text[pos:])
+		if sc, ok := clusterMap[pos]; ok {
+			result = append(result, sc)
+			pos = sc.byteStart + sc.byteLen
+		} else {
 			result = append(result, shapedCluster{byteStart: pos, byteLen: sz})
 			pos += sz
 		}
-		result = append(result, sc)
-		pos = sc.byteStart + sc.byteLen
-	}
-	for pos < len(text) {
-		_, sz := utf8.DecodeRuneInString(text[pos:])
-		result = append(result, shapedCluster{byteStart: pos, byteLen: sz})
-		pos += sz
 	}
 	return result
 }
