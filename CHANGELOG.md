@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-06-03
+
+### Changed
+
+- Reorder struct fields for optimal memory alignment across 10 files; reduces struct sizes by eliminating inter-field padding
+
 ## [1.8.0] - 2026-05-24
 
 ### Added
