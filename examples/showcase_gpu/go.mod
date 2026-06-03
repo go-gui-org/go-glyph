@@ -1,16 +1,16 @@
-module github.com/mike-ward/go-glyph/examples/showcase_gpu
+module github.com/go-gui-org/go-glyph/examples/showcase_gpu
 
 go 1.26
 
 require (
-	github.com/mike-ward/go-glyph v1.4.1
-	github.com/mike-ward/go-glyph/examples/showcase_sections v1.0.0
+	github.com/go-gui-org/go-glyph v1.4.1
+	github.com/go-gui-org/go-glyph/examples/showcase_sections v1.0.0
 	github.com/veandco/go-sdl2 v0.4.40
 )
 
 replace (
-	github.com/mike-ward/go-glyph => ../..
-	github.com/mike-ward/go-glyph/examples/showcase_sections => ../showcase_sections
+	github.com/go-gui-org/go-glyph => ../..
+	github.com/go-gui-org/go-glyph/examples/showcase_sections => ../showcase_sections
 )
 
 require (

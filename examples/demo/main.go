@@ -9,8 +9,8 @@ import (
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/mike-ward/go-glyph"
-	glyphebi "github.com/mike-ward/go-glyph/backend/ebitengine"
+	"github.com/go-gui-org/go-glyph"
+	glyphebi "github.com/go-gui-org/go-glyph/backend/ebitengine"
 )
 
 const (

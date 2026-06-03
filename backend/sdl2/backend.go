@@ -8,7 +8,7 @@ import (
 	"log"
 	"unsafe"
 
-	"github.com/mike-ward/go-glyph"
+	"github.com/go-gui-org/go-glyph"
 	"github.com/veandco/go-sdl2/sdl"
 )
 

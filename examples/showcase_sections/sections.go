@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/mike-ward/go-glyph"
+	"github.com/go-gui-org/go-glyph"
 )
 
 func DrawIntro(a *App, x, y, w float32) {

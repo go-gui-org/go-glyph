@@ -2,7 +2,7 @@
 // drawing functions shared by showcase_gpu and showcase_web.
 package showcase_sections
 
-import "github.com/mike-ward/go-glyph"
+import "github.com/go-gui-org/go-glyph"
 
 // App holds state shared across all showcase sections.
 type App struct {

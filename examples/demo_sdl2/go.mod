@@ -1,13 +1,13 @@
-module github.com/mike-ward/go-glyph/examples/demo_sdl2
+module github.com/go-gui-org/go-glyph/examples/demo_sdl2
 
 go 1.26
 
 require (
-	github.com/mike-ward/go-glyph v1.4.1
+	github.com/go-gui-org/go-glyph v1.4.1
 	github.com/veandco/go-sdl2 v0.4.40
 )
 
-replace github.com/mike-ward/go-glyph => ../..
+replace github.com/go-gui-org/go-glyph => ../..
 
 require (
 	github.com/rivo/uniseg v0.4.7 // indirect

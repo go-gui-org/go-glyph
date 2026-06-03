@@ -7,7 +7,7 @@ import (
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/mike-ward/go-glyph"
+	"github.com/go-gui-org/go-glyph"
 )
 
 // Backend implements glyph.DrawBackend using Ebitengine.

@@ -5,7 +5,7 @@ package android
 import (
 	"unsafe"
 
-	"github.com/mike-ward/go-glyph"
+	"github.com/go-gui-org/go-glyph"
 )
 
 // Backend implements glyph.DrawBackend using OpenGL ES 3.0 on

@@ -7,7 +7,7 @@ package web
 import (
 	"syscall/js"
 
-	"github.com/mike-ward/go-glyph"
+	"github.com/go-gui-org/go-glyph"
 )
 
 // Backend implements glyph.DrawBackend using Canvas2D.

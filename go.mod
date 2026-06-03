@@ -1,4 +1,4 @@
-module github.com/mike-ward/go-glyph
+module github.com/go-gui-org/go-glyph
 
 go 1.26
 

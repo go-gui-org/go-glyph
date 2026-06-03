@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	ss "github.com/mike-ward/go-glyph/examples/showcase_sections"
+	ss "github.com/go-gui-org/go-glyph/examples/showcase_sections"
 )
 
 func resetGlobals() {

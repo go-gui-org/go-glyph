@@ -20,9 +20,9 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/mike-ward/go-glyph"
-	"github.com/mike-ward/go-glyph/backend/android"
-	ss "github.com/mike-ward/go-glyph/examples/showcase_sections"
+	"github.com/go-gui-org/go-glyph"
+	"github.com/go-gui-org/go-glyph/backend/android"
+	ss "github.com/go-gui-org/go-glyph/examples/showcase_sections"
 )
 
 var (

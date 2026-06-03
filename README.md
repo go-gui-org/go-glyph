@@ -77,7 +77,7 @@ sudo dnf install pango-devel freetype-devel \
 ## Installation
 
 ```sh
-go get github.com/mike-ward/go-glyph@latest
+go get github.com/go-gui-org/go-glyph@latest
 ```
 
 ## Quick Start
@@ -91,8 +91,8 @@ import (
     "log"
 
     "github.com/hajimehoshi/ebiten/v2"
-    "github.com/mike-ward/go-glyph"
-    glyphebi "github.com/mike-ward/go-glyph/backend/ebitengine"
+    "github.com/go-gui-org/go-glyph"
+    glyphebi "github.com/go-gui-org/go-glyph/backend/ebitengine"
 )
 
 type Game struct {
@@ -224,7 +224,7 @@ dependencies. Import the one matching the target framework.
 ### Ebitengine
 
 ```go
-import glyphebi "github.com/mike-ward/go-glyph/backend/ebitengine"
+import glyphebi "github.com/go-gui-org/go-glyph/backend/ebitengine"
 
 backend := glyphebi.New(nil, float32(dpiScale))
 // Call backend.SetTarget(screen) each frame before drawing.
@@ -233,7 +233,7 @@ backend := glyphebi.New(nil, float32(dpiScale))
 ### SDL2
 
 ```go
-import glyphsdl "github.com/mike-ward/go-glyph/backend/sdl2"
+import glyphsdl "github.com/go-gui-org/go-glyph/backend/sdl2"
 
 backend := glyphsdl.New(sdlRenderer, float32(dpiScale))
 defer backend.Destroy()
@@ -245,7 +245,7 @@ Uses Metal on macOS and OpenGL 3.3 on Linux. The API is identical
 on both platforms:
 
 ```go
-import glyphgpu "github.com/mike-ward/go-glyph/backend/gpu"
+import glyphgpu "github.com/go-gui-org/go-glyph/backend/gpu"
 
 // Create window with gpu.WindowFlag() (Metal or OpenGL).
 window, _ := sdl.CreateWindow("demo",

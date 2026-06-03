@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"unsafe"
 
-	"github.com/mike-ward/go-glyph"
-	"github.com/mike-ward/go-glyph/backend/gpu"
+	"github.com/go-gui-org/go-glyph"
+	"github.com/go-gui-org/go-glyph/backend/gpu"
 
 	"github.com/veandco/go-sdl2/sdl"
 )

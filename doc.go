@@ -23,8 +23,8 @@
 //
 // [Context] owns FreeType and Pango state. [Renderer] draws shaped layouts
 // through a [DrawBackend]. Two backends are provided:
-//   - [github.com/mike-ward/go-glyph/backend/ebitengine]: Ebitengine integration.
-//   - [github.com/mike-ward/go-glyph/backend/gpu]: raw OpenGL 3.3 via SDL2.
+//   - [github.com/go-gui-org/go-glyph/backend/ebitengine]: Ebitengine integration.
+//   - [github.com/go-gui-org/go-glyph/backend/gpu]: raw OpenGL 3.3 via SDL2.
 //
 // # Thread Safety
 //
@@ -34,6 +34,6 @@
 //
 // # Sub-packages
 //
-//   - [github.com/mike-ward/go-glyph/accessibility]: screen-reader tree management.
-//   - [github.com/mike-ward/go-glyph/ime]: IME bridge (macOS/Linux).
+//   - [github.com/go-gui-org/go-glyph/accessibility]: screen-reader tree management.
+//   - [github.com/go-gui-org/go-glyph/ime]: IME bridge (macOS/Linux).
 package glyph

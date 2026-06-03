@@ -5,7 +5,7 @@ package android
 import (
 	"testing"
 
-	"github.com/mike-ward/go-glyph"
+	"github.com/go-gui-org/go-glyph"
 )
 
 func newTestBackend() *Backend {

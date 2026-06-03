@@ -3,7 +3,7 @@
 # glyph
 
 ```go
-import "github.com/mike-ward/go-glyph"
+import "github.com/go-gui-org/go-glyph"
 ```
 
 Package glyph provides high\-quality text shaping, layout, and rendering for GPU\-accelerated applications. It wraps Pango \(for Unicode layout, bidirectional text, and complex script support\) and FreeType \(for glyph rasterization with subpixel positioning\) behind a backend\-agnostic [DrawBackend](<#DrawBackend>) interface.
@@ -29,13 +29,13 @@ renderer.DrawLayout(layout, 10, 10)
 
 [Context](<#Context>) owns FreeType and Pango state. [Renderer](<#Renderer>) draws shaped layouts through a [DrawBackend](<#DrawBackend>). Two backends are provided:
 
-- [github.com/mike\\\-ward/go\\\-glyph/backend/ebitengine](<https://pkg.go.dev/github.com/mike-ward/go-glyph/backend/ebitengine/>): Ebitengine integration.
-- [github.com/mike\\\-ward/go\\\-glyph/backend/gpu](<https://pkg.go.dev/github.com/mike-ward/go-glyph/backend/gpu/>): raw OpenGL 3.3 via SDL2.
+- [github.com/mike\\\-ward/go\\\-glyph/backend/ebitengine](<https://pkg.go.dev/github.com/go-gui-org/go-glyph/backend/ebitengine/>): Ebitengine integration.
+- [github.com/mike\\\-ward/go\\\-glyph/backend/gpu](<https://pkg.go.dev/github.com/go-gui-org/go-glyph/backend/gpu/>): raw OpenGL 3.3 via SDL2.
 
 ### Sub\\\-packages
 
-- [github.com/mike\\\-ward/go\\\-glyph/accessibility](<https://pkg.go.dev/github.com/mike-ward/go-glyph/accessibility/>): screen\-reader tree management.
-- [github.com/mike\\\-ward/go\\\-glyph/ime](<https://pkg.go.dev/github.com/mike-ward/go-glyph/ime/>): IME bridge \(macOS/Linux\).
+- [github.com/mike\\\-ward/go\\\-glyph/accessibility](<https://pkg.go.dev/github.com/go-gui-org/go-glyph/accessibility/>): screen\-reader tree management.
+- [github.com/mike\\\-ward/go\\\-glyph/ime](<https://pkg.go.dev/github.com/go-gui-org/go-glyph/ime/>): IME bridge \(macOS/Linux\).
 
 ## Index
 
@@ -433,7 +433,7 @@ const SubpixelBins = 4
 ```
 
 <a name="FCConfigAppFontAddDir"></a>
-## func [FCConfigAppFontAddDir](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L376>)
+## func [FCConfigAppFontAddDir](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L376>)
 
 ```go
 func FCConfigAppFontAddDir(dir string) bool
@@ -442,7 +442,7 @@ func FCConfigAppFontAddDir(dir string) bool
 FCConfigAppFontAddDir registers a font directory with FontConfig.
 
 <a name="FCConfigAppFontAddFile"></a>
-## func [FCConfigAppFontAddFile](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L368>)
+## func [FCConfigAppFontAddFile](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L368>)
 
 ```go
 func FCConfigAppFontAddFile(path string) bool
@@ -451,7 +451,7 @@ func FCConfigAppFontAddFile(path string) bool
 FCConfigAppFontAddFile registers a font file with FontConfig.
 
 <a name="GetSelectedText"></a>
-## func [GetSelectedText](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L178>)
+## func [GetSelectedText](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L178>)
 
 ```go
 func GetSelectedText(text string, cursor, anchor int) string
@@ -460,7 +460,7 @@ func GetSelectedText(text string, cursor, anchor int) string
 GetSelectedText returns the text between cursor and anchor.
 
 <a name="IsDeadKey"></a>
-## func [IsDeadKey](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L257>)
+## func [IsDeadKey](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L257>)
 
 ```go
 func IsDeadKey(r rune) bool
@@ -469,7 +469,7 @@ func IsDeadKey(r rune) bool
 IsDeadKey returns true if the rune is a dead key accent starter.
 
 <a name="PangoAttrBackgroundNew"></a>
-## func [PangoAttrBackgroundNew](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L409>)
+## func [PangoAttrBackgroundNew](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L409>)
 
 ```go
 func PangoAttrBackgroundNew(r, g, b uint16) *C.PangoAttribute
@@ -478,7 +478,7 @@ func PangoAttrBackgroundNew(r, g, b uint16) *C.PangoAttribute
 PangoAttrBackgroundNew creates a background color attribute.
 
 <a name="PangoAttrFontDescNew"></a>
-## func [PangoAttrFontDescNew](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L590>)
+## func [PangoAttrFontDescNew](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L590>)
 
 ```go
 func PangoAttrFontDescNew(desc *C.PangoFontDescription) *C.PangoAttribute
@@ -487,7 +487,7 @@ func PangoAttrFontDescNew(desc *C.PangoFontDescription) *C.PangoAttribute
 PangoAttrFontDescNew creates a font description attribute.
 
 <a name="PangoAttrFontFeaturesNew"></a>
-## func [PangoAttrFontFeaturesNew](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L433>)
+## func [PangoAttrFontFeaturesNew](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L433>)
 
 ```go
 func PangoAttrFontFeaturesNew(features string) *C.PangoAttribute
@@ -496,7 +496,7 @@ func PangoAttrFontFeaturesNew(features string) *C.PangoAttribute
 PangoAttrFontFeaturesNew creates an OpenType font features attribute.
 
 <a name="PangoAttrForegroundNew"></a>
-## func [PangoAttrForegroundNew](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L404>)
+## func [PangoAttrForegroundNew](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L404>)
 
 ```go
 func PangoAttrForegroundNew(r, g, b uint16) *C.PangoAttribute
@@ -505,7 +505,7 @@ func PangoAttrForegroundNew(r, g, b uint16) *C.PangoAttribute
 PangoAttrForegroundNew creates a foreground color attribute. Colors are 16\-bit \(0–65535\).
 
 <a name="PangoAttrLetterSpacingNew"></a>
-## func [PangoAttrLetterSpacingNew](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L428>)
+## func [PangoAttrLetterSpacingNew](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L428>)
 
 ```go
 func PangoAttrLetterSpacingNew(spacing int) *C.PangoAttribute
@@ -514,7 +514,7 @@ func PangoAttrLetterSpacingNew(spacing int) *C.PangoAttribute
 PangoAttrLetterSpacingNew creates a letter\-spacing attribute \(Pango units\).
 
 <a name="PangoAttrShapeNew"></a>
-## func [PangoAttrShapeNew](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L595>)
+## func [PangoAttrShapeNew](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L595>)
 
 ```go
 func PangoAttrShapeNew(ink, logical *C.PangoRectangle) *C.PangoAttribute
@@ -523,7 +523,7 @@ func PangoAttrShapeNew(ink, logical *C.PangoRectangle) *C.PangoAttribute
 PangoAttrShapeNew creates a shape attribute \(for inline objects\).
 
 <a name="PangoAttrStrikethroughNew"></a>
-## func [PangoAttrStrikethroughNew](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L419>)
+## func [PangoAttrStrikethroughNew](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L419>)
 
 ```go
 func PangoAttrStrikethroughNew(strikethrough bool) *C.PangoAttribute
@@ -532,7 +532,7 @@ func PangoAttrStrikethroughNew(strikethrough bool) *C.PangoAttribute
 PangoAttrStrikethroughNew creates a strikethrough attribute.
 
 <a name="PangoAttrUnderlineNew"></a>
-## func [PangoAttrUnderlineNew](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L414>)
+## func [PangoAttrUnderlineNew](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L414>)
 
 ```go
 func PangoAttrUnderlineNew(style int) *C.PangoAttribute
@@ -541,7 +541,7 @@ func PangoAttrUnderlineNew(style int) *C.PangoAttribute
 PangoAttrUnderlineNew creates an underline attribute.
 
 <a name="PangoContextGetMetrics"></a>
-## func [PangoContextGetMetrics](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L553>)
+## func [PangoContextGetMetrics](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L553>)
 
 ```go
 func PangoContextGetMetrics(ctx *C.PangoContext, desc *C.PangoFontDescription, lang *C.PangoLanguage) *C.PangoFontMetrics
@@ -550,7 +550,7 @@ func PangoContextGetMetrics(ctx *C.PangoContext, desc *C.PangoFontDescription, l
 PangoContextGetMetrics returns metrics for a font description.
 
 <a name="PangoContextSetBaseGravity"></a>
-## func [PangoContextSetBaseGravity](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L525>)
+## func [PangoContextSetBaseGravity](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L525>)
 
 ```go
 func PangoContextSetBaseGravity(ctx *C.PangoContext)
@@ -559,7 +559,7 @@ func PangoContextSetBaseGravity(ctx *C.PangoContext)
 PangoContextSetBaseGravity sets the base gravity for the context.
 
 <a name="PangoFCFontLockFace"></a>
-## func [PangoFCFontLockFace](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L390>)
+## func [PangoFCFontLockFace](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L390>)
 
 ```go
 func PangoFCFontLockFace(font *C.PangoFont) unsafe.Pointer
@@ -568,7 +568,7 @@ func PangoFCFontLockFace(font *C.PangoFont) unsafe.Pointer
 PangoFCFontLockFace extracts the FT\_Face from a PangoFont. Caller must call PangoFCFontUnlockFace when done.
 
 <a name="PangoFCFontMapConfigChanged"></a>
-## func [PangoFCFontMapConfigChanged](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L384>)
+## func [PangoFCFontMapConfigChanged](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L384>)
 
 ```go
 func PangoFCFontMapConfigChanged(fontMap PangoFontMapW)
@@ -577,7 +577,7 @@ func PangoFCFontMapConfigChanged(fontMap PangoFontMapW)
 PangoFCFontMapConfigChanged notifies the font map that config changed.
 
 <a name="PangoFCFontUnlockFace"></a>
-## func [PangoFCFontUnlockFace](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L396>)
+## func [PangoFCFontUnlockFace](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L396>)
 
 ```go
 func PangoFCFontUnlockFace(font *C.PangoFont)
@@ -586,7 +586,7 @@ func PangoFCFontUnlockFace(font *C.PangoFont)
 PangoFCFontUnlockFace releases the FT\_Face lock.
 
 <a name="PangoFT2FontGetFace"></a>
-## func [PangoFT2FontGetFace](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L499>)
+## func [PangoFT2FontGetFace](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L499>)
 
 ```go
 func PangoFT2FontGetFace(font *C.PangoFont) C.FT_Face
@@ -595,7 +595,7 @@ func PangoFT2FontGetFace(font *C.PangoFont) C.FT_Face
 PangoFT2FontGetFace returns the FT\_Face from a PangoFont. Deprecated but needed for cache key generation.
 
 <a name="PangoFontDescGetFamily"></a>
-## func [PangoFontDescGetFamily](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L509>)
+## func [PangoFontDescGetFamily](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L509>)
 
 ```go
 func PangoFontDescGetFamily(desc *C.PangoFontDescription) string
@@ -604,7 +604,7 @@ func PangoFontDescGetFamily(desc *C.PangoFontDescription) string
 PangoFontDescGetFamily returns the font family name.
 
 <a name="PangoFontDescGetSize"></a>
-## func [PangoFontDescGetSize](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L493>)
+## func [PangoFontDescGetSize](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L493>)
 
 ```go
 func PangoFontDescGetSize(desc *C.PangoFontDescription) int
@@ -613,7 +613,7 @@ func PangoFontDescGetSize(desc *C.PangoFontDescription) int
 PangoFontDescGetSize returns the size in Pango units.
 
 <a name="PangoFontDescSetFamily"></a>
-## func [PangoFontDescSetFamily](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L518>)
+## func [PangoFontDescSetFamily](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L518>)
 
 ```go
 func PangoFontDescSetFamily(desc *C.PangoFontDescription, family string)
@@ -622,7 +622,7 @@ func PangoFontDescSetFamily(desc *C.PangoFontDescription, family string)
 PangoFontDescSetFamily sets the font family.
 
 <a name="PangoFontMetricsGetAscent"></a>
-## func [PangoFontMetricsGetAscent](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L483>)
+## func [PangoFontMetricsGetAscent](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L483>)
 
 ```go
 func PangoFontMetricsGetAscent(m *C.PangoFontMetrics) int
@@ -631,7 +631,7 @@ func PangoFontMetricsGetAscent(m *C.PangoFontMetrics) int
 PangoFontMetricsGetAscent returns ascent in Pango units.
 
 <a name="PangoFontMetricsGetDescent"></a>
-## func [PangoFontMetricsGetDescent](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L488>)
+## func [PangoFontMetricsGetDescent](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L488>)
 
 ```go
 func PangoFontMetricsGetDescent(m *C.PangoFontMetrics) int
@@ -640,7 +640,7 @@ func PangoFontMetricsGetDescent(m *C.PangoFontMetrics) int
 PangoFontMetricsGetDescent returns descent in Pango units.
 
 <a name="PangoFontMetricsGetStrikethroughPosition"></a>
-## func [PangoFontMetricsGetStrikethroughPosition](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L558>)
+## func [PangoFontMetricsGetStrikethroughPosition](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L558>)
 
 ```go
 func PangoFontMetricsGetStrikethroughPosition(m *C.PangoFontMetrics) int
@@ -649,7 +649,7 @@ func PangoFontMetricsGetStrikethroughPosition(m *C.PangoFontMetrics) int
 PangoFontMetricsGetStrikethroughPosition returns position in Pango units.
 
 <a name="PangoFontMetricsGetStrikethroughThickness"></a>
-## func [PangoFontMetricsGetStrikethroughThickness](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L563>)
+## func [PangoFontMetricsGetStrikethroughThickness](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L563>)
 
 ```go
 func PangoFontMetricsGetStrikethroughThickness(m *C.PangoFontMetrics) int
@@ -658,7 +658,7 @@ func PangoFontMetricsGetStrikethroughThickness(m *C.PangoFontMetrics) int
 PangoFontMetricsGetStrikethroughThickness returns thickness in Pango units.
 
 <a name="PangoFontMetricsGetUnderlinePosition"></a>
-## func [PangoFontMetricsGetUnderlinePosition](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L568>)
+## func [PangoFontMetricsGetUnderlinePosition](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L568>)
 
 ```go
 func PangoFontMetricsGetUnderlinePosition(m *C.PangoFontMetrics) int
@@ -667,7 +667,7 @@ func PangoFontMetricsGetUnderlinePosition(m *C.PangoFontMetrics) int
 PangoFontMetricsGetUnderlinePosition returns position in Pango units.
 
 <a name="PangoFontMetricsGetUnderlineThickness"></a>
-## func [PangoFontMetricsGetUnderlineThickness](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L573>)
+## func [PangoFontMetricsGetUnderlineThickness](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L573>)
 
 ```go
 func PangoFontMetricsGetUnderlineThickness(m *C.PangoFontMetrics) int
@@ -676,7 +676,7 @@ func PangoFontMetricsGetUnderlineThickness(m *C.PangoFontMetrics) int
 PangoFontMetricsGetUnderlineThickness returns thickness in Pango units.
 
 <a name="PangoGetDefaultLanguage"></a>
-## func [PangoGetDefaultLanguage](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L478>)
+## func [PangoGetDefaultLanguage](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L478>)
 
 ```go
 func PangoGetDefaultLanguage() *C.PangoLanguage
@@ -685,7 +685,7 @@ func PangoGetDefaultLanguage() *C.PangoLanguage
 PangoGetDefaultLanguage returns the default language.
 
 <a name="PangoLayoutGetAttributes"></a>
-## func [PangoLayoutGetAttributes](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L538>)
+## func [PangoLayoutGetAttributes](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L538>)
 
 ```go
 func PangoLayoutGetAttributes(layout *C.PangoLayout) *C.PangoAttrList
@@ -694,7 +694,7 @@ func PangoLayoutGetAttributes(layout *C.PangoLayout) *C.PangoAttrList
 PangoLayoutGetAttributes returns the attribute list from a layout.
 
 <a name="PangoLayoutGetContext"></a>
-## func [PangoLayoutGetContext](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L548>)
+## func [PangoLayoutGetContext](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L548>)
 
 ```go
 func PangoLayoutGetContext(layout *C.PangoLayout) *C.PangoContext
@@ -703,7 +703,7 @@ func PangoLayoutGetContext(layout *C.PangoLayout) *C.PangoContext
 PangoLayoutGetContext returns the context from a layout.
 
 <a name="PangoLayoutGetFontDescription"></a>
-## func [PangoLayoutGetFontDescription](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L543>)
+## func [PangoLayoutGetFontDescription](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L543>)
 
 ```go
 func PangoLayoutGetFontDescription(layout *C.PangoLayout) *C.PangoFontDescription
@@ -712,7 +712,7 @@ func PangoLayoutGetFontDescription(layout *C.PangoLayout) *C.PangoFontDescriptio
 PangoLayoutGetFontDescription returns the font description of a layout.
 
 <a name="PangoLayoutGetLineCount"></a>
-## func [PangoLayoutGetLineCount](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L578>)
+## func [PangoLayoutGetLineCount](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L578>)
 
 ```go
 func PangoLayoutGetLineCount(layout *C.PangoLayout) int
@@ -721,7 +721,7 @@ func PangoLayoutGetLineCount(layout *C.PangoLayout) int
 PangoLayoutGetLineCount returns the number of lines.
 
 <a name="PangoLayoutGetLogAttrsReadonly"></a>
-## func [PangoLayoutGetLogAttrsReadonly](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L583>)
+## func [PangoLayoutGetLogAttrsReadonly](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L583>)
 
 ```go
 func PangoLayoutGetLogAttrsReadonly(layout *C.PangoLayout) (*C.PangoLogAttr, int)
@@ -730,7 +730,7 @@ func PangoLayoutGetLogAttrsReadonly(layout *C.PangoLayout) (*C.PangoLogAttr, int
 PangoLayoutGetLogAttrsReadonly returns readonly log attrs and count.
 
 <a name="ScaleBitmapBicubic"></a>
-## func [ScaleBitmapBicubic](<https://github.com/mike-ward/go-glyph/blob/main/bitmap.go#L216>)
+## func [ScaleBitmapBicubic](<https://github.com/go-gui-org/go-glyph/blob/main/bitmap.go#L216>)
 
 ```go
 func ScaleBitmapBicubic(src []byte, srcW, srcH, dstW, dstH int) []byte
@@ -739,7 +739,7 @@ func ScaleBitmapBicubic(src []byte, srcW, srcH, dstW, dstH int) []byte
 ScaleBitmapBicubic scales an RGBA bitmap using bicubic \(Catmull\-Rom\) interpolation with premultiplied alpha.
 
 <a name="ValidateDimension"></a>
-## func [ValidateDimension](<https://github.com/mike-ward/go-glyph/blob/main/validation.go#L66>)
+## func [ValidateDimension](<https://github.com/go-gui-org/go-glyph/blob/main/validation.go#L66>)
 
 ```go
 func ValidateDimension(dim int, name, location string) error
@@ -748,7 +748,7 @@ func ValidateDimension(dim int, name, location string) error
 ValidateDimension validates an integer dimension \(width/height\).
 
 <a name="ValidateFontPath"></a>
-## func [ValidateFontPath](<https://github.com/mike-ward/go-glyph/blob/main/validation.go#L41>)
+## func [ValidateFontPath](<https://github.com/go-gui-org/go-glyph/blob/main/validation.go#L41>)
 
 ```go
 func ValidateFontPath(path string, location string) error
@@ -757,7 +757,7 @@ func ValidateFontPath(path string, location string) error
 ValidateFontPath validates a font file path for safety and existence.
 
 <a name="ValidateSize"></a>
-## func [ValidateSize](<https://github.com/mike-ward/go-glyph/blob/main/validation.go#L58>)
+## func [ValidateSize](<https://github.com/go-gui-org/go-glyph/blob/main/validation.go#L58>)
 
 ```go
 func ValidateSize(size, min, max float32, name, location string) error
@@ -766,7 +766,7 @@ func ValidateSize(size, min, max float32, name, location string) error
 ValidateSize validates a numeric size against min/max bounds.
 
 <a name="ValidateTextInput"></a>
-## func [ValidateTextInput](<https://github.com/mike-ward/go-glyph/blob/main/validation.go#L24>)
+## func [ValidateTextInput](<https://github.com/go-gui-org/go-glyph/blob/main/validation.go#L24>)
 
 ```go
 func ValidateTextInput(text string, maxLen int, location string) error
@@ -775,7 +775,7 @@ func ValidateTextInput(text string, maxLen int, location string) error
 ValidateTextInput validates text for UTF\-8, non\-empty, and length. Returns error if invalid.
 
 <a name="AffineTransform"></a>
-## type [AffineTransform](<https://github.com/mike-ward/go-glyph/blob/main/affine.go#L10-L17>)
+## type [AffineTransform](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L10-L17>)
 
 AffineTransform encodes a 2D affine transform matrix:
 
@@ -797,7 +797,7 @@ type AffineTransform struct {
 ```
 
 <a name="AffineIdentity"></a>
-### func [AffineIdentity](<https://github.com/mike-ward/go-glyph/blob/main/affine.go#L25>)
+### func [AffineIdentity](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L25>)
 
 ```go
 func AffineIdentity() AffineTransform
@@ -806,7 +806,7 @@ func AffineIdentity() AffineTransform
 AffineIdentity returns an identity transform.
 
 <a name="AffineRotation"></a>
-### func [AffineRotation](<https://github.com/mike-ward/go-glyph/blob/main/affine.go#L30>)
+### func [AffineRotation](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L30>)
 
 ```go
 func AffineRotation(angle float32) AffineTransform
@@ -815,7 +815,7 @@ func AffineRotation(angle float32) AffineTransform
 AffineRotation returns a rotation transform in radians around origin.
 
 <a name="AffineSkew"></a>
-### func [AffineSkew](<https://github.com/mike-ward/go-glyph/blob/main/affine.go#L42>)
+### func [AffineSkew](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L42>)
 
 ```go
 func AffineSkew(skewX, skewY float32) AffineTransform
@@ -824,7 +824,7 @@ func AffineSkew(skewX, skewY float32) AffineTransform
 AffineSkew returns a shear transform with direct skew factors.
 
 <a name="AffineTranslation"></a>
-### func [AffineTranslation](<https://github.com/mike-ward/go-glyph/blob/main/affine.go#L37>)
+### func [AffineTranslation](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L37>)
 
 ```go
 func AffineTranslation(dx, dy float32) AffineTransform
@@ -833,7 +833,7 @@ func AffineTranslation(dx, dy float32) AffineTransform
 AffineTranslation returns a translation transform.
 
 <a name="AffineTransform.Apply"></a>
-### func \(AffineTransform\) [Apply](<https://github.com/mike-ward/go-glyph/blob/main/affine.go#L20>)
+### func \(AffineTransform\) [Apply](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L20>)
 
 ```go
 func (t AffineTransform) Apply(x, y float32) (float32, float32)
@@ -842,7 +842,7 @@ func (t AffineTransform) Apply(x, y float32) (float32, float32)
 Apply maps a point through the affine transform.
 
 <a name="AffineTransform.Multiply"></a>
-### func \(AffineTransform\) [Multiply](<https://github.com/mike-ward/go-glyph/blob/main/affine.go#L48>)
+### func \(AffineTransform\) [Multiply](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L48>)
 
 ```go
 func (a AffineTransform) Multiply(b AffineTransform) AffineTransform
@@ -851,7 +851,7 @@ func (a AffineTransform) Multiply(b AffineTransform) AffineTransform
 Multiply returns the composition of two transforms: a then b. Result maps point p as: Multiply\(a, b\).Apply\(p\) == a.Apply\(b.Apply\(p\)\).
 
 <a name="Alignment"></a>
-## type [Alignment](<https://github.com/mike-ward/go-glyph/blob/main/enums.go#L4>)
+## type [Alignment](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L4>)
 
 Alignment specifies horizontal text alignment within the layout box.
 
@@ -870,7 +870,7 @@ const (
 ```
 
 <a name="AtlasPage"></a>
-## type [AtlasPage](<https://github.com/mike-ward/go-glyph/blob/main/atlas.go#L9-L19>)
+## type [AtlasPage](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L9-L19>)
 
 AtlasPage is a single texture page in a multi\-page glyph atlas.
 
@@ -889,7 +889,7 @@ type AtlasPage struct {
 ```
 
 <a name="Bitmap"></a>
-## type [Bitmap](<https://github.com/mike-ward/go-glyph/blob/main/bitmap.go#L22-L27>)
+## type [Bitmap](<https://github.com/go-gui-org/go-glyph/blob/main/bitmap.go#L22-L27>)
 
 Bitmap holds RGBA pixel data for a rasterized glyph.
 
@@ -903,7 +903,7 @@ type Bitmap struct {
 ```
 
 <a name="FTBitmapToBitmap"></a>
-### func [FTBitmapToBitmap](<https://github.com/mike-ward/go-glyph/blob/main/bitmap.go#L53>)
+### func [FTBitmapToBitmap](<https://github.com/go-gui-org/go-glyph/blob/main/bitmap.go#L53>)
 
 ```go
 func FTBitmapToBitmap(bmp *C.FT_Bitmap, ftFace C.FT_Face, targetHeight int) (Bitmap, error)
@@ -919,7 +919,7 @@ Supported pixel modes:
 - BGRA: Color emoji bitmaps, BGRA→RGBA swizzle.
 
 <a name="BlockStyle"></a>
-## type [BlockStyle](<https://github.com/mike-ward/go-glyph/blob/main/config.go#L39-L47>)
+## type [BlockStyle](<https://github.com/go-gui-org/go-glyph/blob/main/config.go#L39-L47>)
 
 BlockStyle defines paragraph\-level layout properties.
 
@@ -936,7 +936,7 @@ type BlockStyle struct {
 ```
 
 <a name="DefaultBlockStyle"></a>
-### func [DefaultBlockStyle](<https://github.com/mike-ward/go-glyph/blob/main/config.go#L50>)
+### func [DefaultBlockStyle](<https://github.com/go-gui-org/go-glyph/blob/main/config.go#L50>)
 
 ```go
 func DefaultBlockStyle() BlockStyle
@@ -945,7 +945,7 @@ func DefaultBlockStyle() BlockStyle
 DefaultBlockStyle returns a BlockStyle with standard defaults.
 
 <a name="CachedGlyph"></a>
-## type [CachedGlyph](<https://github.com/mike-ward/go-glyph/blob/main/atlas.go#L43-L51>)
+## type [CachedGlyph](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L43-L51>)
 
 CachedGlyph stores atlas coordinates and bearing info for a rasterized glyph.
 
@@ -962,7 +962,7 @@ type CachedGlyph struct {
 ```
 
 <a name="CharRect"></a>
-## type [CharRect](<https://github.com/mike-ward/go-glyph/blob/main/layout_types.go#L48-L51>)
+## type [CharRect](<https://github.com/go-gui-org/go-glyph/blob/main/layout_types.go#L48-L51>)
 
 CharRect maps a character byte index to its bounding rectangle.
 
@@ -974,7 +974,7 @@ type CharRect struct {
 ```
 
 <a name="Clause"></a>
-## type [Clause](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L4-L8>)
+## type [Clause](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L4-L8>)
 
 Clause represents a segment in multi\-clause CJK composition.
 
@@ -987,7 +987,7 @@ type Clause struct {
 ```
 
 <a name="ClauseRects"></a>
-## type [ClauseRects](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L11-L15>)
+## type [ClauseRects](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L11-L15>)
 
 ClauseRects holds clause index, rects, and style for rendering.
 
@@ -1000,7 +1000,7 @@ type ClauseRects struct {
 ```
 
 <a name="ClauseStyle"></a>
-## type [ClauseStyle](<https://github.com/mike-ward/go-glyph/blob/main/enums.go#L58>)
+## type [ClauseStyle](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L58>)
 
 ClauseStyle identifies the visual style of an IME clause.
 
@@ -1019,7 +1019,7 @@ const (
 ```
 
 <a name="Color"></a>
-## type [Color](<https://github.com/mike-ward/go-glyph/blob/main/color.go#L6-L8>)
+## type [Color](<https://github.com/go-gui-org/go-glyph/blob/main/color.go#L6-L8>)
 
 Color is an RGBA color with 8\-bit channels.
 
@@ -1030,7 +1030,7 @@ type Color struct {
 ```
 
 <a name="GradientColorAt"></a>
-### func [GradientColorAt](<https://github.com/mike-ward/go-glyph/blob/main/gradient.go#L17>)
+### func [GradientColorAt](<https://github.com/go-gui-org/go-glyph/blob/main/gradient.go#L17>)
 
 ```go
 func GradientColorAt(stops []GradientStop, t float32) Color
@@ -1039,7 +1039,7 @@ func GradientColorAt(stops []GradientStop, t float32) Color
 GradientColorAt samples the gradient at normalized position t.
 
 <a name="LerpColor"></a>
-### func [LerpColor](<https://github.com/mike-ward/go-glyph/blob/main/color.go#L11>)
+### func [LerpColor](<https://github.com/go-gui-org/go-glyph/blob/main/color.go#L11>)
 
 ```go
 func LerpColor(a, b Color, t float32) Color
@@ -1048,7 +1048,7 @@ func LerpColor(a, b Color, t float32) Color
 LerpColor linearly interpolates between two colors. t is clamped to \[0,1\].
 
 <a name="CompositionPhase"></a>
-## type [CompositionPhase](<https://github.com/mike-ward/go-glyph/blob/main/enums.go#L48>)
+## type [CompositionPhase](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L48>)
 
 CompositionPhase tracks IME preedit state.
 
@@ -1068,7 +1068,7 @@ const (
 ```
 
 <a name="CompositionState"></a>
-## type [CompositionState](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L18-L25>)
+## type [CompositionState](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L18-L25>)
 
 CompositionState tracks IME composition for preedit display.
 
@@ -1084,7 +1084,7 @@ type CompositionState struct {
 ```
 
 <a name="NewCompositionState"></a>
-### func [NewCompositionState](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L28>)
+### func [NewCompositionState](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L28>)
 
 ```go
 func NewCompositionState() CompositionState
@@ -1093,7 +1093,7 @@ func NewCompositionState() CompositionState
 NewCompositionState returns an initialized CompositionState.
 
 <a name="CompositionState.ClearClauses"></a>
-### func \(\*CompositionState\) [ClearClauses](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L210>)
+### func \(\*CompositionState\) [ClearClauses](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L210>)
 
 ```go
 func (cs *CompositionState) ClearClauses()
@@ -1102,7 +1102,7 @@ func (cs *CompositionState) ClearClauses()
 ClearClauses resets clause array for fresh enumeration.
 
 <a name="CompositionState.Commit"></a>
-### func \(\*CompositionState\) [Commit](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L65>)
+### func \(\*CompositionState\) [Commit](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L65>)
 
 ```go
 func (cs *CompositionState) Commit() string
@@ -1111,7 +1111,7 @@ func (cs *CompositionState) Commit() string
 Commit finalizes composition, returns text to insert.
 
 <a name="CompositionState.CompositionBounds"></a>
-### func \(\*CompositionState\) [CompositionBounds](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L93>)
+### func \(\*CompositionState\) [CompositionBounds](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L93>)
 
 ```go
 func (cs *CompositionState) CompositionBounds(layout Layout) (Rect, bool)
@@ -1120,7 +1120,7 @@ func (cs *CompositionState) CompositionBounds(layout Layout) (Rect, bool)
 CompositionBounds returns bounding rect covering entire preedit. Returns ok=false if not composing.
 
 <a name="CompositionState.DocumentCursorPos"></a>
-### func \(\*CompositionState\) [DocumentCursorPos](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L82>)
+### func \(\*CompositionState\) [DocumentCursorPos](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L82>)
 
 ```go
 func (cs *CompositionState) DocumentCursorPos() int
@@ -1129,7 +1129,7 @@ func (cs *CompositionState) DocumentCursorPos() int
 DocumentCursorPos returns absolute cursor position in document.
 
 <a name="CompositionState.GetClauseRects"></a>
-### func \(\*CompositionState\) [GetClauseRects](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L128>)
+### func \(\*CompositionState\) [GetClauseRects](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L128>)
 
 ```go
 func (cs *CompositionState) GetClauseRects(layout Layout) []ClauseRects
@@ -1138,7 +1138,7 @@ func (cs *CompositionState) GetClauseRects(layout Layout) []ClauseRects
 GetClauseRects returns selection rects for each clause.
 
 <a name="CompositionState.HandleClause"></a>
-### func \(\*CompositionState\) [HandleClause](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L191>)
+### func \(\*CompositionState\) [HandleClause](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L191>)
 
 ```go
 func (cs *CompositionState) HandleClause(start, length, style int)
@@ -1147,7 +1147,7 @@ func (cs *CompositionState) HandleClause(start, length, style int)
 HandleClause processes clause info from IME overlay.
 
 <a name="CompositionState.HandleInsertText"></a>
-### func \(\*CompositionState\) [HandleInsertText](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L174>)
+### func \(\*CompositionState\) [HandleInsertText](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L174>)
 
 ```go
 func (cs *CompositionState) HandleInsertText(text string) string
@@ -1156,7 +1156,7 @@ func (cs *CompositionState) HandleInsertText(text string) string
 HandleInsertText processes insertText from IME overlay.
 
 <a name="CompositionState.HandleMarkedText"></a>
-### func \(\*CompositionState\) [HandleMarkedText](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L160-L161>)
+### func \(\*CompositionState\) [HandleMarkedText](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L160-L161>)
 
 ```go
 func (cs *CompositionState) HandleMarkedText(text string, cursorInPreedit, documentCursor int)
@@ -1165,7 +1165,7 @@ func (cs *CompositionState) HandleMarkedText(text string, cursorInPreedit, docum
 HandleMarkedText processes setMarkedText from IME overlay.
 
 <a name="CompositionState.HandleUnmarkText"></a>
-### func \(\*CompositionState\) [HandleUnmarkText](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L186>)
+### func \(\*CompositionState\) [HandleUnmarkText](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L186>)
 
 ```go
 func (cs *CompositionState) HandleUnmarkText()
@@ -1174,7 +1174,7 @@ func (cs *CompositionState) HandleUnmarkText()
 HandleUnmarkText cancels composition without committing.
 
 <a name="CompositionState.IsComposing"></a>
-### func \(\*CompositionState\) [IsComposing](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L36>)
+### func \(\*CompositionState\) [IsComposing](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L36>)
 
 ```go
 func (cs *CompositionState) IsComposing() bool
@@ -1183,7 +1183,7 @@ func (cs *CompositionState) IsComposing() bool
 IsComposing returns true if composition is active.
 
 <a name="CompositionState.PreeditEnd"></a>
-### func \(\*CompositionState\) [PreeditEnd](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L87>)
+### func \(\*CompositionState\) [PreeditEnd](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L87>)
 
 ```go
 func (cs *CompositionState) PreeditEnd() int
@@ -1192,7 +1192,7 @@ func (cs *CompositionState) PreeditEnd() int
 PreeditEnd returns byte offset where preedit ends in document.
 
 <a name="CompositionState.Reset"></a>
-### func \(\*CompositionState\) [Reset](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L72>)
+### func \(\*CompositionState\) [Reset](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L72>)
 
 ```go
 func (cs *CompositionState) Reset()
@@ -1201,7 +1201,7 @@ func (cs *CompositionState) Reset()
 Reset discards composition without inserting text.
 
 <a name="CompositionState.SetClauses"></a>
-### func \(\*CompositionState\) [SetClauses](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L59>)
+### func \(\*CompositionState\) [SetClauses](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L59>)
 
 ```go
 func (cs *CompositionState) SetClauses(clauses []Clause, selected int)
@@ -1210,7 +1210,7 @@ func (cs *CompositionState) SetClauses(clauses []Clause, selected int)
 SetClauses updates clause segmentation from IME attributes.
 
 <a name="CompositionState.SetMarkedText"></a>
-### func \(\*CompositionState\) [SetMarkedText](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L52>)
+### func \(\*CompositionState\) [SetMarkedText](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L52>)
 
 ```go
 func (cs *CompositionState) SetMarkedText(text string, cursorInPreedit int)
@@ -1219,7 +1219,7 @@ func (cs *CompositionState) SetMarkedText(text string, cursorInPreedit int)
 SetMarkedText updates preedit from IME.
 
 <a name="CompositionState.Start"></a>
-### func \(\*CompositionState\) [Start](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L42>)
+### func \(\*CompositionState\) [Start](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L42>)
 
 ```go
 func (cs *CompositionState) Start(cursorPos int)
@@ -1228,7 +1228,7 @@ func (cs *CompositionState) Start(cursorPos int)
 Start begins composition at document cursor position.
 
 <a name="Context"></a>
-## type [Context](<https://github.com/mike-ward/go-glyph/blob/main/context.go#L23-L30>)
+## type [Context](<https://github.com/go-gui-org/go-glyph/blob/main/context.go#L23-L30>)
 
 Context holds the Pango and FreeType state needed for text shaping. Keep alive for application duration.
 
@@ -1239,7 +1239,7 @@ type Context struct {
 ```
 
 <a name="NewContext"></a>
-### func [NewContext](<https://github.com/mike-ward/go-glyph/blob/main/context.go#L34>)
+### func [NewContext](<https://github.com/go-gui-org/go-glyph/blob/main/context.go#L34>)
 
 ```go
 func NewContext(scaleFactor float32) (*Context, error)
@@ -1248,7 +1248,7 @@ func NewContext(scaleFactor float32) (*Context, error)
 NewContext initializes FreeType, Pango font map, and Pango context. scaleFactor is the display DPI scale \(1.0 = 72 DPI, 2.0 = Retina\).
 
 <a name="Context.AddFontFile"></a>
-### func \(\*Context\) [AddFontFile](<https://github.com/mike-ward/go-glyph/blob/main/context.go#L88>)
+### func \(\*Context\) [AddFontFile](<https://github.com/go-gui-org/go-glyph/blob/main/context.go#L88>)
 
 ```go
 func (ctx *Context) AddFontFile(path string) error
@@ -1257,7 +1257,7 @@ func (ctx *Context) AddFontFile(path string) error
 AddFontFile loads a font file via FontConfig.
 
 <a name="Context.FontHeight"></a>
-### func \(\*Context\) [FontHeight](<https://github.com/mike-ward/go-glyph/blob/main/context.go#L108>)
+### func \(\*Context\) [FontHeight](<https://github.com/go-gui-org/go-glyph/blob/main/context.go#L108>)
 
 ```go
 func (ctx *Context) FontHeight(cfg TextConfig) (float32, error)
@@ -1266,7 +1266,7 @@ func (ctx *Context) FontHeight(cfg TextConfig) (float32, error)
 FontHeight returns ascent \+ descent in logical pixels for the font described by cfg.
 
 <a name="Context.FontMetrics"></a>
-### func \(\*Context\) [FontMetrics](<https://github.com/mike-ward/go-glyph/blob/main/context.go#L152>)
+### func \(\*Context\) [FontMetrics](<https://github.com/go-gui-org/go-glyph/blob/main/context.go#L152>)
 
 ```go
 func (ctx *Context) FontMetrics(cfg TextConfig) (TextMetrics, error)
@@ -1275,7 +1275,7 @@ func (ctx *Context) FontMetrics(cfg TextConfig) (TextMetrics, error)
 FontMetrics returns detailed metrics \(ascender, descender, height, line gap\) in logical pixels.
 
 <a name="Context.Free"></a>
-### func \(\*Context\) [Free](<https://github.com/mike-ward/go-glyph/blob/main/context.go#L78>)
+### func \(\*Context\) [Free](<https://github.com/go-gui-org/go-glyph/blob/main/context.go#L78>)
 
 ```go
 func (ctx *Context) Free()
@@ -1284,7 +1284,7 @@ func (ctx *Context) Free()
 Free releases all Pango and FreeType resources.
 
 <a name="Context.LayoutRichText"></a>
-### func \(\*Context\) [LayoutRichText](<https://github.com/mike-ward/go-glyph/blob/main/layout.go#L35>)
+### func \(\*Context\) [LayoutRichText](<https://github.com/go-gui-org/go-glyph/blob/main/layout.go#L35>)
 
 ```go
 func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error)
@@ -1293,7 +1293,7 @@ func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error)
 LayoutRichText shapes multi\-styled text \(RichText\).
 
 <a name="Context.LayoutText"></a>
-### func \(\*Context\) [LayoutText](<https://github.com/mike-ward/go-glyph/blob/main/layout.go#L17>)
+### func \(\*Context\) [LayoutText](<https://github.com/go-gui-org/go-glyph/blob/main/layout.go#L17>)
 
 ```go
 func (ctx *Context) LayoutText(text string, cfg TextConfig) (Layout, error)
@@ -1302,7 +1302,7 @@ func (ctx *Context) LayoutText(text string, cfg TextConfig) (Layout, error)
 LayoutText shapes, wraps, and arranges text using Pango. Returns a Layout with positioned glyph runs, hit\-test rects, line boundaries, and cursor attributes.
 
 <a name="Context.ResolveFontName"></a>
-### func \(\*Context\) [ResolveFontName](<https://github.com/mike-ward/go-glyph/blob/main/context.go#L211>)
+### func \(\*Context\) [ResolveFontName](<https://github.com/go-gui-org/go-glyph/blob/main/context.go#L211>)
 
 ```go
 func (ctx *Context) ResolveFontName(fontDescStr string) (string, error)
@@ -1311,7 +1311,7 @@ func (ctx *Context) ResolveFontName(fontDescStr string) (string, error)
 ResolveFontName returns the FreeType family name that Pango resolves for the given font description string.
 
 <a name="Context.ScaleFactor"></a>
-### func \(\*Context\) [ScaleFactor](<https://github.com/mike-ward/go-glyph/blob/main/context.go#L85>)
+### func \(\*Context\) [ScaleFactor](<https://github.com/go-gui-org/go-glyph/blob/main/context.go#L85>)
 
 ```go
 func (ctx *Context) ScaleFactor() float32
@@ -1320,7 +1320,7 @@ func (ctx *Context) ScaleFactor() float32
 ScaleFactor returns the DPI scale factor.
 
 <a name="CursorPosition"></a>
-## type [CursorPosition](<https://github.com/mike-ward/go-glyph/blob/main/layout_types.go#L33-L37>)
+## type [CursorPosition](<https://github.com/go-gui-org/go-glyph/blob/main/layout_types.go#L33-L37>)
 
 CursorPosition represents the geometry for rendering a text cursor.
 
@@ -1333,7 +1333,7 @@ type CursorPosition struct {
 ```
 
 <a name="DeadKeyState"></a>
-## type [DeadKeyState](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L216-L220>)
+## type [DeadKeyState](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L216-L220>)
 
 DeadKeyState tracks pending dead key for accent composition.
 
@@ -1346,7 +1346,7 @@ type DeadKeyState struct {
 ```
 
 <a name="DeadKeyState.Clear"></a>
-### func \(\*DeadKeyState\) [Clear](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L245>)
+### func \(\*DeadKeyState\) [Clear](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L245>)
 
 ```go
 func (dks *DeadKeyState) Clear()
@@ -1355,7 +1355,7 @@ func (dks *DeadKeyState) Clear()
 Clear cancels pending dead key.
 
 <a name="DeadKeyState.Reset"></a>
-### func \(\*DeadKeyState\) [Reset](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L250>)
+### func \(\*DeadKeyState\) [Reset](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L250>)
 
 ```go
 func (dks *DeadKeyState) Reset()
@@ -1364,7 +1364,7 @@ func (dks *DeadKeyState) Reset()
 Reset zeros all fields.
 
 <a name="DeadKeyState.StartDeadKey"></a>
-### func \(\*DeadKeyState\) [StartDeadKey](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L238>)
+### func \(\*DeadKeyState\) [StartDeadKey](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L238>)
 
 ```go
 func (dks *DeadKeyState) StartDeadKey(dead rune, pos int)
@@ -1373,7 +1373,7 @@ func (dks *DeadKeyState) StartDeadKey(dead rune, pos int)
 StartDeadKey records a dead key press.
 
 <a name="DeadKeyState.TryCombine"></a>
-### func \(\*DeadKeyState\) [TryCombine](<https://github.com/mike-ward/go-glyph/blob/main/composition.go#L224>)
+### func \(\*DeadKeyState\) [TryCombine](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L224>)
 
 ```go
 func (dks *DeadKeyState) TryCombine(base rune) (string, bool)
@@ -1382,7 +1382,7 @@ func (dks *DeadKeyState) TryCombine(base rune) (string, bool)
 TryCombine attempts to combine pending dead key with base char. Returns \(result, wasCombined\). If invalid: returns both chars.
 
 <a name="DrawBackend"></a>
-## type [DrawBackend](<https://github.com/mike-ward/go-glyph/blob/main/backend.go#L9-L32>)
+## type [DrawBackend](<https://github.com/go-gui-org/go-glyph/blob/main/backend.go#L9-L32>)
 
 DrawBackend abstracts the GPU rendering backend. Implementations provide texture management and drawing primitives. The Renderer calls only these methods — never a specific backend directly.
 
@@ -1414,7 +1414,7 @@ type DrawBackend interface {
 ```
 
 <a name="FTFace"></a>
-## type [FTFace](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L50-L52>)
+## type [FTFace](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L50-L52>)
 
 FTFace wraps FT\_Face.
 
@@ -1425,7 +1425,7 @@ type FTFace struct {
 ```
 
 <a name="FTFace.FacePtr"></a>
-### func \(\*FTFace\) [FacePtr](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L55>)
+### func \(\*FTFace\) [FacePtr](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L55>)
 
 ```go
 func (f *FTFace) FacePtr() unsafe.Pointer
@@ -1434,7 +1434,7 @@ func (f *FTFace) FacePtr() unsafe.Pointer
 FacePtr returns the raw FT\_Face as unsafe.Pointer for storage in Item.
 
 <a name="FTLibrary"></a>
-## type [FTLibrary](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L25-L27>)
+## type [FTLibrary](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L25-L27>)
 
 FTLibrary wraps FT\_Library with explicit Close.
 
@@ -1445,7 +1445,7 @@ type FTLibrary struct {
 ```
 
 <a name="InitFreeType"></a>
-### func [InitFreeType](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L30>)
+### func [InitFreeType](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L30>)
 
 ```go
 func InitFreeType() (FTLibrary, error)
@@ -1454,7 +1454,7 @@ func InitFreeType() (FTLibrary, error)
 InitFreeType initializes a new FreeType library instance.
 
 <a name="FTLibrary.Close"></a>
-### func \(\*FTLibrary\) [Close](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L39>)
+### func \(\*FTLibrary\) [Close](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L39>)
 
 ```go
 func (l *FTLibrary) Close()
@@ -1463,7 +1463,7 @@ func (l *FTLibrary) Close()
 Close releases the FreeType library.
 
 <a name="FTLibrary.Ptr"></a>
-### func \(\*FTLibrary\) [Ptr](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L47>)
+### func \(\*FTLibrary\) [Ptr](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L47>)
 
 ```go
 func (l *FTLibrary) Ptr() C.FT_Library
@@ -1472,7 +1472,7 @@ func (l *FTLibrary) Ptr() C.FT_Library
 Ptr returns the raw C pointer.
 
 <a name="FTStroker"></a>
-## type [FTStroker](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L58-L60>)
+## type [FTStroker](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L58-L60>)
 
 FTStroker wraps FT\_Stroker with explicit Close.
 
@@ -1483,7 +1483,7 @@ type FTStroker struct {
 ```
 
 <a name="NewFTStroker"></a>
-### func [NewFTStroker](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L63>)
+### func [NewFTStroker](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L63>)
 
 ```go
 func NewFTStroker(lib FTLibrary) (FTStroker, error)
@@ -1492,7 +1492,7 @@ func NewFTStroker(lib FTLibrary) (FTStroker, error)
 NewFTStroker creates a new FreeType stroker.
 
 <a name="FTStroker.Close"></a>
-### func \(\*FTStroker\) [Close](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L72>)
+### func \(\*FTStroker\) [Close](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L72>)
 
 ```go
 func (s *FTStroker) Close()
@@ -1501,7 +1501,7 @@ func (s *FTStroker) Close()
 Close releases the stroker.
 
 <a name="FontAxis"></a>
-## type [FontAxis](<https://github.com/mike-ward/go-glyph/blob/main/config.go#L65-L68>)
+## type [FontAxis](<https://github.com/go-gui-org/go-glyph/blob/main/config.go#L65-L68>)
 
 FontAxis represents a variable font axis tag and value.
 
@@ -1513,7 +1513,7 @@ type FontAxis struct {
 ```
 
 <a name="FontFeature"></a>
-## type [FontFeature](<https://github.com/mike-ward/go-glyph/blob/main/config.go#L59-L62>)
+## type [FontFeature](<https://github.com/go-gui-org/go-glyph/blob/main/config.go#L59-L62>)
 
 FontFeature represents an OpenType feature tag and value.
 
@@ -1525,7 +1525,7 @@ type FontFeature struct {
 ```
 
 <a name="FontFeatures"></a>
-## type [FontFeatures](<https://github.com/mike-ward/go-glyph/blob/main/config.go#L71-L74>)
+## type [FontFeatures](<https://github.com/go-gui-org/go-glyph/blob/main/config.go#L71-L74>)
 
 FontFeatures holds OpenType features and variable font axes.
 
@@ -1537,7 +1537,7 @@ type FontFeatures struct {
 ```
 
 <a name="FontMetricsEntry"></a>
-## type [FontMetricsEntry](<https://github.com/mike-ward/go-glyph/blob/main/cache.go#L6-L10>)
+## type [FontMetricsEntry](<https://github.com/go-gui-org/go-glyph/blob/main/cache.go#L6-L10>)
 
 FontMetricsEntry stores cached font metrics in Pango units.
 
@@ -1550,7 +1550,7 @@ type FontMetricsEntry struct {
 ```
 
 <a name="Glyph"></a>
-## type [Glyph](<https://github.com/mike-ward/go-glyph/blob/main/layout_types.go#L99-L106>)
+## type [Glyph](<https://github.com/go-gui-org/go-glyph/blob/main/layout_types.go#L99-L106>)
 
 Glyph holds a shaped glyph index and its positioning offsets.
 
@@ -1566,7 +1566,7 @@ type Glyph struct {
 ```
 
 <a name="GlyphAtlas"></a>
-## type [GlyphAtlas](<https://github.com/mike-ward/go-glyph/blob/main/atlas.go#L30-L39>)
+## type [GlyphAtlas](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L30-L39>)
 
 GlyphAtlas manages a multi\-page texture atlas for glyph bitmaps.
 
@@ -1584,7 +1584,7 @@ type GlyphAtlas struct {
 ```
 
 <a name="NewGlyphAtlas"></a>
-### func [NewGlyphAtlas](<https://github.com/mike-ward/go-glyph/blob/main/atlas.go#L54>)
+### func [NewGlyphAtlas](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L54>)
 
 ```go
 func NewGlyphAtlas(backend DrawBackend, w, h int) (*GlyphAtlas, error)
@@ -1593,7 +1593,7 @@ func NewGlyphAtlas(backend DrawBackend, w, h int) (*GlyphAtlas, error)
 NewGlyphAtlas creates a new glyph atlas with one initial page.
 
 <a name="GlyphAtlas.Cleanup"></a>
-### func \(\*GlyphAtlas\) [Cleanup](<https://github.com/mike-ward/go-glyph/blob/main/atlas.go#L81>)
+### func \(\*GlyphAtlas\) [Cleanup](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L81>)
 
 ```go
 func (atlas *GlyphAtlas) Cleanup(frame uint64)
@@ -1602,7 +1602,7 @@ func (atlas *GlyphAtlas) Cleanup(frame uint64)
 Cleanup removes stale textures from previous frames.
 
 <a name="GlyphAtlas.Free"></a>
-### func \(\*GlyphAtlas\) [Free](<https://github.com/mike-ward/go-glyph/blob/main/atlas.go#L69>)
+### func \(\*GlyphAtlas\) [Free](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L69>)
 
 ```go
 func (atlas *GlyphAtlas) Free()
@@ -1611,7 +1611,7 @@ func (atlas *GlyphAtlas) Free()
 Free releases all atlas textures.
 
 <a name="GlyphAtlas.InsertBitmap"></a>
-### func \(\*GlyphAtlas\) [InsertBitmap](<https://github.com/mike-ward/go-glyph/blob/main/atlas.go#L95>)
+### func \(\*GlyphAtlas\) [InsertBitmap](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L95>)
 
 ```go
 func (atlas *GlyphAtlas) InsertBitmap(bmp Bitmap, left, top int) (CachedGlyph, bool, int, error)
@@ -1620,7 +1620,7 @@ func (atlas *GlyphAtlas) InsertBitmap(bmp Bitmap, left, top int) (CachedGlyph, b
 InsertBitmap places a bitmap into the atlas using shelf\-based best\-height\-fit with multi\-page support. Returns the CachedGlyph, whether a page reset occurred, and the index of the reset page.
 
 <a name="GlyphAtlas.SwapAndUpload"></a>
-### func \(\*GlyphAtlas\) [SwapAndUpload](<https://github.com/mike-ward/go-glyph/blob/main/atlas.go#L191>)
+### func \(\*GlyphAtlas\) [SwapAndUpload](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L191>)
 
 ```go
 func (atlas *GlyphAtlas) SwapAndUpload()
@@ -1629,7 +1629,7 @@ func (atlas *GlyphAtlas) SwapAndUpload()
 SwapAndUpload swaps staging buffers and uploads dirty pages to the GPU.
 
 <a name="GlyphInfo"></a>
-## type [GlyphInfo](<https://github.com/mike-ward/go-glyph/blob/main/layout_types.go#L118-L123>)
+## type [GlyphInfo](<https://github.com/go-gui-org/go-glyph/blob/main/layout_types.go#L118-L123>)
 
 GlyphInfo provides the absolute position and advance of a glyph within a Layout. Returned by GlyphPositions.
 
@@ -1643,7 +1643,7 @@ type GlyphInfo struct {
 ```
 
 <a name="GlyphPlacement"></a>
-## type [GlyphPlacement](<https://github.com/mike-ward/go-glyph/blob/main/layout_types.go#L110-L114>)
+## type [GlyphPlacement](<https://github.com/go-gui-org/go-glyph/blob/main/layout_types.go#L110-L114>)
 
 GlyphPlacement specifies absolute screen position and rotation for a single glyph. Used with DrawLayoutPlaced for text\-on\-curve.
 
@@ -1656,7 +1656,7 @@ type GlyphPlacement struct {
 ```
 
 <a name="GradientConfig"></a>
-## type [GradientConfig](<https://github.com/mike-ward/go-glyph/blob/main/gradient.go#L11-L14>)
+## type [GradientConfig](<https://github.com/go-gui-org/go-glyph/blob/main/gradient.go#L11-L14>)
 
 GradientConfig defines an N\-stop gradient for text rendering. Stops must be sorted by position in ascending order.
 
@@ -1668,7 +1668,7 @@ type GradientConfig struct {
 ```
 
 <a name="GradientDirection"></a>
-## type [GradientDirection](<https://github.com/mike-ward/go-glyph/blob/main/enums.go#L30>)
+## type [GradientDirection](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L30>)
 
 GradientDirection controls the axis of color interpolation.
 
@@ -1686,7 +1686,7 @@ const (
 ```
 
 <a name="GradientStop"></a>
-## type [GradientStop](<https://github.com/mike-ward/go-glyph/blob/main/gradient.go#L4-L7>)
+## type [GradientStop](<https://github.com/go-gui-org/go-glyph/blob/main/gradient.go#L4-L7>)
 
 GradientStop defines a color at a normalized position \(0.0–1.0\).
 
@@ -1698,7 +1698,7 @@ type GradientStop struct {
 ```
 
 <a name="InlineObject"></a>
-## type [InlineObject](<https://github.com/mike-ward/go-glyph/blob/main/config.go#L77-L82>)
+## type [InlineObject](<https://github.com/go-gui-org/go-glyph/blob/main/config.go#L77-L82>)
 
 InlineObject represents an embedded non\-text element in a layout.
 
@@ -1712,7 +1712,7 @@ type InlineObject struct {
 ```
 
 <a name="Item"></a>
-## type [Item](<https://github.com/mike-ward/go-glyph/blob/main/layout_types.go#L62-L96>)
+## type [Item](<https://github.com/go-gui-org/go-glyph/blob/main/layout_types.go#L62-L96>)
 
 Item is a run of glyphs sharing the same font and attributes.
 
@@ -1755,7 +1755,7 @@ type Item struct {
 ```
 
 <a name="Layout"></a>
-## type [Layout](<https://github.com/mike-ward/go-glyph/blob/main/layout_types.go#L11-L30>)
+## type [Layout](<https://github.com/go-gui-org/go-glyph/blob/main/layout_types.go#L11-L30>)
 
 Layout is the result of text shaping. It contains positioned glyph runs, hit\-test rectangles, line boundaries, and cursor attributes.
 
@@ -1779,7 +1779,7 @@ type Layout struct {
 ```
 
 <a name="Layout.GetCharRect"></a>
-### func \(\*Layout\) [GetCharRect](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L45>)
+### func \(\*Layout\) [GetCharRect](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L45>)
 
 ```go
 func (l *Layout) GetCharRect(index int) (Rect, bool)
@@ -1788,7 +1788,7 @@ func (l *Layout) GetCharRect(index int) (Rect, bool)
 GetCharRect returns the bounding box for a character at byte index. Returns ok=false if index is not a valid character position.
 
 <a name="Layout.GetClosestOffset"></a>
-### func \(\*Layout\) [GetClosestOffset](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L67>)
+### func \(\*Layout\) [GetClosestOffset](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L67>)
 
 ```go
 func (l *Layout) GetClosestOffset(x, y float32) int
@@ -1797,7 +1797,7 @@ func (l *Layout) GetClosestOffset(x, y float32) int
 GetClosestOffset returns the byte index of the character closest to \(x, y\). Handles clicks outside bounds.
 
 <a name="Layout.GetCursorPos"></a>
-### func \(\*Layout\) [GetCursorPos](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L196>)
+### func \(\*Layout\) [GetCursorPos](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L196>)
 
 ```go
 func (l *Layout) GetCursorPos(byteIndex int) (CursorPosition, bool)
@@ -1806,7 +1806,7 @@ func (l *Layout) GetCursorPos(byteIndex int) (CursorPosition, bool)
 GetCursorPos returns cursor geometry at byte\_index. Returns ok=false if not a valid cursor position.
 
 <a name="Layout.GetFontNameAtIndex"></a>
-### func \(\*Layout\) [GetFontNameAtIndex](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L527>)
+### func \(\*Layout\) [GetFontNameAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L527>)
 
 ```go
 func (l *Layout) GetFontNameAtIndex(index int) string
@@ -1815,7 +1815,7 @@ func (l *Layout) GetFontNameAtIndex(index int) string
 GetFontNameAtIndex returns the font family name at byte index.
 
 <a name="Layout.GetParagraphAtIndex"></a>
-### func \(\*Layout\) [GetParagraphAtIndex](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L495>)
+### func \(\*Layout\) [GetParagraphAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L495>)
 
 ```go
 func (l *Layout) GetParagraphAtIndex(byteIndex int, text string) (int, int)
@@ -1824,7 +1824,7 @@ func (l *Layout) GetParagraphAtIndex(byteIndex int, text string) (int, int)
 GetParagraphAtIndex returns \(start, end\) byte indices for paragraph containing index. Paragraph = text between \\n\\n.
 
 <a name="Layout.GetSelectionRects"></a>
-### func \(\*Layout\) [GetSelectionRects](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L140>)
+### func \(\*Layout\) [GetSelectionRects](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L140>)
 
 ```go
 func (l *Layout) GetSelectionRects(start, end int) []Rect
@@ -1833,7 +1833,7 @@ func (l *Layout) GetSelectionRects(start, end int) []Rect
 GetSelectionRects returns rectangles covering \[start, end\).
 
 <a name="Layout.GetValidCursorPositions"></a>
-### func \(\*Layout\) [GetValidCursorPositions](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L252>)
+### func \(\*Layout\) [GetValidCursorPositions](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L252>)
 
 ```go
 func (l *Layout) GetValidCursorPositions() []int
@@ -1842,7 +1842,7 @@ func (l *Layout) GetValidCursorPositions() []int
 GetValidCursorPositions returns sorted byte indices that are valid cursor positions. Uses pre\-built cache.
 
 <a name="Layout.GetWordAtIndex"></a>
-### func \(\*Layout\) [GetWordAtIndex](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L419>)
+### func \(\*Layout\) [GetWordAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L419>)
 
 ```go
 func (l *Layout) GetWordAtIndex(byteIndex int) (int, int)
@@ -1851,7 +1851,7 @@ func (l *Layout) GetWordAtIndex(byteIndex int) (int, int)
 GetWordAtIndex returns \(start, end\) byte indices for word containing index. Returns \(index, index\) if not in a word.
 
 <a name="Layout.GlyphPositions"></a>
-### func \(\*Layout\) [GlyphPositions](<https://github.com/mike-ward/go-glyph/blob/main/layout_types.go#L127>)
+### func \(\*Layout\) [GlyphPositions](<https://github.com/go-gui-org/go-glyph/blob/main/layout_types.go#L127>)
 
 ```go
 func (l *Layout) GlyphPositions() []GlyphInfo
@@ -1860,7 +1860,7 @@ func (l *Layout) GlyphPositions() []GlyphInfo
 GlyphPositions returns the absolute position, advance, and index of every glyph in the layout.
 
 <a name="Layout.HitTest"></a>
-### func \(\*Layout\) [HitTest](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L55>)
+### func \(\*Layout\) [HitTest](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L55>)
 
 ```go
 func (l *Layout) HitTest(x, y float32) int
@@ -1869,7 +1869,7 @@ func (l *Layout) HitTest(x, y float32) int
 HitTest returns the byte index of the character at \(x, y\) relative to origin. Returns \-1 if no character is found.
 
 <a name="Layout.HitTestRect"></a>
-### func \(\*Layout\) [HitTestRect](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L32>)
+### func \(\*Layout\) [HitTestRect](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L32>)
 
 ```go
 func (l *Layout) HitTestRect(x, y float32) (Rect, bool)
@@ -1878,7 +1878,7 @@ func (l *Layout) HitTestRect(x, y float32) (Rect, bool)
 HitTestRect returns the bounding box of the character at \(x, y\) relative to the layout origin. Returns ok=false if no character is found.
 
 <a name="Layout.MoveCursorDown"></a>
-### func \(\*Layout\) [MoveCursorDown](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L391>)
+### func \(\*Layout\) [MoveCursorDown](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L391>)
 
 ```go
 func (l *Layout) MoveCursorDown(byteIndex int, preferredX float32) int
@@ -1887,7 +1887,7 @@ func (l *Layout) MoveCursorDown(byteIndex int, preferredX float32) int
 MoveCursorDown returns byte index on next line at similar x.
 
 <a name="Layout.MoveCursorLeft"></a>
-### func \(\*Layout\) [MoveCursorLeft](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L260>)
+### func \(\*Layout\) [MoveCursorLeft](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L260>)
 
 ```go
 func (l *Layout) MoveCursorLeft(byteIndex int) int
@@ -1896,7 +1896,7 @@ func (l *Layout) MoveCursorLeft(byteIndex int) int
 MoveCursorLeft returns the previous valid cursor position.
 
 <a name="Layout.MoveCursorLineEnd"></a>
-### func \(\*Layout\) [MoveCursorLineEnd](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L352>)
+### func \(\*Layout\) [MoveCursorLineEnd](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L352>)
 
 ```go
 func (l *Layout) MoveCursorLineEnd(byteIndex int) int
@@ -1905,7 +1905,7 @@ func (l *Layout) MoveCursorLineEnd(byteIndex int) int
 MoveCursorLineEnd returns the end of the current line.
 
 <a name="Layout.MoveCursorLineStart"></a>
-### func \(\*Layout\) [MoveCursorLineStart](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L341>)
+### func \(\*Layout\) [MoveCursorLineStart](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L341>)
 
 ```go
 func (l *Layout) MoveCursorLineStart(byteIndex int) int
@@ -1914,7 +1914,7 @@ func (l *Layout) MoveCursorLineStart(byteIndex int) int
 MoveCursorLineStart returns the start of the current line.
 
 <a name="Layout.MoveCursorRight"></a>
-### func \(\*Layout\) [MoveCursorRight](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L274>)
+### func \(\*Layout\) [MoveCursorRight](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L274>)
 
 ```go
 func (l *Layout) MoveCursorRight(byteIndex int) int
@@ -1923,7 +1923,7 @@ func (l *Layout) MoveCursorRight(byteIndex int) int
 MoveCursorRight returns the next valid cursor position.
 
 <a name="Layout.MoveCursorUp"></a>
-### func \(\*Layout\) [MoveCursorUp](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L364>)
+### func \(\*Layout\) [MoveCursorUp](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L364>)
 
 ```go
 func (l *Layout) MoveCursorUp(byteIndex int, preferredX float32) int
@@ -1932,7 +1932,7 @@ func (l *Layout) MoveCursorUp(byteIndex int, preferredX float32) int
 MoveCursorUp returns byte index on previous line at similar x. Pass preferredX \< 0 to use cursor's current x.
 
 <a name="Layout.MoveCursorWordLeft"></a>
-### func \(\*Layout\) [MoveCursorWordLeft](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L309>)
+### func \(\*Layout\) [MoveCursorWordLeft](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L309>)
 
 ```go
 func (l *Layout) MoveCursorWordLeft(byteIndex int) int
@@ -1941,7 +1941,7 @@ func (l *Layout) MoveCursorWordLeft(byteIndex int) int
 MoveCursorWordLeft returns the previous word start.
 
 <a name="Layout.MoveCursorWordRight"></a>
-### func \(\*Layout\) [MoveCursorWordRight](<https://github.com/mike-ward/go-glyph/blob/main/layout_query.go#L323>)
+### func \(\*Layout\) [MoveCursorWordRight](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L323>)
 
 ```go
 func (l *Layout) MoveCursorWordRight(byteIndex int) int
@@ -1950,7 +1950,7 @@ func (l *Layout) MoveCursorWordRight(byteIndex int) int
 MoveCursorWordRight returns the next word start.
 
 <a name="Line"></a>
-## type [Line](<https://github.com/mike-ward/go-glyph/blob/main/layout_types.go#L54-L59>)
+## type [Line](<https://github.com/go-gui-org/go-glyph/blob/main/layout_types.go#L54-L59>)
 
 Line describes one line of a laid\-out paragraph.
 
@@ -1964,7 +1964,7 @@ type Line struct {
 ```
 
 <a name="LoadGlyphConfig"></a>
-## type [LoadGlyphConfig](<https://github.com/mike-ward/go-glyph/blob/main/renderer_load.go#L17-L22>)
+## type [LoadGlyphConfig](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_load.go#L17-L22>)
 
 LoadGlyphConfig holds parameters for glyph rasterization.
 
@@ -1978,7 +1978,7 @@ type LoadGlyphConfig struct {
 ```
 
 <a name="LoadGlyphResult"></a>
-## type [LoadGlyphResult](<https://github.com/mike-ward/go-glyph/blob/main/renderer_load.go#L25-L29>)
+## type [LoadGlyphResult](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_load.go#L25-L29>)
 
 LoadGlyphResult holds the output of a glyph load operation.
 
@@ -1991,7 +1991,7 @@ type LoadGlyphResult struct {
 ```
 
 <a name="LoadGlyph"></a>
-### func [LoadGlyph](<https://github.com/mike-ward/go-glyph/blob/main/renderer_load.go#L40-L41>)
+### func [LoadGlyph](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_load.go#L40-L41>)
 
 ```go
 func LoadGlyph(atlas *GlyphAtlas, cfg LoadGlyphConfig, scaleFactor float32) (LoadGlyphResult, error)
@@ -2007,7 +2007,7 @@ Hybrid hinting strategy:
 Subpixel positioning: bins 0–3 shift the outline by 0/0.25/0.5/0.75 pixels before rendering.
 
 <a name="LoadStrokedGlyph"></a>
-### func [LoadStrokedGlyph](<https://github.com/mike-ward/go-glyph/blob/main/renderer_load.go#L132-L134>)
+### func [LoadStrokedGlyph](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_load.go#L132-L134>)
 
 ```go
 func LoadStrokedGlyph(atlas *GlyphAtlas, stroker FTStroker, cfg LoadGlyphConfig, strokeRadius int64, scaleFactor float32) (LoadGlyphResult, error)
@@ -2016,7 +2016,7 @@ func LoadStrokedGlyph(atlas *GlyphAtlas, stroker FTStroker, cfg LoadGlyphConfig,
 LoadStrokedGlyph rasterizes a stroked \(outline\-only\) glyph via FT\_Stroker and inserts it into the atlas.
 
 <a name="LogAttr"></a>
-## type [LogAttr](<https://github.com/mike-ward/go-glyph/blob/main/layout_types.go#L40-L45>)
+## type [LogAttr](<https://github.com/go-gui-org/go-glyph/blob/main/layout_types.go#L40-L45>)
 
 LogAttr holds character classification for cursor/word boundaries.
 
@@ -2030,7 +2030,7 @@ type LogAttr struct {
 ```
 
 <a name="MutationResult"></a>
-## type [MutationResult](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L4-L10>)
+## type [MutationResult](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L4-L10>)
 
 MutationResult contains the result of applying a text mutation.
 
@@ -2045,7 +2045,7 @@ type MutationResult struct {
 ```
 
 <a name="CutSelection"></a>
-### func [CutSelection](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L192>)
+### func [CutSelection](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L192>)
 
 ```go
 func CutSelection(text string, cursor, anchor int) (string, MutationResult)
@@ -2054,7 +2054,7 @@ func CutSelection(text string, cursor, anchor int) (string, MutationResult)
 CutSelection removes selected text and returns it for clipboard.
 
 <a name="DeleteBackward"></a>
-### func [DeleteBackward](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L32>)
+### func [DeleteBackward](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L32>)
 
 ```go
 func DeleteBackward(text string, layout Layout, cursor int) MutationResult
@@ -2063,7 +2063,7 @@ func DeleteBackward(text string, layout Layout, cursor int) MutationResult
 DeleteBackward removes one grapheme cluster before cursor \(Backspace\). Uses layout.MoveCursorLeft for grapheme boundary.
 
 <a name="DeleteForward"></a>
-### func [DeleteForward](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L48>)
+### func [DeleteForward](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L48>)
 
 ```go
 func DeleteForward(text string, layout Layout, cursor int) MutationResult
@@ -2072,7 +2072,7 @@ func DeleteForward(text string, layout Layout, cursor int) MutationResult
 DeleteForward removes one grapheme cluster after cursor \(Delete\).
 
 <a name="DeleteSelection"></a>
-### func [DeleteSelection](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L138>)
+### func [DeleteSelection](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L138>)
 
 ```go
 func DeleteSelection(text string, cursor, anchor int) MutationResult
@@ -2081,7 +2081,7 @@ func DeleteSelection(text string, cursor, anchor int) MutationResult
 DeleteSelection removes text between cursor and anchor.
 
 <a name="DeleteToLineEnd"></a>
-### func [DeleteToLineEnd](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L123>)
+### func [DeleteToLineEnd](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L123>)
 
 ```go
 func DeleteToLineEnd(text string, layout Layout, cursor int) MutationResult
@@ -2090,7 +2090,7 @@ func DeleteToLineEnd(text string, layout Layout, cursor int) MutationResult
 DeleteToLineEnd removes text from cursor to line end \(Cmd\+Delete\).
 
 <a name="DeleteToLineStart"></a>
-### func [DeleteToLineStart](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L107>)
+### func [DeleteToLineStart](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L107>)
 
 ```go
 func DeleteToLineStart(text string, layout Layout, cursor int) MutationResult
@@ -2099,7 +2099,7 @@ func DeleteToLineStart(text string, layout Layout, cursor int) MutationResult
 DeleteToLineStart removes text from cursor to line start \(Cmd\+Backspace\).
 
 <a name="DeleteToWordBoundary"></a>
-### func [DeleteToWordBoundary](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L75>)
+### func [DeleteToWordBoundary](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L75>)
 
 ```go
 func DeleteToWordBoundary(text string, layout Layout, cursor int) MutationResult
@@ -2108,7 +2108,7 @@ func DeleteToWordBoundary(text string, layout Layout, cursor int) MutationResult
 DeleteToWordBoundary removes text from cursor to previous word boundary \(Option\+Backspace\).
 
 <a name="DeleteToWordEnd"></a>
-### func [DeleteToWordEnd](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L91>)
+### func [DeleteToWordEnd](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L91>)
 
 ```go
 func DeleteToWordEnd(text string, layout Layout, cursor int) MutationResult
@@ -2117,7 +2117,7 @@ func DeleteToWordEnd(text string, layout Layout, cursor int) MutationResult
 DeleteToWordEnd removes text from cursor to next word boundary \(Option\+Delete\).
 
 <a name="InsertReplacingSelection"></a>
-### func [InsertReplacingSelection](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L158>)
+### func [InsertReplacingSelection](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L158>)
 
 ```go
 func InsertReplacingSelection(text string, cursor, anchor int, insert string) MutationResult
@@ -2126,7 +2126,7 @@ func InsertReplacingSelection(text string, cursor, anchor int, insert string) Mu
 InsertReplacingSelection inserts text, replacing any selection.
 
 <a name="InsertText"></a>
-### func [InsertText](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L63>)
+### func [InsertText](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L63>)
 
 ```go
 func InsertText(text string, cursor int, insert string) MutationResult
@@ -2135,7 +2135,7 @@ func InsertText(text string, cursor int, insert string) MutationResult
 InsertText inserts a string at cursor position.
 
 <a name="MutationResult.ToChange"></a>
-### func \(MutationResult\) [ToChange](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L21>)
+### func \(MutationResult\) [ToChange](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L21>)
 
 ```go
 func (m MutationResult) ToChange(inserted string) TextChange
@@ -2144,7 +2144,7 @@ func (m MutationResult) ToChange(inserted string) TextChange
 ToChange converts a MutationResult to a TextChange.
 
 <a name="OperationType"></a>
-## type [OperationType](<https://github.com/mike-ward/go-glyph/blob/main/enums.go#L67>)
+## type [OperationType](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L67>)
 
 OperationType identifies the kind of undo operation.
 
@@ -2163,7 +2163,7 @@ const (
 ```
 
 <a name="PangoAttrListW"></a>
-## type [PangoAttrListW](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L253-L255>)
+## type [PangoAttrListW](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L253-L255>)
 
 PangoAttrListW wraps \*PangoAttrList.
 
@@ -2174,7 +2174,7 @@ type PangoAttrListW struct {
 ```
 
 <a name="NewPangoAttrList"></a>
-### func [NewPangoAttrList](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L258>)
+### func [NewPangoAttrList](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L258>)
 
 ```go
 func NewPangoAttrList() PangoAttrListW
@@ -2183,7 +2183,7 @@ func NewPangoAttrList() PangoAttrListW
 NewPangoAttrList creates a new attribute list.
 
 <a name="PangoAttrListCopy"></a>
-### func [PangoAttrListCopy](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L533>)
+### func [PangoAttrListCopy](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L533>)
 
 ```go
 func PangoAttrListCopy(list *C.PangoAttrList) PangoAttrListW
@@ -2192,7 +2192,7 @@ func PangoAttrListCopy(list *C.PangoAttrList) PangoAttrListW
 PangoAttrListCopy copies a PangoAttrList.
 
 <a name="PangoAttrListW.Close"></a>
-### func \(\*PangoAttrListW\) [Close](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L268>)
+### func \(\*PangoAttrListW\) [Close](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L268>)
 
 ```go
 func (a *PangoAttrListW) Close()
@@ -2201,7 +2201,7 @@ func (a *PangoAttrListW) Close()
 Close unrefs the attribute list.
 
 <a name="PangoAttrListW.Insert"></a>
-### func \(PangoAttrListW\) [Insert](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L263>)
+### func \(PangoAttrListW\) [Insert](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L263>)
 
 ```go
 func (a PangoAttrListW) Insert(attr *C.PangoAttribute)
@@ -2210,7 +2210,7 @@ func (a PangoAttrListW) Insert(attr *C.PangoAttribute)
 Insert adds an attribute to the list. The list takes ownership.
 
 <a name="PangoContextW"></a>
-## type [PangoContextW](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L114-L116>)
+## type [PangoContextW](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L114-L116>)
 
 PangoContextW wraps \*PangoContext.
 
@@ -2221,7 +2221,7 @@ type PangoContextW struct {
 ```
 
 <a name="PangoContextW.Close"></a>
-### func \(\*PangoContextW\) [Close](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L119>)
+### func \(\*PangoContextW\) [Close](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L119>)
 
 ```go
 func (c *PangoContextW) Close()
@@ -2230,7 +2230,7 @@ func (c *PangoContextW) Close()
 Close unrefs the Pango context.
 
 <a name="PangoContextW.Ptr"></a>
-### func \(\*PangoContextW\) [Ptr](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L127>)
+### func \(\*PangoContextW\) [Ptr](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L127>)
 
 ```go
 func (c *PangoContextW) Ptr() *C.PangoContext
@@ -2239,7 +2239,7 @@ func (c *PangoContextW) Ptr() *C.PangoContext
 Ptr returns the raw C pointer.
 
 <a name="PangoFontDescW"></a>
-## type [PangoFontDescW](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L211-L213>)
+## type [PangoFontDescW](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L211-L213>)
 
 PangoFontDescW wraps \*PangoFontDescription.
 
@@ -2250,7 +2250,7 @@ type PangoFontDescW struct {
 ```
 
 <a name="NewPangoFontDescFromString"></a>
-### func [NewPangoFontDescFromString](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L216>)
+### func [NewPangoFontDescFromString](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L216>)
 
 ```go
 func NewPangoFontDescFromString(desc string) PangoFontDescW
@@ -2259,7 +2259,7 @@ func NewPangoFontDescFromString(desc string) PangoFontDescW
 NewPangoFontDescFromString parses a Pango font description string.
 
 <a name="PangoFontDescNew"></a>
-### func [PangoFontDescNew](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L504>)
+### func [PangoFontDescNew](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L504>)
 
 ```go
 func PangoFontDescNew() PangoFontDescW
@@ -2268,7 +2268,7 @@ func PangoFontDescNew() PangoFontDescW
 PangoFontDescNew creates a new empty font description.
 
 <a name="PangoFontDescW.Close"></a>
-### func \(\*PangoFontDescW\) [Close](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L245>)
+### func \(\*PangoFontDescW\) [Close](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L245>)
 
 ```go
 func (d *PangoFontDescW) Close()
@@ -2277,7 +2277,7 @@ func (d *PangoFontDescW) Close()
 Close frees the font description.
 
 <a name="PangoFontDescW.SetSize"></a>
-### func \(PangoFontDescW\) [SetSize](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L223>)
+### func \(PangoFontDescW\) [SetSize](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L223>)
 
 ```go
 func (d PangoFontDescW) SetSize(size int)
@@ -2286,7 +2286,7 @@ func (d PangoFontDescW) SetSize(size int)
 SetSize sets the font size in Pango units.
 
 <a name="PangoFontDescW.SetStyle"></a>
-### func \(PangoFontDescW\) [SetStyle](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L233>)
+### func \(PangoFontDescW\) [SetStyle](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L233>)
 
 ```go
 func (d PangoFontDescW) SetStyle(style int)
@@ -2295,7 +2295,7 @@ func (d PangoFontDescW) SetStyle(style int)
 SetStyle sets the font style \(normal/italic/oblique\).
 
 <a name="PangoFontDescW.SetVariations"></a>
-### func \(PangoFontDescW\) [SetVariations](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L238>)
+### func \(PangoFontDescW\) [SetVariations](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L238>)
 
 ```go
 func (d PangoFontDescW) SetVariations(variations string)
@@ -2304,7 +2304,7 @@ func (d PangoFontDescW) SetVariations(variations string)
 SetVariations sets font variation axes string.
 
 <a name="PangoFontDescW.SetWeight"></a>
-### func \(PangoFontDescW\) [SetWeight](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L228>)
+### func \(PangoFontDescW\) [SetWeight](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L228>)
 
 ```go
 func (d PangoFontDescW) SetWeight(weight int)
@@ -2313,7 +2313,7 @@ func (d PangoFontDescW) SetWeight(weight int)
 SetWeight sets the font weight.
 
 <a name="PangoFontMapW"></a>
-## type [PangoFontMapW](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L83-L85>)
+## type [PangoFontMapW](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L83-L85>)
 
 PangoFontMapW wraps \*PangoFontMap \(the W suffix avoids conflict with the C type\).
 
@@ -2324,7 +2324,7 @@ type PangoFontMapW struct {
 ```
 
 <a name="NewPangoFT2FontMap"></a>
-### func [NewPangoFT2FontMap](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L88>)
+### func [NewPangoFT2FontMap](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L88>)
 
 ```go
 func NewPangoFT2FontMap() PangoFontMapW
@@ -2333,7 +2333,7 @@ func NewPangoFT2FontMap() PangoFontMapW
 NewPangoFT2FontMap creates a new Pango FT2 font map.
 
 <a name="PangoFontMapW.Close"></a>
-### func \(\*PangoFontMapW\) [Close](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L106>)
+### func \(\*PangoFontMapW\) [Close](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L106>)
 
 ```go
 func (m *PangoFontMapW) Close()
@@ -2342,7 +2342,7 @@ func (m *PangoFontMapW) Close()
 Close unrefs the font map.
 
 <a name="PangoFontMapW.CreateContext"></a>
-### func \(PangoFontMapW\) [CreateContext](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L101>)
+### func \(PangoFontMapW\) [CreateContext](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L101>)
 
 ```go
 func (m PangoFontMapW) CreateContext() PangoContextW
@@ -2351,7 +2351,7 @@ func (m PangoFontMapW) CreateContext() PangoContextW
 CreateContext creates a PangoContext from this font map.
 
 <a name="PangoFontMapW.SetResolution"></a>
-### func \(PangoFontMapW\) [SetResolution](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L93>)
+### func \(PangoFontMapW\) [SetResolution](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L93>)
 
 ```go
 func (m PangoFontMapW) SetResolution(dpiX, dpiY float64)
@@ -2360,7 +2360,7 @@ func (m PangoFontMapW) SetResolution(dpiX, dpiY float64)
 SetResolution sets the DPI resolution on the font map.
 
 <a name="PangoFontMetricsW"></a>
-## type [PangoFontMetricsW](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L455-L457>)
+## type [PangoFontMetricsW](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L455-L457>)
 
 PangoFontMetricsW wraps \*PangoFontMetrics.
 
@@ -2371,7 +2371,7 @@ type PangoFontMetricsW struct {
 ```
 
 <a name="PangoFontGetMetrics"></a>
-### func [PangoFontGetMetrics](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L473>)
+### func [PangoFontGetMetrics](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L473>)
 
 ```go
 func PangoFontGetMetrics(font *C.PangoFont, lang *C.PangoLanguage) PangoFontMetricsW
@@ -2380,7 +2380,7 @@ func PangoFontGetMetrics(font *C.PangoFont, lang *C.PangoLanguage) PangoFontMetr
 PangoFontGetMetrics returns metrics for the font and language.
 
 <a name="PangoFontMetricsW.Close"></a>
-### func \(\*PangoFontMetricsW\) [Close](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L460>)
+### func \(\*PangoFontMetricsW\) [Close](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L460>)
 
 ```go
 func (m *PangoFontMetricsW) Close()
@@ -2389,7 +2389,7 @@ func (m *PangoFontMetricsW) Close()
 Close unrefs the metrics.
 
 <a name="PangoFontW"></a>
-## type [PangoFontW](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L442-L444>)
+## type [PangoFontW](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L442-L444>)
 
 PangoFontW wraps \*PangoFont.
 
@@ -2400,7 +2400,7 @@ type PangoFontW struct {
 ```
 
 <a name="PangoContextLoadFont"></a>
-### func [PangoContextLoadFont](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L468>)
+### func [PangoContextLoadFont](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L468>)
 
 ```go
 func PangoContextLoadFont(ctx *C.PangoContext, desc *C.PangoFontDescription) PangoFontW
@@ -2409,7 +2409,7 @@ func PangoContextLoadFont(ctx *C.PangoContext, desc *C.PangoFontDescription) Pan
 PangoContextLoadFont loads a font matching the description.
 
 <a name="PangoFontW.Close"></a>
-### func \(\*PangoFontW\) [Close](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L447>)
+### func \(\*PangoFontW\) [Close](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L447>)
 
 ```go
 func (f *PangoFontW) Close()
@@ -2418,7 +2418,7 @@ func (f *PangoFontW) Close()
 Close unrefs the font.
 
 <a name="PangoLayoutIterW"></a>
-## type [PangoLayoutIterW](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L276-L278>)
+## type [PangoLayoutIterW](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L276-L278>)
 
 PangoLayoutIterW wraps \*PangoLayoutIter.
 
@@ -2429,7 +2429,7 @@ type PangoLayoutIterW struct {
 ```
 
 <a name="PangoLayoutIterW.Close"></a>
-### func \(\*PangoLayoutIterW\) [Close](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L335>)
+### func \(\*PangoLayoutIterW\) [Close](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L335>)
 
 ```go
 func (it *PangoLayoutIterW) Close()
@@ -2438,7 +2438,7 @@ func (it *PangoLayoutIterW) Close()
 Close frees the iterator.
 
 <a name="PangoLayoutIterW.GetBaseline"></a>
-### func \(PangoLayoutIterW\) [GetBaseline](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L291>)
+### func \(PangoLayoutIterW\) [GetBaseline](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L291>)
 
 ```go
 func (it PangoLayoutIterW) GetBaseline() int
@@ -2447,7 +2447,7 @@ func (it PangoLayoutIterW) GetBaseline() int
 GetBaseline returns the current baseline in Pango units.
 
 <a name="PangoLayoutIterW.GetCharExtents"></a>
-### func \(PangoLayoutIterW\) [GetCharExtents](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L328>)
+### func \(PangoLayoutIterW\) [GetCharExtents](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L328>)
 
 ```go
 func (it PangoLayoutIterW) GetCharExtents() C.PangoRectangle
@@ -2456,7 +2456,7 @@ func (it PangoLayoutIterW) GetCharExtents() C.PangoRectangle
 GetCharExtents returns the logical extents of the current character.
 
 <a name="PangoLayoutIterW.GetIndex"></a>
-### func \(PangoLayoutIterW\) [GetIndex](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L323>)
+### func \(PangoLayoutIterW\) [GetIndex](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L323>)
 
 ```go
 func (it PangoLayoutIterW) GetIndex() int
@@ -2465,7 +2465,7 @@ func (it PangoLayoutIterW) GetIndex() int
 GetIndex returns the byte index of the current iterator position.
 
 <a name="PangoLayoutIterW.GetLineExtents"></a>
-### func \(PangoLayoutIterW\) [GetLineExtents](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L312>)
+### func \(PangoLayoutIterW\) [GetLineExtents](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L312>)
 
 ```go
 func (it PangoLayoutIterW) GetLineExtents() (ink, logical C.PangoRectangle)
@@ -2474,7 +2474,7 @@ func (it PangoLayoutIterW) GetLineExtents() (ink, logical C.PangoRectangle)
 GetLineExtents returns ink and logical extents of the current line.
 
 <a name="PangoLayoutIterW.GetLineReadonly"></a>
-### func \(PangoLayoutIterW\) [GetLineReadonly](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L307>)
+### func \(PangoLayoutIterW\) [GetLineReadonly](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L307>)
 
 ```go
 func (it PangoLayoutIterW) GetLineReadonly() *C.PangoLayoutLine
@@ -2483,7 +2483,7 @@ func (it PangoLayoutIterW) GetLineReadonly() *C.PangoLayoutLine
 GetLineReadonly returns the current layout line.
 
 <a name="PangoLayoutIterW.GetRunExtents"></a>
-### func \(PangoLayoutIterW\) [GetRunExtents](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L296>)
+### func \(PangoLayoutIterW\) [GetRunExtents](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L296>)
 
 ```go
 func (it PangoLayoutIterW) GetRunExtents() (ink, logical C.PangoRectangle)
@@ -2492,7 +2492,7 @@ func (it PangoLayoutIterW) GetRunExtents() (ink, logical C.PangoRectangle)
 GetRunExtents returns ink and logical extents of the current run.
 
 <a name="PangoLayoutIterW.GetRunReadonly"></a>
-### func \(PangoLayoutIterW\) [GetRunReadonly](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L286>)
+### func \(PangoLayoutIterW\) [GetRunReadonly](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L286>)
 
 ```go
 func (it PangoLayoutIterW) GetRunReadonly() *C.PangoGlyphItem
@@ -2501,7 +2501,7 @@ func (it PangoLayoutIterW) GetRunReadonly() *C.PangoGlyphItem
 GetRunReadonly returns the current run \(may be nil for empty runs\).
 
 <a name="PangoLayoutIterW.NextChar"></a>
-### func \(PangoLayoutIterW\) [NextChar](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L318>)
+### func \(PangoLayoutIterW\) [NextChar](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L318>)
 
 ```go
 func (it PangoLayoutIterW) NextChar() bool
@@ -2510,7 +2510,7 @@ func (it PangoLayoutIterW) NextChar() bool
 NextChar advances to the next character.
 
 <a name="PangoLayoutIterW.NextLine"></a>
-### func \(PangoLayoutIterW\) [NextLine](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L302>)
+### func \(PangoLayoutIterW\) [NextLine](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L302>)
 
 ```go
 func (it PangoLayoutIterW) NextLine() bool
@@ -2519,7 +2519,7 @@ func (it PangoLayoutIterW) NextLine() bool
 NextLine advances to the next line.
 
 <a name="PangoLayoutIterW.NextRun"></a>
-### func \(PangoLayoutIterW\) [NextRun](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L281>)
+### func \(PangoLayoutIterW\) [NextRun](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L281>)
 
 ```go
 func (it PangoLayoutIterW) NextRun() bool
@@ -2528,7 +2528,7 @@ func (it PangoLayoutIterW) NextRun() bool
 NextRun advances to the next run. Returns false at end.
 
 <a name="PangoLayoutW"></a>
-## type [PangoLayoutW](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L130-L132>)
+## type [PangoLayoutW](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L130-L132>)
 
 PangoLayoutW wraps \*PangoLayout with RAII.
 
@@ -2539,7 +2539,7 @@ type PangoLayoutW struct {
 ```
 
 <a name="NewPangoLayout"></a>
-### func [NewPangoLayout](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L135>)
+### func [NewPangoLayout](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L135>)
 
 ```go
 func NewPangoLayout(ctx PangoContextW) PangoLayoutW
@@ -2548,7 +2548,7 @@ func NewPangoLayout(ctx PangoContextW) PangoLayoutW
 NewPangoLayout creates a new PangoLayout for the given context.
 
 <a name="PangoLayoutW.Close"></a>
-### func \(\*PangoLayoutW\) [Close](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L203>)
+### func \(\*PangoLayoutW\) [Close](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L203>)
 
 ```go
 func (l *PangoLayoutW) Close()
@@ -2557,7 +2557,7 @@ func (l *PangoLayoutW) Close()
 Close unrefs the layout.
 
 <a name="PangoLayoutW.GetExtents"></a>
-### func \(PangoLayoutW\) [GetExtents](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L194>)
+### func \(PangoLayoutW\) [GetExtents](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L194>)
 
 ```go
 func (l PangoLayoutW) GetExtents() (ink, logical C.PangoRectangle)
@@ -2566,7 +2566,7 @@ func (l PangoLayoutW) GetExtents() (ink, logical C.PangoRectangle)
 GetExtents returns ink and logical extents.
 
 <a name="PangoLayoutW.GetIter"></a>
-### func \(PangoLayoutW\) [GetIter](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L189>)
+### func \(PangoLayoutW\) [GetIter](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L189>)
 
 ```go
 func (l PangoLayoutW) GetIter() PangoLayoutIterW
@@ -2575,7 +2575,7 @@ func (l PangoLayoutW) GetIter() PangoLayoutIterW
 GetIter returns a layout iterator.
 
 <a name="PangoLayoutW.Ptr"></a>
-### func \(PangoLayoutW\) [Ptr](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L200>)
+### func \(PangoLayoutW\) [Ptr](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L200>)
 
 ```go
 func (l PangoLayoutW) Ptr() *C.PangoLayout
@@ -2584,7 +2584,7 @@ func (l PangoLayoutW) Ptr() *C.PangoLayout
 Ptr returns the raw C pointer.
 
 <a name="PangoLayoutW.SetAlignment"></a>
-### func \(PangoLayoutW\) [SetAlignment](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L164>)
+### func \(PangoLayoutW\) [SetAlignment](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L164>)
 
 ```go
 func (l PangoLayoutW) SetAlignment(align Alignment)
@@ -2593,7 +2593,7 @@ func (l PangoLayoutW) SetAlignment(align Alignment)
 SetAlignment sets horizontal alignment.
 
 <a name="PangoLayoutW.SetAttributes"></a>
-### func \(PangoLayoutW\) [SetAttributes](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L179>)
+### func \(PangoLayoutW\) [SetAttributes](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L179>)
 
 ```go
 func (l PangoLayoutW) SetAttributes(attrs PangoAttrListW)
@@ -2602,7 +2602,7 @@ func (l PangoLayoutW) SetAttributes(attrs PangoAttrListW)
 SetAttributes sets the attribute list.
 
 <a name="PangoLayoutW.SetFontDescription"></a>
-### func \(PangoLayoutW\) [SetFontDescription](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L174>)
+### func \(PangoLayoutW\) [SetFontDescription](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L174>)
 
 ```go
 func (l PangoLayoutW) SetFontDescription(desc PangoFontDescW)
@@ -2611,7 +2611,7 @@ func (l PangoLayoutW) SetFontDescription(desc PangoFontDescW)
 SetFontDescription sets the font for the layout.
 
 <a name="PangoLayoutW.SetIndent"></a>
-### func \(PangoLayoutW\) [SetIndent](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L169>)
+### func \(PangoLayoutW\) [SetIndent](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L169>)
 
 ```go
 func (l PangoLayoutW) SetIndent(indent int)
@@ -2620,7 +2620,7 @@ func (l PangoLayoutW) SetIndent(indent int)
 SetIndent sets the first\-line indent in Pango units.
 
 <a name="PangoLayoutW.SetMarkup"></a>
-### func \(PangoLayoutW\) [SetMarkup](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L147>)
+### func \(PangoLayoutW\) [SetMarkup](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L147>)
 
 ```go
 func (l PangoLayoutW) SetMarkup(text string)
@@ -2629,7 +2629,7 @@ func (l PangoLayoutW) SetMarkup(text string)
 SetMarkup sets the layout text with Pango markup.
 
 <a name="PangoLayoutW.SetTabs"></a>
-### func \(PangoLayoutW\) [SetTabs](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L184>)
+### func \(PangoLayoutW\) [SetTabs](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L184>)
 
 ```go
 func (l PangoLayoutW) SetTabs(tabs PangoTabArrayW)
@@ -2638,7 +2638,7 @@ func (l PangoLayoutW) SetTabs(tabs PangoTabArrayW)
 SetTabs sets custom tab stops.
 
 <a name="PangoLayoutW.SetText"></a>
-### func \(PangoLayoutW\) [SetText](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L140>)
+### func \(PangoLayoutW\) [SetText](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L140>)
 
 ```go
 func (l PangoLayoutW) SetText(text string)
@@ -2647,7 +2647,7 @@ func (l PangoLayoutW) SetText(text string)
 SetText sets the layout text.
 
 <a name="PangoLayoutW.SetWidth"></a>
-### func \(PangoLayoutW\) [SetWidth](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L154>)
+### func \(PangoLayoutW\) [SetWidth](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L154>)
 
 ```go
 func (l PangoLayoutW) SetWidth(width int)
@@ -2656,7 +2656,7 @@ func (l PangoLayoutW) SetWidth(width int)
 SetWidth sets the layout width in Pango units \(\-1 = no wrap\).
 
 <a name="PangoLayoutW.SetWrap"></a>
-### func \(PangoLayoutW\) [SetWrap](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L159>)
+### func \(PangoLayoutW\) [SetWrap](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L159>)
 
 ```go
 func (l PangoLayoutW) SetWrap(mode WrapMode)
@@ -2665,7 +2665,7 @@ func (l PangoLayoutW) SetWrap(mode WrapMode)
 SetWrap sets the wrap mode.
 
 <a name="PangoTabArrayW"></a>
-## type [PangoTabArrayW](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L343-L345>)
+## type [PangoTabArrayW](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L343-L345>)
 
 PangoTabArrayW wraps \*PangoTabArray.
 
@@ -2676,7 +2676,7 @@ type PangoTabArrayW struct {
 ```
 
 <a name="NewPangoTabArray"></a>
-### func [NewPangoTabArray](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L348>)
+### func [NewPangoTabArray](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L348>)
 
 ```go
 func NewPangoTabArray(size int) PangoTabArrayW
@@ -2685,7 +2685,7 @@ func NewPangoTabArray(size int) PangoTabArrayW
 NewPangoTabArray creates a tab array with the given number of stops.
 
 <a name="PangoTabArrayW.Close"></a>
-### func \(\*PangoTabArrayW\) [Close](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L358>)
+### func \(\*PangoTabArrayW\) [Close](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L358>)
 
 ```go
 func (t *PangoTabArrayW) Close()
@@ -2694,7 +2694,7 @@ func (t *PangoTabArrayW) Close()
 Close frees the tab array.
 
 <a name="PangoTabArrayW.SetTab"></a>
-### func \(PangoTabArrayW\) [SetTab](<https://github.com/mike-ward/go-glyph/blob/main/pango.go#L353>)
+### func \(PangoTabArrayW\) [SetTab](<https://github.com/go-gui-org/go-glyph/blob/main/pango.go#L353>)
 
 ```go
 func (t PangoTabArrayW) SetTab(index, position int)
@@ -2703,7 +2703,7 @@ func (t PangoTabArrayW) SetTab(index, position int)
 SetTab sets a tab stop position in pixels.
 
 <a name="Rect"></a>
-## type [Rect](<https://github.com/mike-ward/go-glyph/blob/main/rect.go#L4-L6>)
+## type [Rect](<https://github.com/go-gui-org/go-glyph/blob/main/rect.go#L4-L6>)
 
 Rect is an axis\-aligned rectangle.
 
@@ -2714,7 +2714,7 @@ type Rect struct {
 ```
 
 <a name="Renderer"></a>
-## type [Renderer](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L18-L29>)
+## type [Renderer](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L18-L29>)
 
 Renderer rasterizes glyphs, manages the glyph cache and atlas, and emits draw calls through the DrawBackend interface. Not safe for concurrent use.
 
@@ -2725,7 +2725,7 @@ type Renderer struct {
 ```
 
 <a name="NewRenderer"></a>
-### func [NewRenderer](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L37>)
+### func [NewRenderer](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L37>)
 
 ```go
 func NewRenderer(backend DrawBackend, scaleFactor float32) (*Renderer, error)
@@ -2734,7 +2734,7 @@ func NewRenderer(backend DrawBackend, scaleFactor float32) (*Renderer, error)
 NewRenderer creates a Renderer with default 1024x1024 atlas.
 
 <a name="NewRendererWithConfig"></a>
-### func [NewRendererWithConfig](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L43-L44>)
+### func [NewRendererWithConfig](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L43-L44>)
 
 ```go
 func NewRendererWithConfig(backend DrawBackend, scaleFactor float32, atlasW, atlasH int, cfg RendererConfig) (*Renderer, error)
@@ -2743,7 +2743,7 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32, atlasW, atl
 NewRendererWithConfig creates a Renderer with custom atlas size and configuration.
 
 <a name="Renderer.Atlas"></a>
-### func \(\*Renderer\) [Atlas](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L192>)
+### func \(\*Renderer\) [Atlas](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L192>)
 
 ```go
 func (r *Renderer) Atlas() *GlyphAtlas
@@ -2752,7 +2752,7 @@ func (r *Renderer) Atlas() *GlyphAtlas
 Atlas returns the glyph atlas for external access \(e.g. debug\).
 
 <a name="Renderer.Commit"></a>
-### func \(\*Renderer\) [Commit](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L83>)
+### func \(\*Renderer\) [Commit](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L83>)
 
 ```go
 func (r *Renderer) Commit()
@@ -2761,7 +2761,7 @@ func (r *Renderer) Commit()
 Commit uploads dirty atlas pages to the GPU. Call once per frame.
 
 <a name="Renderer.DrawComposition"></a>
-### func \(\*Renderer\) [DrawComposition](<https://github.com/mike-ward/go-glyph/blob/main/draw_composition.go#L6-L7>)
+### func \(\*Renderer\) [DrawComposition](<https://github.com/go-gui-org/go-glyph/blob/main/draw_composition.go#L6-L7>)
 
 ```go
 func (r *Renderer) DrawComposition(layout Layout, x, y float32, cs *CompositionState, cursorColor Color)
@@ -2770,7 +2770,7 @@ func (r *Renderer) DrawComposition(layout Layout, x, y float32, cs *CompositionS
 DrawComposition renders IME preedit visual feedback: clause underlines and preedit cursor. Call after DrawLayout when composition is active.
 
 <a name="Renderer.DrawLayout"></a>
-### func \(\*Renderer\) [DrawLayout](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L89>)
+### func \(\*Renderer\) [DrawLayout](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L89>)
 
 ```go
 func (r *Renderer) DrawLayout(layout Layout, x, y float32)
@@ -2779,7 +2779,7 @@ func (r *Renderer) DrawLayout(layout Layout, x, y float32)
 DrawLayout renders a Layout at \(x, y\) using the identity transform.
 
 <a name="Renderer.DrawLayoutPlaced"></a>
-### func \(\*Renderer\) [DrawLayoutPlaced](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L118>)
+### func \(\*Renderer\) [DrawLayoutPlaced](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L118>)
 
 ```go
 func (r *Renderer) DrawLayoutPlaced(layout Layout, placements []GlyphPlacement)
@@ -2788,7 +2788,7 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout, placements []GlyphPlacement)
 DrawLayoutPlaced renders each glyph at individual placements. Decorations are skipped. placements must match layout.Glyphs length.
 
 <a name="Renderer.DrawLayoutRotated"></a>
-### func \(\*Renderer\) [DrawLayoutRotated](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L100>)
+### func \(\*Renderer\) [DrawLayoutRotated](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L100>)
 
 ```go
 func (r *Renderer) DrawLayoutRotated(layout Layout, x, y, angle float32)
@@ -2797,7 +2797,7 @@ func (r *Renderer) DrawLayoutRotated(layout Layout, x, y, angle float32)
 DrawLayoutRotated renders rotated by angle \(radians\).
 
 <a name="Renderer.DrawLayoutTransformed"></a>
-### func \(\*Renderer\) [DrawLayoutTransformed](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L94-L95>)
+### func \(\*Renderer\) [DrawLayoutTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L94-L95>)
 
 ```go
 func (r *Renderer) DrawLayoutTransformed(layout Layout, x, y float32, transform AffineTransform)
@@ -2806,7 +2806,7 @@ func (r *Renderer) DrawLayoutTransformed(layout Layout, x, y float32, transform 
 DrawLayoutTransformed renders with an affine transform.
 
 <a name="Renderer.DrawLayoutTransformedWithGradient"></a>
-### func \(\*Renderer\) [DrawLayoutTransformedWithGradient](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L111-L112>)
+### func \(\*Renderer\) [DrawLayoutTransformedWithGradient](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L111-L112>)
 
 ```go
 func (r *Renderer) DrawLayoutTransformedWithGradient(layout Layout, x, y float32, transform AffineTransform, gradient *GradientConfig)
@@ -2815,7 +2815,7 @@ func (r *Renderer) DrawLayoutTransformedWithGradient(layout Layout, x, y float32
 DrawLayoutTransformedWithGradient renders with both transform and gradient.
 
 <a name="Renderer.DrawLayoutWithComposition"></a>
-### func \(\*Renderer\) [DrawLayoutWithComposition](<https://github.com/mike-ward/go-glyph/blob/main/draw_composition.go#L58-L59>)
+### func \(\*Renderer\) [DrawLayoutWithComposition](<https://github.com/go-gui-org/go-glyph/blob/main/draw_composition.go#L58-L59>)
 
 ```go
 func (r *Renderer) DrawLayoutWithComposition(layout Layout, x, y float32, cs *CompositionState)
@@ -2824,7 +2824,7 @@ func (r *Renderer) DrawLayoutWithComposition(layout Layout, x, y float32, cs *Co
 DrawLayoutWithComposition renders a layout with preedit text. Currently draws normally; opacity reduction deferred to future.
 
 <a name="Renderer.DrawLayoutWithGradient"></a>
-### func \(\*Renderer\) [DrawLayoutWithGradient](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L105-L106>)
+### func \(\*Renderer\) [DrawLayoutWithGradient](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L105-L106>)
 
 ```go
 func (r *Renderer) DrawLayoutWithGradient(layout Layout, x, y float32, gradient *GradientConfig)
@@ -2833,7 +2833,7 @@ func (r *Renderer) DrawLayoutWithGradient(layout Layout, x, y float32, gradient 
 DrawLayoutWithGradient renders with gradient colors.
 
 <a name="Renderer.Free"></a>
-### func \(\*Renderer\) [Free](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L71>)
+### func \(\*Renderer\) [Free](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L71>)
 
 ```go
 func (r *Renderer) Free()
@@ -2842,7 +2842,7 @@ func (r *Renderer) Free()
 Free releases renderer resources.
 
 <a name="RendererConfig"></a>
-## type [RendererConfig](<https://github.com/mike-ward/go-glyph/blob/main/renderer.go#L32-L34>)
+## type [RendererConfig](<https://github.com/go-gui-org/go-glyph/blob/main/renderer.go#L32-L34>)
 
 RendererConfig configures the Renderer.
 
@@ -2853,7 +2853,7 @@ type RendererConfig struct {
 ```
 
 <a name="RichText"></a>
-## type [RichText](<https://github.com/mike-ward/go-glyph/blob/main/config.go#L91-L93>)
+## type [RichText](<https://github.com/go-gui-org/go-glyph/blob/main/config.go#L91-L93>)
 
 RichText is a sequence of styled runs.
 
@@ -2864,7 +2864,7 @@ type RichText struct {
 ```
 
 <a name="Shelf"></a>
-## type [Shelf](<https://github.com/mike-ward/go-glyph/blob/main/atlas.go#L22-L27>)
+## type [Shelf](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L22-L27>)
 
 Shelf is a horizontal strip within an atlas page.
 
@@ -2878,7 +2878,7 @@ type Shelf struct {
 ```
 
 <a name="StyleRun"></a>
-## type [StyleRun](<https://github.com/mike-ward/go-glyph/blob/main/config.go#L85-L88>)
+## type [StyleRun](<https://github.com/go-gui-org/go-glyph/blob/main/config.go#L85-L88>)
 
 StyleRun is a text segment with its own style.
 
@@ -2890,7 +2890,7 @@ type StyleRun struct {
 ```
 
 <a name="TextChange"></a>
-## type [TextChange](<https://github.com/mike-ward/go-glyph/blob/main/layout_mutation.go#L13-L18>)
+## type [TextChange](<https://github.com/go-gui-org/go-glyph/blob/main/layout_mutation.go#L13-L18>)
 
 TextChange captures mutation info for undo support and events.
 
@@ -2904,7 +2904,7 @@ type TextChange struct {
 ```
 
 <a name="TextConfig"></a>
-## type [TextConfig](<https://github.com/mike-ward/go-glyph/blob/main/config.go#L4-L11>)
+## type [TextConfig](<https://github.com/go-gui-org/go-glyph/blob/main/config.go#L4-L11>)
 
 TextConfig holds configuration for text layout and rendering.
 
@@ -2920,7 +2920,7 @@ type TextConfig struct {
 ```
 
 <a name="TextMetrics"></a>
-## type [TextMetrics](<https://github.com/mike-ward/go-glyph/blob/main/config.go#L97-L102>)
+## type [TextMetrics](<https://github.com/go-gui-org/go-glyph/blob/main/config.go#L97-L102>)
 
 TextMetrics contains metrics for a specific font configuration. All values are in pixels.
 
@@ -2934,7 +2934,7 @@ type TextMetrics struct {
 ```
 
 <a name="TextOrientation"></a>
-## type [TextOrientation](<https://github.com/mike-ward/go-glyph/blob/main/enums.go#L22>)
+## type [TextOrientation](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L22>)
 
 TextOrientation defines the flow direction of text.
 
@@ -2952,7 +2952,7 @@ const (
 ```
 
 <a name="TextStyle"></a>
-## type [TextStyle](<https://github.com/mike-ward/go-glyph/blob/main/config.go#L14-L36>)
+## type [TextStyle](<https://github.com/go-gui-org/go-glyph/blob/main/config.go#L14-L36>)
 
 TextStyle represents the visual style of a run of text.
 
@@ -2983,7 +2983,7 @@ type TextStyle struct {
 ```
 
 <a name="TextSystem"></a>
-## type [TextSystem](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L16-L21>)
+## type [TextSystem](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L16-L21>)
 
 TextSystem is the main entry point for text rendering. It owns the Context, Renderer, and a layout cache.
 
@@ -2994,7 +2994,7 @@ type TextSystem struct {
 ```
 
 <a name="NewTextSystem"></a>
-### func [NewTextSystem](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L24>)
+### func [NewTextSystem](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L24>)
 
 ```go
 func NewTextSystem(backend DrawBackend) (*TextSystem, error)
@@ -3003,7 +3003,7 @@ func NewTextSystem(backend DrawBackend) (*TextSystem, error)
 NewTextSystem creates a TextSystem with default atlas size \(1024x1024\).
 
 <a name="NewTextSystemAtlasSize"></a>
-### func [NewTextSystemAtlasSize](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L44>)
+### func [NewTextSystemAtlasSize](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L44>)
 
 ```go
 func NewTextSystemAtlasSize(backend DrawBackend, atlasW, atlasH int) (*TextSystem, error)
@@ -3012,7 +3012,7 @@ func NewTextSystemAtlasSize(backend DrawBackend, atlasW, atlasH int) (*TextSyste
 NewTextSystemAtlasSize creates a TextSystem with custom atlas dimensions.
 
 <a name="TextSystem.AddFontFile"></a>
-### func \(\*TextSystem\) [AddFontFile](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L136>)
+### func \(\*TextSystem\) [AddFontFile](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L136>)
 
 ```go
 func (ts *TextSystem) AddFontFile(path string) error
@@ -3021,7 +3021,7 @@ func (ts *TextSystem) AddFontFile(path string) error
 AddFontFile registers a font file \(TTF/OTF\).
 
 <a name="TextSystem.Commit"></a>
-### func \(\*TextSystem\) [Commit](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L127>)
+### func \(\*TextSystem\) [Commit](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L127>)
 
 ```go
 func (ts *TextSystem) Commit()
@@ -3030,7 +3030,7 @@ func (ts *TextSystem) Commit()
 Commit uploads atlas textures and prunes the layout cache. Call once per frame after all draw calls.
 
 <a name="TextSystem.Context"></a>
-### func \(\*TextSystem\) [Context](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L214>)
+### func \(\*TextSystem\) [Context](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L214>)
 
 ```go
 func (ts *TextSystem) Context() *Context
@@ -3039,7 +3039,7 @@ func (ts *TextSystem) Context() *Context
 Context returns the underlying Context for advanced usage.
 
 <a name="TextSystem.DrawLayout"></a>
-### func \(\*TextSystem\) [DrawLayout](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L172>)
+### func \(\*TextSystem\) [DrawLayout](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L172>)
 
 ```go
 func (ts *TextSystem) DrawLayout(l Layout, x, y float32)
@@ -3048,7 +3048,7 @@ func (ts *TextSystem) DrawLayout(l Layout, x, y float32)
 DrawLayout renders a pre\-computed Layout at \(x, y\).
 
 <a name="TextSystem.DrawLayoutPlaced"></a>
-### func \(\*TextSystem\) [DrawLayoutPlaced](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L203>)
+### func \(\*TextSystem\) [DrawLayoutPlaced](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L203>)
 
 ```go
 func (ts *TextSystem) DrawLayoutPlaced(l Layout, placements []GlyphPlacement)
@@ -3057,7 +3057,7 @@ func (ts *TextSystem) DrawLayoutPlaced(l Layout, placements []GlyphPlacement)
 DrawLayoutPlaced renders glyphs at individual placements.
 
 <a name="TextSystem.DrawLayoutRotated"></a>
-### func \(\*TextSystem\) [DrawLayoutRotated](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L189>)
+### func \(\*TextSystem\) [DrawLayoutRotated](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L189>)
 
 ```go
 func (ts *TextSystem) DrawLayoutRotated(l Layout, x, y, angle float32)
@@ -3066,7 +3066,7 @@ func (ts *TextSystem) DrawLayoutRotated(l Layout, x, y, angle float32)
 DrawLayoutRotated renders rotated by angle \(radians\).
 
 <a name="TextSystem.DrawLayoutTransformed"></a>
-### func \(\*TextSystem\) [DrawLayoutTransformed](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L180-L181>)
+### func \(\*TextSystem\) [DrawLayoutTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L180-L181>)
 
 ```go
 func (ts *TextSystem) DrawLayoutTransformed(l Layout, x, y float32, transform AffineTransform)
@@ -3075,7 +3075,7 @@ func (ts *TextSystem) DrawLayoutTransformed(l Layout, x, y float32, transform Af
 DrawLayoutTransformed renders with an affine transform.
 
 <a name="TextSystem.DrawLayoutWithGradient"></a>
-### func \(\*TextSystem\) [DrawLayoutWithGradient](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L194-L195>)
+### func \(\*TextSystem\) [DrawLayoutWithGradient](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L194-L195>)
 
 ```go
 func (ts *TextSystem) DrawLayoutWithGradient(l Layout, x, y float32, gradient *GradientConfig)
@@ -3084,7 +3084,7 @@ func (ts *TextSystem) DrawLayoutWithGradient(l Layout, x, y float32, gradient *G
 DrawLayoutWithGradient renders with gradient colors.
 
 <a name="TextSystem.DrawText"></a>
-### func \(\*TextSystem\) [DrawText](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L84>)
+### func \(\*TextSystem\) [DrawText](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L84>)
 
 ```go
 func (ts *TextSystem) DrawText(x, y float32, text string, cfg TextConfig) error
@@ -3093,7 +3093,7 @@ func (ts *TextSystem) DrawText(x, y float32, text string, cfg TextConfig) error
 DrawText renders text at \(x, y\) using configuration. Uses layout cache for repeated calls.
 
 <a name="TextSystem.FontHeight"></a>
-### func \(\*TextSystem\) [FontHeight](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L116>)
+### func \(\*TextSystem\) [FontHeight](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L116>)
 
 ```go
 func (ts *TextSystem) FontHeight(cfg TextConfig) (float32, error)
@@ -3102,7 +3102,7 @@ func (ts *TextSystem) FontHeight(cfg TextConfig) (float32, error)
 FontHeight returns the font height \(ascent \+ descent\) in pixels.
 
 <a name="TextSystem.FontMetrics"></a>
-### func \(\*TextSystem\) [FontMetrics](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L121>)
+### func \(\*TextSystem\) [FontMetrics](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L121>)
 
 ```go
 func (ts *TextSystem) FontMetrics(cfg TextConfig) (TextMetrics, error)
@@ -3111,7 +3111,7 @@ func (ts *TextSystem) FontMetrics(cfg TextConfig) (TextMetrics, error)
 FontMetrics returns detailed font metrics.
 
 <a name="TextSystem.Free"></a>
-### func \(\*TextSystem\) [Free](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L70>)
+### func \(\*TextSystem\) [Free](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L70>)
 
 ```go
 func (ts *TextSystem) Free()
@@ -3120,7 +3120,7 @@ func (ts *TextSystem) Free()
 Free releases all TextSystem resources.
 
 <a name="TextSystem.LayoutRichText"></a>
-### func \(\*TextSystem\) [LayoutRichText](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L167>)
+### func \(\*TextSystem\) [LayoutRichText](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L167>)
 
 ```go
 func (ts *TextSystem) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error)
@@ -3129,7 +3129,7 @@ func (ts *TextSystem) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error
 LayoutRichText computes a Layout for multi\-styled text.
 
 <a name="TextSystem.LayoutText"></a>
-### func \(\*TextSystem\) [LayoutText](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L150>)
+### func \(\*TextSystem\) [LayoutText](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L150>)
 
 ```go
 func (ts *TextSystem) LayoutText(text string, cfg TextConfig) (Layout, error)
@@ -3138,7 +3138,7 @@ func (ts *TextSystem) LayoutText(text string, cfg TextConfig) (Layout, error)
 LayoutText computes a new Layout \(bypasses cache\).
 
 <a name="TextSystem.LayoutTextCached"></a>
-### func \(\*TextSystem\) [LayoutTextCached](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L158>)
+### func \(\*TextSystem\) [LayoutTextCached](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L158>)
 
 ```go
 func (ts *TextSystem) LayoutTextCached(text string, cfg TextConfig) (Layout, error)
@@ -3147,7 +3147,7 @@ func (ts *TextSystem) LayoutTextCached(text string, cfg TextConfig) (Layout, err
 LayoutTextCached retrieves a cached layout or creates a new one.
 
 <a name="TextSystem.Renderer"></a>
-### func \(\*TextSystem\) [Renderer](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L211>)
+### func \(\*TextSystem\) [Renderer](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L211>)
 
 ```go
 func (ts *TextSystem) Renderer() *Renderer
@@ -3156,7 +3156,7 @@ func (ts *TextSystem) Renderer() *Renderer
 Renderer returns the underlying Renderer for advanced usage.
 
 <a name="TextSystem.ResolveFontName"></a>
-### func \(\*TextSystem\) [ResolveFontName](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L145>)
+### func \(\*TextSystem\) [ResolveFontName](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L145>)
 
 ```go
 func (ts *TextSystem) ResolveFontName(name string) (string, error)
@@ -3165,7 +3165,7 @@ func (ts *TextSystem) ResolveFontName(name string) (string, error)
 ResolveFontName returns the actual font family name that Pango resolves for the given description string.
 
 <a name="TextSystem.TextHeight"></a>
-### func \(\*TextSystem\) [TextHeight](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L107>)
+### func \(\*TextSystem\) [TextHeight](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L107>)
 
 ```go
 func (ts *TextSystem) TextHeight(text string, cfg TextConfig) (float32, error)
@@ -3174,7 +3174,7 @@ func (ts *TextSystem) TextHeight(text string, cfg TextConfig) (float32, error)
 TextHeight returns the visual height \(pixels\) of text.
 
 <a name="TextSystem.TextWidth"></a>
-### func \(\*TextSystem\) [TextWidth](<https://github.com/mike-ward/go-glyph/blob/main/glyph.go#L98>)
+### func \(\*TextSystem\) [TextWidth](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L98>)
 
 ```go
 func (ts *TextSystem) TextWidth(text string, cfg TextConfig) (float32, error)
@@ -3183,7 +3183,7 @@ func (ts *TextSystem) TextWidth(text string, cfg TextConfig) (float32, error)
 TextWidth returns the width \(pixels\) of text if rendered with cfg.
 
 <a name="TextureID"></a>
-## type [TextureID](<https://github.com/mike-ward/go-glyph/blob/main/backend.go#L4>)
+## type [TextureID](<https://github.com/go-gui-org/go-glyph/blob/main/backend.go#L4>)
 
 TextureID is an opaque handle to a GPU texture managed by a DrawBackend.
 
@@ -3192,7 +3192,7 @@ type TextureID uint64
 ```
 
 <a name="Typeface"></a>
-## type [Typeface](<https://github.com/mike-ward/go-glyph/blob/main/enums.go#L38>)
+## type [Typeface](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L38>)
 
 Typeface specifies bold/italic style programmatically.
 
@@ -3212,7 +3212,7 @@ const (
 ```
 
 <a name="UndoManager"></a>
-## type [UndoManager](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L19-L26>)
+## type [UndoManager](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L19-L26>)
 
 UndoManager tracks undo/redo stacks with coalescing.
 
@@ -3223,7 +3223,7 @@ type UndoManager struct {
 ```
 
 <a name="NewUndoManager"></a>
-### func [NewUndoManager](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L36>)
+### func [NewUndoManager](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L36>)
 
 ```go
 func NewUndoManager(maxHistory int) *UndoManager
@@ -3232,7 +3232,7 @@ func NewUndoManager(maxHistory int) *UndoManager
 NewUndoManager creates an UndoManager with specified history limit.
 
 <a name="UndoManager.BreakCoalescing"></a>
-### func \(\*UndoManager\) [BreakCoalescing](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L223>)
+### func \(\*UndoManager\) [BreakCoalescing](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L223>)
 
 ```go
 func (um *UndoManager) BreakCoalescing()
@@ -3241,7 +3241,7 @@ func (um *UndoManager) BreakCoalescing()
 BreakCoalescing flushes pending operation on cursor navigation.
 
 <a name="UndoManager.CanRedo"></a>
-### func \(\*UndoManager\) [CanRedo](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L233>)
+### func \(\*UndoManager\) [CanRedo](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L233>)
 
 ```go
 func (um *UndoManager) CanRedo() bool
@@ -3250,7 +3250,7 @@ func (um *UndoManager) CanRedo() bool
 CanRedo returns true if redo is possible.
 
 <a name="UndoManager.CanUndo"></a>
-### func \(\*UndoManager\) [CanUndo](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L228>)
+### func \(\*UndoManager\) [CanUndo](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L228>)
 
 ```go
 func (um *UndoManager) CanUndo() bool
@@ -3259,7 +3259,7 @@ func (um *UndoManager) CanUndo() bool
 CanUndo returns true if undo is possible.
 
 <a name="UndoManager.Clear"></a>
-### func \(\*UndoManager\) [Clear](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L238>)
+### func \(\*UndoManager\) [Clear](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L238>)
 
 ```go
 func (um *UndoManager) Clear()
@@ -3268,7 +3268,7 @@ func (um *UndoManager) Clear()
 Clear resets all undo/redo state.
 
 <a name="UndoManager.FlushPending"></a>
-### func \(\*UndoManager\) [FlushPending](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L137>)
+### func \(\*UndoManager\) [FlushPending](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L137>)
 
 ```go
 func (um *UndoManager) FlushPending()
@@ -3277,7 +3277,7 @@ func (um *UndoManager) FlushPending()
 FlushPending pushes pending coalescable op to undo stack.
 
 <a name="UndoManager.RecordMutation"></a>
-### func \(\*UndoManager\) [RecordMutation](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L115-L116>)
+### func \(\*UndoManager\) [RecordMutation](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L115-L116>)
 
 ```go
 func (um *UndoManager) RecordMutation(result MutationResult, inserted string, cursorBefore, anchorBefore int)
@@ -3286,7 +3286,7 @@ func (um *UndoManager) RecordMutation(result MutationResult, inserted string, cu
 RecordMutation tracks a mutation for undo support.
 
 <a name="UndoManager.Redo"></a>
-### func \(\*UndoManager\) [Redo](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L182>)
+### func \(\*UndoManager\) [Redo](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L182>)
 
 ```go
 func (um *UndoManager) Redo(text string) *UndoResult
@@ -3295,7 +3295,7 @@ func (um *UndoManager) Redo(text string) *UndoResult
 Redo reapplies an undone operation. Returns nil if nothing to redo.
 
 <a name="UndoManager.Undo"></a>
-### func \(\*UndoManager\) [Undo](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L148>)
+### func \(\*UndoManager\) [Undo](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L148>)
 
 ```go
 func (um *UndoManager) Undo(text string) *UndoResult
@@ -3304,7 +3304,7 @@ func (um *UndoManager) Undo(text string) *UndoResult
 Undo reverses the last operation. Returns nil if nothing to undo.
 
 <a name="UndoManager.UndoDepth"></a>
-### func \(\*UndoManager\) [UndoDepth](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L245>)
+### func \(\*UndoManager\) [UndoDepth](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L245>)
 
 ```go
 func (um *UndoManager) UndoDepth() int
@@ -3313,7 +3313,7 @@ func (um *UndoManager) UndoDepth() int
 UndoDepth returns count of operations available for undo.
 
 <a name="UndoOperation"></a>
-## type [UndoOperation](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L6-L16>)
+## type [UndoOperation](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L6-L16>)
 
 UndoOperation stores inverse operation data for undo/redo.
 
@@ -3332,7 +3332,7 @@ type UndoOperation struct {
 ```
 
 <a name="MutationToUndoOp"></a>
-### func [MutationToUndoOp](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L47-L48>)
+### func [MutationToUndoOp](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L47-L48>)
 
 ```go
 func MutationToUndoOp(result MutationResult, inserted string, cursorBefore, anchorBefore int) UndoOperation
@@ -3341,7 +3341,7 @@ func MutationToUndoOp(result MutationResult, inserted string, cursorBefore, anch
 MutationToUndoOp converts a MutationResult to an UndoOperation.
 
 <a name="UndoResult"></a>
-## type [UndoResult](<https://github.com/mike-ward/go-glyph/blob/main/undo.go#L29-L33>)
+## type [UndoResult](<https://github.com/go-gui-org/go-glyph/blob/main/undo.go#L29-L33>)
 
 UndoResult holds the result of an undo/redo operation.
 
@@ -3354,7 +3354,7 @@ type UndoResult struct {
 ```
 
 <a name="WrapMode"></a>
-## type [WrapMode](<https://github.com/mike-ward/go-glyph/blob/main/enums.go#L13>)
+## type [WrapMode](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L13>)
 
 WrapMode defines how text wraps when exceeding max width.
 
@@ -3375,7 +3375,7 @@ const (
 # accessibility
 
 ```go
-import "github.com/mike-ward/go-glyph/accessibility"
+import "github.com/go-gui-org/go-glyph/accessibility"
 ```
 
 Package accessibility provides screen reader support for the glyph text rendering library. Platform backends announce text changes via VoiceOver \(macOS\) or AT\-SPI \(Linux\).
@@ -3418,7 +3418,7 @@ Package accessibility provides screen reader support for the glyph text renderin
 
 
 <a name="GetEmojiName"></a>
-## func [GetEmojiName](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/emoji_names.go#L5>)
+## func [GetEmojiName](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/emoji_names.go#L5>)
 
 ```go
 func GetEmojiName(ch rune) string
@@ -3427,7 +3427,7 @@ func GetEmojiName(ch rune) string
 GetEmojiName returns a short name for common emoji codepoints. Returns empty string if the codepoint is unknown.
 
 <a name="Announcer"></a>
-## type [Announcer](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L10-L15>)
+## type [Announcer](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L10-L15>)
 
 Announcer provides screen reader announcements with debounce.
 
@@ -3438,7 +3438,7 @@ type Announcer struct {
 ```
 
 <a name="NewAnnouncer"></a>
-### func [NewAnnouncer](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L24>)
+### func [NewAnnouncer](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L24>)
 
 ```go
 func NewAnnouncer() *Announcer
@@ -3447,7 +3447,7 @@ func NewAnnouncer() *Announcer
 NewAnnouncer creates an announcer with default 150ms debounce.
 
 <a name="Announcer.AnnounceCharacter"></a>
-### func \(\*Announcer\) [AnnounceCharacter](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L34>)
+### func \(\*Announcer\) [AnnounceCharacter](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L34>)
 
 ```go
 func (a *Announcer) AnnounceCharacter(ch rune) string
@@ -3456,7 +3456,7 @@ func (a *Announcer) AnnounceCharacter(ch rune) string
 AnnounceCharacter returns announcement for a character. Punctuation/whitespace get symbolic names; emoji get short names.
 
 <a name="Announcer.AnnounceCompositionCancelled"></a>
-### func \(\*Announcer\) [AnnounceCompositionCancelled](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L205>)
+### func \(\*Announcer\) [AnnounceCompositionCancelled](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L205>)
 
 ```go
 func (a *Announcer) AnnounceCompositionCancelled() string
@@ -3465,7 +3465,7 @@ func (a *Announcer) AnnounceCompositionCancelled() string
 AnnounceCompositionCancelled announces "composition cancelled".
 
 <a name="Announcer.AnnounceDeadKey"></a>
-### func \(\*Announcer\) [AnnounceDeadKey](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L172>)
+### func \(\*Announcer\) [AnnounceDeadKey](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L172>)
 
 ```go
 func (a *Announcer) AnnounceDeadKey(deadKey rune) string
@@ -3474,7 +3474,7 @@ func (a *Announcer) AnnounceDeadKey(deadKey rune) string
 AnnounceDeadKey announces the dead key name.
 
 <a name="Announcer.AnnounceDeadKeyResult"></a>
-### func \(\*Announcer\) [AnnounceDeadKeyResult](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L198>)
+### func \(\*Announcer\) [AnnounceDeadKeyResult](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L198>)
 
 ```go
 func (a *Announcer) AnnounceDeadKeyResult(ch rune) string
@@ -3483,7 +3483,7 @@ func (a *Announcer) AnnounceDeadKeyResult(ch rune) string
 AnnounceDeadKeyResult announces the composed character.
 
 <a name="Announcer.AnnounceDocumentBoundary"></a>
-### func \(\*Announcer\) [AnnounceDocumentBoundary](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L123>)
+### func \(\*Announcer\) [AnnounceDocumentBoundary](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L123>)
 
 ```go
 func (a *Announcer) AnnounceDocumentBoundary(b DocBoundary) string
@@ -3492,7 +3492,7 @@ func (a *Announcer) AnnounceDocumentBoundary(b DocBoundary) string
 AnnounceDocumentBoundary announces beginning/end of document.
 
 <a name="Announcer.AnnounceLineBoundary"></a>
-### func \(\*Announcer\) [AnnounceLineBoundary](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L96>)
+### func \(\*Announcer\) [AnnounceLineBoundary](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L96>)
 
 ```go
 func (a *Announcer) AnnounceLineBoundary(b LineBoundary) string
@@ -3501,7 +3501,7 @@ func (a *Announcer) AnnounceLineBoundary(b LineBoundary) string
 AnnounceLineBoundary announces "beginning/end of line".
 
 <a name="Announcer.AnnounceLineNumber"></a>
-### func \(\*Announcer\) [AnnounceLineNumber](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L109>)
+### func \(\*Announcer\) [AnnounceLineNumber](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L109>)
 
 ```go
 func (a *Announcer) AnnounceLineNumber(line int) string
@@ -3510,7 +3510,7 @@ func (a *Announcer) AnnounceLineNumber(line int) string
 AnnounceLineNumber announces "line N" on line change.
 
 <a name="Announcer.AnnounceSelection"></a>
-### func \(\*Announcer\) [AnnounceSelection](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L136>)
+### func \(\*Announcer\) [AnnounceSelection](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L136>)
 
 ```go
 func (a *Announcer) AnnounceSelection(selectedText string) string
@@ -3519,7 +3519,7 @@ func (a *Announcer) AnnounceSelection(selectedText string) string
 AnnounceSelection reads short text or counts long text.
 
 <a name="Announcer.AnnounceSelectionCleared"></a>
-### func \(\*Announcer\) [AnnounceSelectionCleared](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L162>)
+### func \(\*Announcer\) [AnnounceSelectionCleared](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L162>)
 
 ```go
 func (a *Announcer) AnnounceSelectionCleared() string
@@ -3528,7 +3528,7 @@ func (a *Announcer) AnnounceSelectionCleared() string
 AnnounceSelectionCleared announces "deselected".
 
 <a name="Announcer.AnnounceSelectionExtended"></a>
-### func \(\*Announcer\) [AnnounceSelectionExtended](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L152>)
+### func \(\*Announcer\) [AnnounceSelectionExtended](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L152>)
 
 ```go
 func (a *Announcer) AnnounceSelectionExtended(addedText string) string
@@ -3537,7 +3537,7 @@ func (a *Announcer) AnnounceSelectionExtended(addedText string) string
 AnnounceSelectionExtended announces "added: \<text\>".
 
 <a name="Announcer.AnnounceWordJump"></a>
-### func \(\*Announcer\) [AnnounceWordJump](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L86>)
+### func \(\*Announcer\) [AnnounceWordJump](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L86>)
 
 ```go
 func (a *Announcer) AnnounceWordJump(word string) string
@@ -3546,7 +3546,7 @@ func (a *Announcer) AnnounceWordJump(word string) string
 AnnounceWordJump announces "moved to: \<word\>".
 
 <a name="AnnouncerBackend"></a>
-## type [AnnouncerBackend](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/announcer.go#L19-L21>)
+## type [AnnouncerBackend](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/announcer.go#L19-L21>)
 
 AnnouncerBackend is the platform interface for posting announcements. Implementations live in build\-tagged files.
 
@@ -3557,7 +3557,7 @@ type AnnouncerBackend interface {
 ```
 
 <a name="Backend"></a>
-## type [Backend](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/manager.go#L4-L10>)
+## type [Backend](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/manager.go#L4-L10>)
 
 Backend is the platform interface for the accessibility tree.
 
@@ -3572,7 +3572,7 @@ type Backend interface {
 ```
 
 <a name="DocBoundary"></a>
-## type [DocBoundary](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/types.go#L38>)
+## type [DocBoundary](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/types.go#L38>)
 
 DocBoundary indicates cursor at document start or end.
 
@@ -3590,7 +3590,7 @@ const (
 ```
 
 <a name="LineBoundary"></a>
-## type [LineBoundary](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/types.go#L30>)
+## type [LineBoundary](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/types.go#L30>)
 
 LineBoundary indicates cursor at line start or end.
 
@@ -3608,7 +3608,7 @@ const (
 ```
 
 <a name="Manager"></a>
-## type [Manager](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/manager.go#L13-L18>)
+## type [Manager](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/manager.go#L13-L18>)
 
 Manager manages the accessibility tree lifecycle.
 
@@ -3619,7 +3619,7 @@ type Manager struct {
 ```
 
 <a name="NewManager"></a>
-### func [NewManager](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/manager.go#L21>)
+### func [NewManager](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/manager.go#L21>)
 
 ```go
 func NewManager() *Manager
@@ -3628,7 +3628,7 @@ func NewManager() *Manager
 NewManager creates a manager with platform\-specific backend.
 
 <a name="Manager.AddTextNode"></a>
-### func \(\*Manager\) [AddTextNode](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/manager.go#L30>)
+### func \(\*Manager\) [AddTextNode](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/manager.go#L30>)
 
 ```go
 func (m *Manager) AddTextNode(text string, rect Rect)
@@ -3637,7 +3637,7 @@ func (m *Manager) AddTextNode(text string, rect Rect)
 AddTextNode adds a text node under the root.
 
 <a name="Manager.Commit"></a>
-### func \(\*Manager\) [Commit](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/manager.go#L89>)
+### func \(\*Manager\) [Commit](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/manager.go#L89>)
 
 ```go
 func (m *Manager) Commit()
@@ -3646,7 +3646,7 @@ func (m *Manager) Commit()
 Commit pushes accumulated updates then resets.
 
 <a name="Manager.CreateTextFieldNode"></a>
-### func \(\*Manager\) [CreateTextFieldNode](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/manager.go#L49>)
+### func \(\*Manager\) [CreateTextFieldNode](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/manager.go#L49>)
 
 ```go
 func (m *Manager) CreateTextFieldNode(rect Rect) int
@@ -3655,7 +3655,7 @@ func (m *Manager) CreateTextFieldNode(rect Rect) int
 CreateTextFieldNode creates an editable text field node.
 
 <a name="Manager.Flush"></a>
-### func \(\*Manager\) [Flush](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/manager.go#L84>)
+### func \(\*Manager\) [Flush](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/manager.go#L84>)
 
 ```go
 func (m *Manager) Flush()
@@ -3664,7 +3664,7 @@ func (m *Manager) Flush()
 Flush processes pending platform events.
 
 <a name="Manager.PostNotification"></a>
-### func \(\*Manager\) [PostNotification](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/manager.go#L79>)
+### func \(\*Manager\) [PostNotification](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/manager.go#L79>)
 
 ```go
 func (m *Manager) PostNotification(nodeID int, n Notification)
@@ -3673,7 +3673,7 @@ func (m *Manager) PostNotification(nodeID int, n Notification)
 PostNotification posts an accessibility notification.
 
 <a name="Manager.SetFocus"></a>
-### func \(\*Manager\) [SetFocus](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/manager.go#L74>)
+### func \(\*Manager\) [SetFocus](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/manager.go#L74>)
 
 ```go
 func (m *Manager) SetFocus(nodeID int)
@@ -3682,7 +3682,7 @@ func (m *Manager) SetFocus(nodeID int)
 SetFocus notifies the backend of focus change.
 
 <a name="Manager.UpdateTextField"></a>
-### func \(\*Manager\) [UpdateTextField](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/manager.go#L68-L69>)
+### func \(\*Manager\) [UpdateTextField](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/manager.go#L68-L69>)
 
 ```go
 func (m *Manager) UpdateTextField(nodeID int, value string, sel Range, cursorLine int)
@@ -3691,7 +3691,7 @@ func (m *Manager) UpdateTextField(nodeID int, value string, sel Range, cursorLin
 UpdateTextField updates text field attributes via backend.
 
 <a name="Node"></a>
-## type [Node](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/types.go#L57-L67>)
+## type [Node](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/types.go#L57-L67>)
 
 Node represents a single node in the accessibility tree.
 
@@ -3710,7 +3710,7 @@ type Node struct {
 ```
 
 <a name="Notification"></a>
-## type [Notification](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/types.go#L22>)
+## type [Notification](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/types.go#L22>)
 
 Notification identifies accessibility state changes.
 
@@ -3728,7 +3728,7 @@ const (
 ```
 
 <a name="Range"></a>
-## type [Range](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/types.go#L51-L54>)
+## type [Range](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/types.go#L51-L54>)
 
 Range represents a text range \(location \+ length\).
 
@@ -3740,7 +3740,7 @@ type Range struct {
 ```
 
 <a name="Rect"></a>
-## type [Rect](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/types.go#L46-L48>)
+## type [Rect](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/types.go#L46-L48>)
 
 Rect is a bounding rectangle in window coordinates.
 
@@ -3751,7 +3751,7 @@ type Rect struct {
 ```
 
 <a name="Role"></a>
-## type [Role](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/types.go#L7>)
+## type [Role](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/types.go#L7>)
 
 Role defines the semantic role of an accessibility node.
 
@@ -3776,7 +3776,7 @@ const (
 ```
 
 <a name="TextFieldNode"></a>
-## type [TextFieldNode](<https://github.com/mike-ward/go-glyph/blob/main/accessibility/types.go#L70-L76>)
+## type [TextFieldNode](<https://github.com/go-gui-org/go-glyph/blob/main/accessibility/types.go#L70-L76>)
 
 TextFieldNode extends Node for editable text fields.
 
@@ -3793,7 +3793,7 @@ type TextFieldNode struct {
 # ime
 
 ```go
-import "github.com/mike-ward/go-glyph/ime"
+import "github.com/go-gui-org/go-glyph/ime"
 ```
 
 Package ime provides platform\-specific IME \(Input Method Editor\) bridges. The Bridge interface abstracts IME interaction across macOS \(NSTextInputClient\), Linux \(IBus\), and stub platforms.
@@ -3806,7 +3806,7 @@ Package ime provides platform\-specific IME \(Input Method Editor\) bridges. The
 
 
 <a name="Bridge"></a>
-## type [Bridge](<https://github.com/mike-ward/go-glyph/blob/main/ime/bridge.go#L7-L20>)
+## type [Bridge](<https://github.com/go-gui-org/go-glyph/blob/main/ime/bridge.go#L7-L20>)
 
 Bridge is the platform interface for IME input.
 
@@ -3828,7 +3828,7 @@ type Bridge interface {
 ```
 
 <a name="NewBridge"></a>
-### func [NewBridge](<https://github.com/mike-ward/go-glyph/blob/main/ime/bridge.go#L36>)
+### func [NewBridge](<https://github.com/go-gui-org/go-glyph/blob/main/ime/bridge.go#L36>)
 
 ```go
 func NewBridge(cb Callbacks) Bridge
@@ -3837,7 +3837,7 @@ func NewBridge(cb Callbacks) Bridge
 NewBridge creates a platform\-specific IME bridge. The callbacks receive IME events from the platform.
 
 <a name="Callbacks"></a>
-## type [Callbacks](<https://github.com/mike-ward/go-glyph/blob/main/ime/bridge.go#L23-L32>)
+## type [Callbacks](<https://github.com/go-gui-org/go-glyph/blob/main/ime/bridge.go#L23-L32>)
 
 Callbacks receives IME events from the platform bridge.
 
@@ -3857,7 +3857,7 @@ type Callbacks struct {
 # ebitengine
 
 ```go
-import "github.com/mike-ward/go-glyph/backend/ebitengine"
+import "github.com/go-gui-org/go-glyph/backend/ebitengine"
 ```
 
 Package ebitengine provides an Ebitengine DrawBackend for the glyph text rendering library.
@@ -3877,7 +3877,7 @@ Package ebitengine provides an Ebitengine DrawBackend for the glyph text renderi
 
 
 <a name="Backend"></a>
-## type [Backend](<https://github.com/mike-ward/go-glyph/blob/main/backend/ebitengine/backend.go#L14-L21>)
+## type [Backend](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L14-L21>)
 
 Backend implements glyph.DrawBackend using Ebitengine.
 
@@ -3888,7 +3888,7 @@ type Backend struct {
 ```
 
 <a name="New"></a>
-### func [New](<https://github.com/mike-ward/go-glyph/blob/main/backend/ebitengine/backend.go#L26>)
+### func [New](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L26>)
 
 ```go
 func New(target *ebiten.Image, dpiScale float32) *Backend
@@ -3897,7 +3897,7 @@ func New(target *ebiten.Image, dpiScale float32) *Backend
 New creates an Ebitengine backend. target is the destination image \(usually the screen from Game.Draw\). dpiScale is the display scale factor \(e.g. ebiten.Monitor\(\).DeviceScaleFactor\(\)\).
 
 <a name="Backend.DPIScale"></a>
-### func \(\*Backend\) [DPIScale](<https://github.com/mike-ward/go-glyph/blob/main/backend/ebitengine/backend.go#L201>)
+### func \(\*Backend\) [DPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L201>)
 
 ```go
 func (b *Backend) DPIScale() float32
@@ -3906,7 +3906,7 @@ func (b *Backend) DPIScale() float32
 DPIScale returns the display DPI scale factor.
 
 <a name="Backend.DeleteTexture"></a>
-### func \(\*Backend\) [DeleteTexture](<https://github.com/mike-ward/go-glyph/blob/main/backend/ebitengine/backend.go#L67>)
+### func \(\*Backend\) [DeleteTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L67>)
 
 ```go
 func (b *Backend) DeleteTexture(id glyph.TextureID)
@@ -3915,7 +3915,7 @@ func (b *Backend) DeleteTexture(id glyph.TextureID)
 DeleteTexture releases a texture.
 
 <a name="Backend.DrawFilledRect"></a>
-### func \(\*Backend\) [DrawFilledRect](<https://github.com/mike-ward/go-glyph/blob/main/backend/ebitengine/backend.go#L115>)
+### func \(\*Backend\) [DrawFilledRect](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L115>)
 
 ```go
 func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color)
@@ -3924,7 +3924,7 @@ func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color)
 DrawFilledRect draws a filled rectangle.
 
 <a name="Backend.DrawTexturedQuad"></a>
-### func \(\*Backend\) [DrawTexturedQuad](<https://github.com/mike-ward/go-glyph/blob/main/backend/ebitengine/backend.go#L77>)
+### func \(\*Backend\) [DrawTexturedQuad](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L77>)
 
 ```go
 func (b *Backend) DrawTexturedQuad(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color)
@@ -3933,7 +3933,7 @@ func (b *Backend) DrawTexturedQuad(id glyph.TextureID, src, dst glyph.Rect, c gl
 DrawTexturedQuad draws a textured rectangle with color tinting.
 
 <a name="Backend.DrawTexturedQuadTransformed"></a>
-### func \(\*Backend\) [DrawTexturedQuadTransformed](<https://github.com/mike-ward/go-glyph/blob/main/backend/ebitengine/backend.go#L148-L149>)
+### func \(\*Backend\) [DrawTexturedQuadTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L148-L149>)
 
 ```go
 func (b *Backend) DrawTexturedQuadTransformed(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color, t glyph.AffineTransform)
@@ -3942,7 +3942,7 @@ func (b *Backend) DrawTexturedQuadTransformed(id glyph.TextureID, src, dst glyph
 DrawTexturedQuadTransformed draws with an affine transform applied.
 
 <a name="Backend.NewTexture"></a>
-### func \(\*Backend\) [NewTexture](<https://github.com/mike-ward/go-glyph/blob/main/backend/ebitengine/backend.go#L45>)
+### func \(\*Backend\) [NewTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L45>)
 
 ```go
 func (b *Backend) NewTexture(width, height int) glyph.TextureID
@@ -3951,7 +3951,7 @@ func (b *Backend) NewTexture(width, height int) glyph.TextureID
 NewTexture allocates a new RGBA texture.
 
 <a name="Backend.SetTarget"></a>
-### func \(\*Backend\) [SetTarget](<https://github.com/mike-ward/go-glyph/blob/main/backend/ebitengine/backend.go#L40>)
+### func \(\*Backend\) [SetTarget](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L40>)
 
 ```go
 func (b *Backend) SetTarget(target *ebiten.Image)
@@ -3960,7 +3960,7 @@ func (b *Backend) SetTarget(target *ebiten.Image)
 SetTarget updates the draw target \(call each frame with screen\).
 
 <a name="Backend.UpdateTexture"></a>
-### func \(\*Backend\) [UpdateTexture](<https://github.com/mike-ward/go-glyph/blob/main/backend/ebitengine/backend.go#L56>)
+### func \(\*Backend\) [UpdateTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L56>)
 
 ```go
 func (b *Backend) UpdateTexture(id glyph.TextureID, data []byte)
@@ -3971,7 +3971,7 @@ UpdateTexture uploads RGBA data to an existing texture.
 # gpu
 
 ```go
-import "github.com/mike-ward/go-glyph/backend/gpu"
+import "github.com/go-gui-org/go-glyph/backend/gpu"
 ```
 
 Package gpu provides a raw Metal DrawBackend for the glyph text rendering library. SDL2 is used only for window/events; rendering bypasses SDL2's renderer entirely.
@@ -4011,7 +4011,7 @@ b.EndFrame(0, 0, 0, 1, logW, logH)
 
 
 <a name="WindowDrawableSize"></a>
-## func [WindowDrawableSize](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/metal_darwin.go#L87>)
+## func [WindowDrawableSize](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/metal_darwin.go#L87>)
 
 ```go
 func WindowDrawableSize(sdlWindow unsafe.Pointer) (int, int)
@@ -4020,7 +4020,7 @@ func WindowDrawableSize(sdlWindow unsafe.Pointer) (int, int)
 WindowDrawableSize returns the physical drawable size for an SDL2 Metal window. sdlWindow is unsafe.Pointer to SDL\_Window.
 
 <a name="WindowFlag"></a>
-## func [WindowFlag](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/metal_darwin.go#L81>)
+## func [WindowFlag](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/metal_darwin.go#L81>)
 
 ```go
 func WindowFlag() uint32
@@ -4029,7 +4029,7 @@ func WindowFlag() uint32
 WindowFlag returns SDL\_WINDOW\_METAL.
 
 <a name="Backend"></a>
-## type [Backend](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L11-L17>)
+## type [Backend](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L11-L17>)
 
 Backend implements glyph.DrawBackend using a GPU backend via CGo. SDL2 provides the window; rendering bypasses SDL2's renderer.
 
@@ -4040,7 +4040,7 @@ type Backend struct {
 ```
 
 <a name="New"></a>
-### func [New](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L21>)
+### func [New](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L21>)
 
 ```go
 func New(sdlWindow unsafe.Pointer, dpiScale float32) (*Backend, error)
@@ -4049,7 +4049,7 @@ func New(sdlWindow unsafe.Pointer, dpiScale float32) (*Backend, error)
 New creates a GPU backend. sdlWindow is an unsafe.Pointer to the SDL\_Window. dpiScale is physical pixels / logical pixels.
 
 <a name="Backend.BeginFrame"></a>
-### func \(\*Backend\) [BeginFrame](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L134>)
+### func \(\*Backend\) [BeginFrame](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L134>)
 
 ```go
 func (b *Backend) BeginFrame()
@@ -4058,7 +4058,7 @@ func (b *Backend) BeginFrame()
 BeginFrame resets vertex/command buffers for a new frame.
 
 <a name="Backend.DPIScale"></a>
-### func \(\*Backend\) [DPIScale](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L131>)
+### func \(\*Backend\) [DPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L131>)
 
 ```go
 func (b *Backend) DPIScale() float32
@@ -4067,7 +4067,7 @@ func (b *Backend) DPIScale() float32
 DPIScale returns the display DPI scale factor.
 
 <a name="Backend.DeleteTexture"></a>
-### func \(\*Backend\) [DeleteTexture](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L53>)
+### func \(\*Backend\) [DeleteTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L53>)
 
 ```go
 func (b *Backend) DeleteTexture(id glyph.TextureID)
@@ -4076,7 +4076,7 @@ func (b *Backend) DeleteTexture(id glyph.TextureID)
 DeleteTexture releases a texture.
 
 <a name="Backend.Destroy"></a>
-### func \(\*Backend\) [Destroy](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L152>)
+### func \(\*Backend\) [Destroy](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L152>)
 
 ```go
 func (b *Backend) Destroy()
@@ -4085,7 +4085,7 @@ func (b *Backend) Destroy()
 Destroy releases all GPU resources.
 
 <a name="Backend.DrawFilledRect"></a>
-### func \(\*Backend\) [DrawFilledRect](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L85>)
+### func \(\*Backend\) [DrawFilledRect](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L85>)
 
 ```go
 func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color)
@@ -4094,7 +4094,7 @@ func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color)
 DrawFilledRect draws a filled rectangle \(textureID=0 → white tex\).
 
 <a name="Backend.DrawTexturedQuad"></a>
-### func \(\*Backend\) [DrawTexturedQuad](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L60-L62>)
+### func \(\*Backend\) [DrawTexturedQuad](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L60-L62>)
 
 ```go
 func (b *Backend) DrawTexturedQuad(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color)
@@ -4103,7 +4103,7 @@ func (b *Backend) DrawTexturedQuad(id glyph.TextureID, src, dst glyph.Rect, c gl
 DrawTexturedQuad draws a textured rectangle with color tinting.
 
 <a name="Backend.DrawTexturedQuadTransformed"></a>
-### func \(\*Backend\) [DrawTexturedQuadTransformed](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L102-L105>)
+### func \(\*Backend\) [DrawTexturedQuadTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L102-L105>)
 
 ```go
 func (b *Backend) DrawTexturedQuadTransformed(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color, t glyph.AffineTransform)
@@ -4112,7 +4112,7 @@ func (b *Backend) DrawTexturedQuadTransformed(id glyph.TextureID, src, dst glyph
 DrawTexturedQuadTransformed draws a textured quad with an affine transform applied CPU\-side.
 
 <a name="Backend.DrawableSize"></a>
-### func \(\*Backend\) [DrawableSize](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L147>)
+### func \(\*Backend\) [DrawableSize](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L147>)
 
 ```go
 func (b *Backend) DrawableSize() (int, int)
@@ -4121,7 +4121,7 @@ func (b *Backend) DrawableSize() (int, int)
 DrawableSize returns the physical drawable size in pixels.
 
 <a name="Backend.EndFrame"></a>
-### func \(\*Backend\) [EndFrame](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L139-L140>)
+### func \(\*Backend\) [EndFrame](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L139-L140>)
 
 ```go
 func (b *Backend) EndFrame(clearR, clearG, clearB, clearA float32, logicalW, logicalH int) error
@@ -4130,7 +4130,7 @@ func (b *Backend) EndFrame(clearR, clearG, clearB, clearA float32, logicalW, log
 EndFrame flushes batched draw commands to the GPU and presents.
 
 <a name="Backend.NewTexture"></a>
-### func \(\*Backend\) [NewTexture](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L38>)
+### func \(\*Backend\) [NewTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L38>)
 
 ```go
 func (b *Backend) NewTexture(width, height int) glyph.TextureID
@@ -4139,7 +4139,7 @@ func (b *Backend) NewTexture(width, height int) glyph.TextureID
 NewTexture allocates a new RGBA texture.
 
 <a name="Backend.UpdateTexture"></a>
-### func \(\*Backend\) [UpdateTexture](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/backend.go#L46>)
+### func \(\*Backend\) [UpdateTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L46>)
 
 ```go
 func (b *Backend) UpdateTexture(id glyph.TextureID, data []byte)
@@ -4148,7 +4148,7 @@ func (b *Backend) UpdateTexture(id glyph.TextureID, data []byte)
 UpdateTexture uploads RGBA data to an existing texture.
 
 <a name="Vertex"></a>
-## type [Vertex](<https://github.com/mike-ward/go-glyph/blob/main/backend/gpu/batch.go#L7-L11>)
+## type [Vertex](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/batch.go#L7-L11>)
 
 Vertex matches the MSL vertex layout \(20 bytes\).
 
@@ -4163,7 +4163,7 @@ type Vertex struct {
 # sdl2
 
 ```go
-import "github.com/mike-ward/go-glyph/backend/sdl2"
+import "github.com/go-gui-org/go-glyph/backend/sdl2"
 ```
 
 Package sdl2 provides an SDL2 DrawBackend for the glyph text rendering library.
@@ -4184,7 +4184,7 @@ Package sdl2 provides an SDL2 DrawBackend for the glyph text rendering library.
 
 
 <a name="SyncMetalLayer"></a>
-## func [SyncMetalLayer](<https://github.com/mike-ward/go-glyph/blob/main/backend/sdl2/metal_darwin.go#L25>)
+## func [SyncMetalLayer](<https://github.com/go-gui-org/go-glyph/blob/main/backend/sdl2/metal_darwin.go#L25>)
 
 ```go
 func SyncMetalLayer(renderer *sdl.Renderer)
@@ -4193,7 +4193,7 @@ func SyncMetalLayer(renderer *sdl.Renderer)
 SyncMetalLayer sets presentsWithTransaction on the renderer's CAMetalLayer so that frame presentation is synchronized with Core Animation transactions. This eliminates the 1\-frame compositor stretch during live window resize on macOS.
 
 <a name="Backend"></a>
-## type [Backend](<https://github.com/mike-ward/go-glyph/blob/main/backend/sdl2/backend.go#L14-L21>)
+## type [Backend](<https://github.com/go-gui-org/go-glyph/blob/main/backend/sdl2/backend.go#L14-L21>)
 
 Backend implements glyph.DrawBackend using SDL2.
 
@@ -4204,7 +4204,7 @@ type Backend struct {
 ```
 
 <a name="New"></a>
-### func [New](<https://github.com/mike-ward/go-glyph/blob/main/backend/sdl2/backend.go#L26>)
+### func [New](<https://github.com/go-gui-org/go-glyph/blob/main/backend/sdl2/backend.go#L26>)
 
 ```go
 func New(renderer *sdl.Renderer, dpiScale float32) *Backend
@@ -4213,7 +4213,7 @@ func New(renderer *sdl.Renderer, dpiScale float32) *Backend
 New creates an SDL2 backend. renderer is the SDL renderer for the target window. dpiScale is the display scale factor \(physical pixels / logical pixels\).
 
 <a name="Backend.DPIScale"></a>
-### func \(\*Backend\) [DPIScale](<https://github.com/mike-ward/go-glyph/blob/main/backend/sdl2/backend.go#L174>)
+### func \(\*Backend\) [DPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/sdl2/backend.go#L174>)
 
 ```go
 func (b *Backend) DPIScale() float32
@@ -4222,7 +4222,7 @@ func (b *Backend) DPIScale() float32
 DPIScale returns the display DPI scale factor.
 
 <a name="Backend.DeleteTexture"></a>
-### func \(\*Backend\) [DeleteTexture](<https://github.com/mike-ward/go-glyph/blob/main/backend/sdl2/backend.go#L71>)
+### func \(\*Backend\) [DeleteTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/sdl2/backend.go#L71>)
 
 ```go
 func (b *Backend) DeleteTexture(id glyph.TextureID)
@@ -4231,7 +4231,7 @@ func (b *Backend) DeleteTexture(id glyph.TextureID)
 DeleteTexture releases a texture.
 
 <a name="Backend.Destroy"></a>
-### func \(\*Backend\) [Destroy](<https://github.com/mike-ward/go-glyph/blob/main/backend/sdl2/backend.go#L178>)
+### func \(\*Backend\) [Destroy](<https://github.com/go-gui-org/go-glyph/blob/main/backend/sdl2/backend.go#L178>)
 
 ```go
 func (b *Backend) Destroy()
@@ -4240,7 +4240,7 @@ func (b *Backend) Destroy()
 Destroy releases all textures held by the backend. Does not destroy the SDL renderer \(caller\-owned\).
 
 <a name="Backend.DrawFilledRect"></a>
-### func \(\*Backend\) [DrawFilledRect](<https://github.com/mike-ward/go-glyph/blob/main/backend/sdl2/backend.go#L103>)
+### func \(\*Backend\) [DrawFilledRect](<https://github.com/go-gui-org/go-glyph/blob/main/backend/sdl2/backend.go#L103>)
 
 ```go
 func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color)
@@ -4249,7 +4249,7 @@ func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color)
 DrawFilledRect draws a filled rectangle.
 
 <a name="Backend.DrawTexturedQuad"></a>
-### func \(\*Backend\) [DrawTexturedQuad](<https://github.com/mike-ward/go-glyph/blob/main/backend/sdl2/backend.go#L81-L83>)
+### func \(\*Backend\) [DrawTexturedQuad](<https://github.com/go-gui-org/go-glyph/blob/main/backend/sdl2/backend.go#L81-L83>)
 
 ```go
 func (b *Backend) DrawTexturedQuad(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color)
@@ -4258,7 +4258,7 @@ func (b *Backend) DrawTexturedQuad(id glyph.TextureID, src, dst glyph.Rect, c gl
 DrawTexturedQuad draws a textured rectangle with color tinting.
 
 <a name="Backend.DrawTexturedQuadTransformed"></a>
-### func \(\*Backend\) [DrawTexturedQuadTransformed](<https://github.com/mike-ward/go-glyph/blob/main/backend/sdl2/backend.go#L122-L125>)
+### func \(\*Backend\) [DrawTexturedQuadTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/backend/sdl2/backend.go#L122-L125>)
 
 ```go
 func (b *Backend) DrawTexturedQuadTransformed(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color, t glyph.AffineTransform)
@@ -4267,7 +4267,7 @@ func (b *Backend) DrawTexturedQuadTransformed(id glyph.TextureID, src, dst glyph
 DrawTexturedQuadTransformed draws with an affine transform.
 
 <a name="Backend.NewTexture"></a>
-### func \(\*Backend\) [NewTexture](<https://github.com/mike-ward/go-glyph/blob/main/backend/sdl2/backend.go#L41>)
+### func \(\*Backend\) [NewTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/sdl2/backend.go#L41>)
 
 ```go
 func (b *Backend) NewTexture(width, height int) glyph.TextureID
@@ -4276,7 +4276,7 @@ func (b *Backend) NewTexture(width, height int) glyph.TextureID
 NewTexture allocates a new RGBA texture.
 
 <a name="Backend.UpdateTexture"></a>
-### func \(\*Backend\) [UpdateTexture](<https://github.com/mike-ward/go-glyph/blob/main/backend/sdl2/backend.go#L61>)
+### func \(\*Backend\) [UpdateTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/sdl2/backend.go#L61>)
 
 ```go
 func (b *Backend) UpdateTexture(id glyph.TextureID, data []byte)
@@ -4287,7 +4287,7 @@ UpdateTexture uploads RGBA data to an existing texture.
 # demo
 
 ```go
-import "github.com/mike-ward/go-glyph/examples/demo"
+import "github.com/go-gui-org/go-glyph/examples/demo"
 ```
 
 Command demo renders sample text using the glyph library with an Ebitengine window.
@@ -4301,7 +4301,7 @@ Command demo renders sample text using the glyph library with an Ebitengine wind
 
 
 <a name="Game"></a>
-## type [Game](<https://github.com/mike-ward/go-glyph/blob/main/examples/demo/main.go#L22-L27>)
+## type [Game](<https://github.com/go-gui-org/go-glyph/blob/main/examples/demo/main.go#L22-L27>)
 
 Game implements ebiten.Game.
 
@@ -4312,7 +4312,7 @@ type Game struct {
 ```
 
 <a name="Game.Draw"></a>
-### func \(\*Game\) [Draw](<https://github.com/mike-ward/go-glyph/blob/main/examples/demo/main.go#L34>)
+### func \(\*Game\) [Draw](<https://github.com/go-gui-org/go-glyph/blob/main/examples/demo/main.go#L34>)
 
 ```go
 func (g *Game) Draw(screen *ebiten.Image)
@@ -4321,7 +4321,7 @@ func (g *Game) Draw(screen *ebiten.Image)
 
 
 <a name="Game.Layout"></a>
-### func \(\*Game\) [Layout](<https://github.com/mike-ward/go-glyph/blob/main/examples/demo/main.go#L149>)
+### func \(\*Game\) [Layout](<https://github.com/go-gui-org/go-glyph/blob/main/examples/demo/main.go#L149>)
 
 ```go
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int)
@@ -4330,7 +4330,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int)
 
 
 <a name="Game.Update"></a>
-### func \(\*Game\) [Update](<https://github.com/mike-ward/go-glyph/blob/main/examples/demo/main.go#L29>)
+### func \(\*Game\) [Update](<https://github.com/go-gui-org/go-glyph/blob/main/examples/demo/main.go#L29>)
 
 ```go
 func (g *Game) Update() error
@@ -4341,7 +4341,7 @@ func (g *Game) Update() error
 # demo\_gpu
 
 ```go
-import "github.com/mike-ward/go-glyph/examples/demo_gpu"
+import "github.com/go-gui-org/go-glyph/examples/demo_gpu"
 ```
 
 Command demo\_gpu renders sample text using the glyph library with an SDL2 window and raw Metal backend.
@@ -4353,7 +4353,7 @@ Command demo\_gpu renders sample text using the glyph library with an SDL2 windo
 # demo\_sdl2
 
 ```go
-import "github.com/mike-ward/go-glyph/examples/demo_sdl2"
+import "github.com/go-gui-org/go-glyph/examples/demo_sdl2"
 ```
 
 Command demo\_sdl2 renders sample text using the glyph library with an SDL2 window.
@@ -4365,7 +4365,7 @@ Command demo\_sdl2 renders sample text using the glyph library with an SDL2 wind
 # showcase\_gpu
 
 ```go
-import "github.com/mike-ward/go-glyph/examples/showcase_gpu"
+import "github.com/go-gui-org/go-glyph/examples/showcase_gpu"
 ```
 
 Command showcase\_gpu is a comprehensive feature gallery for the glyph library using an SDL2 window with raw Metal backend. Scroll with mouse wheel or Page Up/Down, Home/End keys.

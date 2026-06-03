@@ -8,8 +8,8 @@ import (
 	"math"
 	"runtime"
 
-	"github.com/mike-ward/go-glyph"
-	glyphsdl "github.com/mike-ward/go-glyph/backend/sdl2"
+	"github.com/go-gui-org/go-glyph"
+	glyphsdl "github.com/go-gui-org/go-glyph/backend/sdl2"
 
 	"github.com/veandco/go-sdl2/sdl"
 )
