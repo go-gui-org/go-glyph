@@ -17,10 +17,10 @@ const maxAllocationSize = 1024 * 1024 * 1024
 
 // Bitmap holds RGBA pixel data for a rasterized glyph.
 type Bitmap struct {
+	Data     []byte
 	Width    int
 	Height   int
 	Channels int // Always 4 (RGBA).
-	Data     []byte
 }
 
 // checkAllocationSize validates width*height*channels doesn't overflow

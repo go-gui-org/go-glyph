@@ -4,25 +4,25 @@ import "time"
 
 // UndoOperation stores inverse operation data for undo/redo.
 type UndoOperation struct {
+	DeletedText  string
+	InsertedText string
 	OpType       OperationType
 	CursorBefore int
 	AnchorBefore int
 	RangeStart   int
 	RangeEnd     int
-	DeletedText  string
-	InsertedText string
 	CursorAfter  int
 	AnchorAfter  int
 }
 
 // UndoManager tracks undo/redo stacks with coalescing.
 type UndoManager struct {
+	coalescableOp     *UndoOperation
 	undoStack         []UndoOperation
 	redoStack         []UndoOperation
 	maxHistory        int
 	lastMutationTime  int64 // Unix millis.
 	coalesceTimeoutMs int64
-	coalescableOp     *UndoOperation
 }
 
 // UndoResult holds the result of an undo/redo operation.

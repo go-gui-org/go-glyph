@@ -3,18 +3,18 @@ package glyph
 // MutationResult contains the result of applying a text mutation.
 type MutationResult struct {
 	NewText     string
-	CursorPos   int
 	DeletedText string
+	CursorPos   int
 	RangeStart  int
 	RangeEnd    int
 }
 
 // TextChange captures mutation info for undo support and events.
 type TextChange struct {
-	RangeStart int
-	RangeEnd   int
 	NewText    string
 	OldText    string
+	RangeStart int
+	RangeEnd   int
 }
 
 // ToChange converts a MutationResult to a TextChange.

@@ -10,9 +10,9 @@ import (
 // SDL2 provides the window; rendering bypasses SDL2's renderer.
 type Backend struct {
 	gpu      *gpuCtx
-	batch    batch
 	widths   map[glyph.TextureID]int
 	heights  map[glyph.TextureID]int
+	batch    batch
 	dpiScale float32
 }
 

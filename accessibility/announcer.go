@@ -8,10 +8,10 @@ import (
 
 // Announcer provides screen reader announcements with debounce.
 type Announcer struct {
+	backend              AnnouncerBackend
 	lastAnnouncementTime int64 // Unix millis.
 	debounceMs           int64
 	lastLine             int
-	backend              AnnouncerBackend
 }
 
 // AnnouncerBackend is the platform interface for posting

@@ -55,12 +55,13 @@ type Range struct {
 
 // Node represents a single node in the accessibility tree.
 type Node struct {
-	ID       int
-	Role     Role
-	Rect     Rect
 	Text     string
 	Children []int
+	ID       int
+	Role     Role
 	Parent   int // -1 if root.
+
+	Rect Rect
 
 	IsFocused  bool
 	IsSelected bool
@@ -68,8 +69,8 @@ type Node struct {
 
 // TextFieldNode extends Node for editable text fields.
 type TextFieldNode struct {
-	Node          Node
 	Value         string
+	Node          Node
 	SelectedRange Range
 	CursorLine    int
 	NumCharacters int

@@ -14,15 +14,15 @@ const atlasGlyphPadding = 1
 
 // AtlasPage is a single texture page in a multi-page glyph atlas.
 type AtlasPage struct {
+	Shelves      []Shelf
+	StagingFront []byte // GPU upload source.
+	StagingBack  []byte // CPU rasterization target.
 	TextureID    TextureID
 	Width        int
 	Height       int
-	Shelves      []Shelf
-	Dirty        bool
 	Age          uint64 // Frame counter when last used.
 	UsedPixels   int64
-	StagingFront []byte // GPU upload source.
-	StagingBack  []byte // CPU rasterization target.
+	Dirty        bool
 }
 
 // Shelf is a horizontal strip within an atlas page.
@@ -39,11 +39,11 @@ type Shelf struct {
 type GlyphAtlas struct {
 	Backend           DrawBackend
 	Pages             []AtlasPage
+	Garbage           []TextureID // Textures pending deletion.
 	MaxPages          int
 	CurrentPage       int
 	FrameCounter      uint64
 	MaxGlyphDimension int
-	Garbage           []TextureID // Textures pending deletion.
 	LastFrame         uint64
 }
 

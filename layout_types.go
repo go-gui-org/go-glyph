@@ -9,24 +9,25 @@ const PangoGlyphUnknownFlag = 0x10000000
 // Layout is the result of text shaping. It contains positioned glyph
 // runs, hit-test rectangles, line boundaries, and cursor attributes.
 type Layout struct {
+	CharRectByIndex map[int]int // byte index → CharRects index
+	LogAttrByIndex  map[int]int // byte index → LogAttrs index
 	Text            string
 	ClonedObjectIDs []string
 	Items           []Item
 	Glyphs          []Glyph
 	CharRects       []CharRect
-	CharRectByIndex map[int]int // byte index → CharRects index
 	Lines           []Line
 	LogAttrs        []LogAttr
-	LogAttrByIndex  map[int]int // byte index → LogAttrs index
-	Width           float32     // Logical width.
-	Height          float32     // Logical height.
-	VisualWidth     float32     // Ink width.
-	VisualHeight    float32     // Ink height.
 
 	// Pre-sorted cursor/word boundary caches, built once.
-	cursorPositions []int // Sorted valid cursor byte indices.
-	wordStarts      []int // Sorted word-start byte indices.
-	wordEnds        []int // Sorted word-end byte indices.
+	cursorPositions []int   // Sorted valid cursor byte indices.
+	wordStarts      []int   // Sorted word-start byte indices.
+	wordEnds        []int   // Sorted word-end byte indices.
+	Width           float32 // Logical width.
+	Height          float32 // Logical height.
+	VisualWidth     float32 // Ink width.
+	VisualHeight    float32 // Ink height.
+
 }
 
 // CursorPosition represents the geometry for rendering a text cursor.
@@ -60,10 +61,13 @@ type Line struct {
 
 // Item is a run of glyphs sharing the same font and attributes.
 type Item struct {
-	RunText  string
+	Style TextStyle
+
 	FTFace   unsafe.Pointer // *C.FT_FaceRec, set during layout.
+	RunText  string
 	ObjectID string
-	Style    TextStyle
+
+	CSSFont string // WASM only: CSS font string for glyph rasterization.
 
 	Width   float64
 	X       float64 // Run position relative to layout.
@@ -82,13 +86,12 @@ type Item struct {
 	StrikethroughOffset    float64
 	StrikethroughThickness float64
 
+	StrokeWidth float32
+
 	Color   Color
 	BgColor Color
 
-	StrokeWidth float32
 	StrokeColor Color
-
-	CSSFont string // WASM only: CSS font string for glyph rasterization.
 
 	HasUnderline     bool
 	HasStrikethrough bool

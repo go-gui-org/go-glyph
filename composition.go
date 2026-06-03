@@ -9,18 +9,18 @@ type Clause struct {
 
 // ClauseRects holds clause index, rects, and style for rendering.
 type ClauseRects struct {
-	ClauseIdx int
 	Rects     []Rect
+	ClauseIdx int
 	Style     ClauseStyle
 }
 
 // CompositionState tracks IME composition for preedit display.
 type CompositionState struct {
-	Phase          CompositionPhase
 	PreeditText    string
+	Clauses        []Clause
+	Phase          CompositionPhase
 	PreeditStart   int
 	CursorOffset   int
-	Clauses        []Clause
 	SelectedClause int
 }
 

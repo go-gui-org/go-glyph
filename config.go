@@ -3,40 +3,41 @@ package glyph
 // TextConfig holds configuration for text layout and rendering.
 type TextConfig struct {
 	Style        TextStyle
+	Gradient     *GradientConfig // nil = no gradient.
 	Block        BlockStyle
+	Orientation  TextOrientation
 	UseMarkup    bool
 	NoHitTesting bool
-	Orientation  TextOrientation
-	Gradient     *GradientConfig // nil = no gradient.
 }
 
 // TextStyle represents the visual style of a run of text.
 type TextStyle struct {
+	Features *FontFeatures
+	Object   *InlineObject
 	// FontName is a Pango font description string, e.g. "Sans Italic Light 15".
 	FontName string
 	// Typeface overrides weight/style in FontName when not TypefaceRegular.
 	Typeface Typeface
 	// Size overrides the size in FontName (points). 0 = use FontName.
-	Size  float32
-	Color Color
-	// BgColor is the background highlight color behind the text run.
-	BgColor Color
-
-	Underline     bool
-	Strikethrough bool
+	Size float32
 	// LetterSpacing is extra spacing between characters (points).
 	LetterSpacing float32
 
 	// StrokeWidth is outline width in points (0 = no stroke).
 	StrokeWidth float32
+	Color       Color
+	// BgColor is the background highlight color behind the text run.
+	BgColor Color
+
 	StrokeColor Color
 
-	Features *FontFeatures
-	Object   *InlineObject
+	Underline     bool
+	Strikethrough bool
 }
 
 // BlockStyle defines paragraph-level layout properties.
 type BlockStyle struct {
+	Tabs  []int
 	Align Alignment
 	Wrap  WrapMode
 	// Width is the wrapping width. -1 = no wrapping.
@@ -45,7 +46,6 @@ type BlockStyle struct {
 	Indent float32
 	// LineSpacing adds extra vertical space after each line except the last.
 	LineSpacing float32
-	Tabs        []int
 }
 
 // DefaultBlockStyle returns a BlockStyle with standard defaults.
@@ -85,8 +85,8 @@ type InlineObject struct {
 
 // StyleRun is a text segment with its own style.
 type StyleRun struct {
-	Text  string
 	Style TextStyle
+	Text  string
 }
 
 // RichText is a sequence of styled runs.
