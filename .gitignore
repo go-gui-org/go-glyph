@@ -45,6 +45,9 @@ vendor/
 deps/
 .build_android_deps/
 
+# Claude Code
+.claude/
+
 # IDE
 .idea/
 .vscode/
