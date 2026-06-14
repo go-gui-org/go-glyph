@@ -159,7 +159,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 
 				glyphColor := c
 				if hasGradient {
-					glyphColor = winGradientColor(gradient, cx, cy,
+					glyphColor = gradientColorForGlyph(gradient, cx, cy,
 						float32(item.Ascent),
 						gradXOff, gradYOff, gradW, gradH)
 				}
@@ -207,7 +207,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		runY := float32(item.Y)
 		decoColor := item.Color
 		if hasGradient {
-			decoColor = winGradientColor(gradient, runX, runY,
+			decoColor = gradientColorForGlyph(gradient, runX, runY,
 				float32(item.Ascent),
 				gradXOff, gradYOff, gradW, gradH)
 		}
@@ -293,28 +293,3 @@ func (r *Renderer) emitPlacedQuad(cg CachedGlyph, placement GlyphPlacement,
 	}
 }
 
-func winGradientColor(gradient *GradientConfig,
-	cx, cy, ascent float32,
-	gradXOff, gradYOff, gradW, gradH float32) Color {
-	if gradient == nil || len(gradient.Stops) == 0 {
-		return Color{0, 0, 0, 255}
-	}
-	var t float32
-	switch gradient.Direction {
-	case GradientHorizontal:
-		if gradW > 0 {
-			t = (cx - gradXOff) / gradW
-		}
-	case GradientVertical:
-		if gradH > 0 {
-			t = (cy - ascent - gradYOff) / gradH
-		}
-	}
-	if t < 0 {
-		t = 0
-	}
-	if t > 1 {
-		t = 1
-	}
-	return GradientColorAt(gradient.Stops, t)
-}

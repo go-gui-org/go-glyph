@@ -90,6 +90,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	y += 30
 	g.drawGradient(20, y, "Rainbow Gradient", "Sans 28")
 	y += 40
+	g.drawDiagonalGradient(20, y, "Diagonal Gradient", "Sans 28")
+	y += 40
 
 	// --- Underline / Strikethrough ---
 	g.drawSection(10, y, "Decorations")
@@ -210,6 +212,23 @@ func (g *Game) drawAligned(x, y float32, text, font string,
 func (g *Game) drawGradient(x, y float32, text, font string) {
 	grad := &glyph.GradientConfig{
 		Direction: glyph.GradientHorizontal,
+		Stops: []glyph.GradientStop{
+			{Color: gc(255, 0, 0, 255), Position: 0.0},
+			{Color: gc(255, 165, 0, 255), Position: 0.25},
+			{Color: gc(0, 128, 0, 255), Position: 0.5},
+			{Color: gc(0, 0, 255, 255), Position: 0.75},
+			{Color: gc(128, 0, 128, 255), Position: 1.0},
+		},
+	}
+	_ = g.ts.DrawText(x, y, text, glyph.TextConfig{
+		Style:    glyph.TextStyle{FontName: font, Color: gc(255, 255, 255, 255)},
+		Gradient: grad,
+	})
+}
+
+func (g *Game) drawDiagonalGradient(x, y float32, text, font string) {
+	grad := &glyph.GradientConfig{
+		Direction: glyph.GradientDiagonal,
 		Stops: []glyph.GradientStop{
 			{Color: gc(255, 0, 0, 255), Position: 0.0},
 			{Color: gc(255, 165, 0, 255), Position: 0.25},

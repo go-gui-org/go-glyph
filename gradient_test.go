@@ -134,6 +134,103 @@ func TestGradientColorAtLargeT(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// gradientColorForGlyph
+// ---------------------------------------------------------------------------
+
+func TestGradientForGlyphNil(t *testing.T) {
+	c := gradientColorForGlyph(nil, 50, 50, 20, 0, 0, 100, 100)
+	if c.R != 0 || c.G != 0 || c.B != 0 || c.A != 255 {
+		t.Errorf("nil gradient: %+v", c)
+	}
+}
+
+func TestGradientForGlyphHorizontal(t *testing.T) {
+	grad := &GradientConfig{
+		Direction: GradientHorizontal,
+		Stops: []GradientStop{
+			{Color: Color{0, 0, 0, 255}, Position: 0.0},
+			{Color: Color{255, 0, 0, 255}, Position: 1.0},
+		},
+	}
+	// Left edge → t=0 → black.
+	cl := gradientColorForGlyph(grad, 0, 0, 0, 0, 0, 100, 100)
+	if cl.R != 0 {
+		t.Errorf("left edge: R=%d, want 0", cl.R)
+	}
+	// Right edge → t=1 → red.
+	cr := gradientColorForGlyph(grad, 100, 0, 0, 0, 0, 100, 100)
+	if cr.R != 255 {
+		t.Errorf("right edge: R=%d, want 255", cr.R)
+	}
+	// Midpoint → t=0.5 → R=~127.
+	cm := gradientColorForGlyph(grad, 50, 0, 0, 0, 0, 100, 100)
+	if cm.R < 120 || cm.R > 135 {
+		t.Errorf("midpoint: R=%d, want ~127", cm.R)
+	}
+}
+
+func TestGradientForGlyphVertical(t *testing.T) {
+	grad := &GradientConfig{
+		Direction: GradientVertical,
+		Stops: []GradientStop{
+			{Color: Color{0, 0, 0, 255}, Position: 0.0},
+			{Color: Color{0, 255, 0, 255}, Position: 1.0},
+		},
+	}
+	ascent := float32(20)
+	// Top (cy = ascent) → t=0 → black.
+	ct := gradientColorForGlyph(grad, 0, 20, ascent, 0, 0, 100, 100)
+	if ct.G != 0 {
+		t.Errorf("top: G=%d, want 0", ct.G)
+	}
+	// Bottom (cy = ascent + gradH) → t=1 → green.
+	cb := gradientColorForGlyph(grad, 0, 120, ascent, 0, 0, 100, 100)
+	if cb.G != 255 {
+		t.Errorf("bottom: G=%d, want 255", cb.G)
+	}
+}
+
+func TestGradientForGlyphDiagonal(t *testing.T) {
+	grad := &GradientConfig{
+		Direction: GradientDiagonal,
+		Stops: []GradientStop{
+			{Color: Color{0, 0, 0, 255}, Position: 0.0},
+			{Color: Color{0, 0, 255, 255}, Position: 1.0},
+		},
+	}
+	ascent := float32(20)
+	// Top-left (cx=gradXOff, cy=ascent) → t≈0 → black.
+	tl := gradientColorForGlyph(grad, 0, 20, ascent, 0, 0, 100, 100)
+	if tl.B > 20 {
+		t.Errorf("top-left: B=%d, want ~0", tl.B)
+	}
+	// Bottom-right (cx=gradXOff+gradW, cy=ascent+gradH) → t≈1 → blue.
+	br := gradientColorForGlyph(grad, 100, 120, ascent, 0, 0, 100, 100)
+	if br.B < 230 {
+		t.Errorf("bottom-right: B=%d, want ~255", br.B)
+	}
+	// Center → t≈0.5.
+	cc := gradientColorForGlyph(grad, 50, 70, ascent, 0, 0, 100, 100)
+	if cc.B < 110 || cc.B > 145 {
+		t.Errorf("center: B=%d, want ~127", cc.B)
+	}
+}
+
+func TestGradientForGlyphDiagonalZeroExtent(t *testing.T) {
+	grad := &GradientConfig{
+		Direction: GradientDiagonal,
+		Stops: []GradientStop{
+			{Color: Color{100, 0, 0, 255}, Position: 0.0},
+		},
+	}
+	// Zero width and height → t stays 0 → returns first stop color.
+	c := gradientColorForGlyph(grad, 0, 0, 0, 0, 0, 0, 0)
+	if c.R != 100 {
+		t.Errorf("zero extent: R=%d, want 100", c.R)
+	}
+}
+
 func TestGradientColorAtCoincidentPositions(t *testing.T) {
 	stops := []GradientStop{
 		{Color: Color{255, 0, 0, 255}, Position: 0.5},

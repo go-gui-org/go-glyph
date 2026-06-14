@@ -33,6 +33,7 @@ type GradientDirection int
 const (
 	GradientHorizontal GradientDirection = iota // Left to right.
 	GradientVertical                            // Top to bottom.
+	GradientDiagonal                            // Top-left to bottom-right.
 )
 
 // Typeface specifies bold/italic style programmatically.

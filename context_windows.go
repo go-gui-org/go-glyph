@@ -179,3 +179,7 @@ func windowsFontDirs() []string {
 	}
 	return dirs
 }
+
+// parseSizeFromFontName is unused on Windows (GDI/DirectWrite parse font
+// sizes via LOGFONT), but required by layout_shared.go.
+func parseSizeFromFontName(name string) float32 { return 0 }

@@ -271,26 +271,6 @@ func transformLayoutPoint(transform AffineTransform,
 	return originX + tx, originY + ty
 }
 
-func gradientColorForGlyph(gradient *GradientConfig, cx, cy, ascent float32,
-	gradXOff, gradYOff, gradW, gradH float32) Color {
-	if gradient == nil || len(gradient.Stops) == 0 {
-		return Color{0, 0, 0, 255}
-	}
-	var t float32
-	switch gradient.Direction {
-	case GradientHorizontal:
-		if gradW > 0 {
-			t = (cx - gradXOff) / gradW
-		}
-	case GradientVertical:
-		if gradH > 0 {
-			t = (cy - ascent - gradYOff) / gradH
-		}
-	}
-	t = max(0, min(1, t))
-	return GradientColorAt(gradient.Stops, t)
-}
-
 var (
 	lastColor Color
 	lastCSS   string

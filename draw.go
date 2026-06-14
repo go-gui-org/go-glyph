@@ -364,24 +364,3 @@ func gradientStripCount(glyphH float32) int {
 }
 
 func clamp01(v float32) float32 { return max(0, min(1, v)) }
-
-// gradientColorForGlyph computes the gradient color at a glyph position.
-func gradientColorForGlyph(gradient *GradientConfig, cx, cy, ascent float32,
-	gradXOff, gradYOff, gradW, gradH float32) Color {
-	if gradient == nil || len(gradient.Stops) == 0 {
-		return Color{0, 0, 0, 255}
-	}
-	var t float32
-	switch gradient.Direction {
-	case GradientHorizontal:
-		if gradW > 0 {
-			t = (cx - gradXOff) / gradW
-		}
-	case GradientVertical:
-		if gradH > 0 {
-			t = (cy - ascent - gradYOff) / gradH
-		}
-	}
-	t = max(0, min(1, t))
-	return GradientColorAt(gradient.Stops, t)
-}

@@ -143,8 +143,11 @@ support and `isEmojiRune` is wired in `layout_windows.go`,
 Verify end-to-end rendering in an example and add a regression test
 beyond `dwrite_smoke_windows_test.go` (requires Windows).
 
-**SVG diagonal gradients.** Planned feature — not yet started.
-Requires glyph angle support in the rasterizer.
+**SVG diagonal gradients.** Landed: `GradientDiagonal` added to `enums.go`;
+`gradientColorForGlyph` de-duplicated from 5 platform files into
+`gradient.go` with diagonal interpolation (top-left to bottom-right).
+`parseSizeFromFontName` stub added to `context_windows.go` so
+`layout_shared.go` compiles on Windows. Tests in `gradient_test.go`.
 
 **Changelog:** Recorded unreleased fixes (glyph cache key hashing, Phase B
 tests, Phase C benchmarks, Phase D de-duplication, platform matrix,
