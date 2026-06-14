@@ -435,3 +435,9 @@ func TestRichTextLayout(t *testing.T) {
 		t.Errorf("width=%f, want > 0", l.Width)
 	}
 }
+
+func TestLayoutPangoEquivalence(t *testing.T) {
+	ctx := newTestContext(t)
+	defer ctx.Free()
+	runLayoutEquivCases(t, LayoutEquivCases(), ctx.LayoutText)
+}

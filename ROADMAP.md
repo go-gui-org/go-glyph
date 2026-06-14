@@ -137,6 +137,9 @@ support; verify end-to-end rendering in an example and add a regression
 test beyond `dwrite_smoke_windows_test.go`. Wire `isEmojiRune` in
 `gdi_windows.go` if still unused.
 
+**SVG diagonal gradients.** One remaining code TODO in
+  `gui/svg_cache.go` — blocked on glyph angle support.
+
 **Changelog:** Record unreleased fixes (glyph cache key hashing) in
 `CHANGELOG.md` before the next tag.
 

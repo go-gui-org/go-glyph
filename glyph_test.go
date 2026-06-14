@@ -5,6 +5,7 @@ package glyph
 import (
 	"math"
 	"testing"
+	"time"
 )
 
 // recordingBackend extends mockBackend with draw call recording.
@@ -624,5 +625,98 @@ func TestTextSystemDecorations(t *testing.T) {
 
 	if len(backend.filledRects) == 0 {
 		t.Error("expected filled rect for underline decoration")
+	}
+}
+
+// --- Layout cache TTL and eviction tests ---
+
+func TestPruneCache_AgeEviction(t *testing.T) {
+	backend := newRecordingBackend()
+	ts, err := NewTextSystem(backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Free()
+
+	// Insert entries with old timestamps.
+	now := time.Now().UnixMilli()
+	ts.evictionAge = 100 // 100ms TTL for test.
+
+	ts.cache[1] = &cachedLayout{lastAccess: now - 200} // Old — should evict.
+	ts.cache[2] = &cachedLayout{lastAccess: now - 50}  // Recent — survives.
+	ts.cache[3] = &cachedLayout{lastAccess: now}       // Fresh — survives.
+
+	ts.pruneCache()
+
+	if _, ok := ts.cache[1]; ok {
+		t.Error("key 1 (200ms old) should have been evicted (exceeds 100ms TTL)")
+	}
+	if _, ok := ts.cache[2]; !ok {
+		t.Error("key 2 (50ms old) should survive (within 100ms TTL)")
+	}
+	if _, ok := ts.cache[3]; !ok {
+		t.Error("key 3 (0ms old) should survive (within 100ms TTL)")
+	}
+}
+
+func TestPruneCache_EmptyNoPanic(t *testing.T) {
+	var ts TextSystem
+	ts.pruneCache() // Must not panic.
+}
+
+func TestEvictOldestLayouts_TwentyFivePercent(t *testing.T) {
+	backend := newRecordingBackend()
+	ts, err := NewTextSystem(backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Free()
+
+	// Insert 10 entries with ascending timestamps.
+	for i := range 10 {
+		ts.cache[uint64(i)] = &cachedLayout{lastAccess: int64(i)}
+	}
+
+	ts.evictOldestLayouts()
+
+	// Should drop floor(10/4) = 2 entries (keys 0, 1).
+	// At most 25% deleted.
+	if len(ts.cache) < 7 || len(ts.cache) > 8 {
+		t.Errorf("cache size = %d after 25%% eviction, want 8 (kept 80%%)",
+			len(ts.cache))
+	}
+	if _, ok := ts.cache[0]; ok {
+		t.Error("key 0 (oldest) should have been evicted")
+	}
+	if _, ok := ts.cache[1]; ok {
+		t.Error("key 1 (second oldest) should have been evicted")
+	}
+	// Keys 2-9 should survive.
+	for i := uint64(2); i < 10; i++ {
+		if _, ok := ts.cache[i]; !ok {
+			t.Errorf("key %d should survive", i)
+		}
+	}
+}
+
+func TestEvictOldestLayouts_EmptyNoPanic(t *testing.T) {
+	var ts TextSystem
+	ts.evictOldestLayouts() // Must not panic.
+}
+
+func TestEvictOldestLayouts_SingleEntry(t *testing.T) {
+	backend := newRecordingBackend()
+	ts, err := NewTextSystem(backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Free()
+
+	ts.cache[0] = &cachedLayout{lastAccess: 100}
+	ts.evictOldestLayouts()
+
+	// n/4 = 0, targetDelete = 1 — single entry evicted.
+	if len(ts.cache) != 0 {
+		t.Errorf("single entry should be evicted, got %d", len(ts.cache))
 	}
 }

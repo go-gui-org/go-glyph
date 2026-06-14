@@ -728,3 +728,9 @@ func TestLayoutDarwin_WrapWordChar_FallsBackToChar(t *testing.T) {
 		t.Errorf("WrapWordChar fallback: got %d lines, want ≥2", len(l.Lines))
 	}
 }
+
+func TestLayoutDarwinEquivalence(t *testing.T) {
+	ctx := newDarwinTestContext(t)
+	defer ctx.Free()
+	runLayoutEquivCases(t, LayoutEquivCases(), ctx.LayoutText)
+}
