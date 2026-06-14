@@ -1,30 +1,48 @@
 // Package glyph provides high-quality text shaping, layout, and rendering
-// for GPU-accelerated applications. It wraps Pango (for Unicode layout,
-// bidirectional text, and complex script support) and FreeType (for glyph
-// rasterization with subpixel positioning) behind a backend-agnostic
+// for GPU-accelerated applications. It uses a platform-appropriate shaper
+// and rasterizer per operating system, exposed behind a backend-agnostic
 // [DrawBackend] interface.
+//
+// # Platform matrix
+//
+//	OS          Shaper              Rasterizer
+//	Linux/BSD   Pango + HarfBuzz    FreeType + FontConfig
+//	macOS *     CoreText            CoreText / CoreGraphics
+//	Windows     GDI + DirectWrite   GDI + DirectWrite
+//	Android     FreeType            FreeType
+//	WASM        Canvas2D            Canvas2D
+//
+//	* macOS can also use the Pango/FreeType stack with the glyph_pango
+//	  build tag.
 //
 // # Quick start
 //
-//	ctx, err := glyph.NewContext(2.0) // 2× Retina scale
+//	backend := ebitengine.NewBackend() // or sdl2, gpu, web, etc.
+//	ts, err := glyph.NewTextSystem(backend)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	defer ts.Free()
+//
+//	layout, err := ts.LayoutText("Hello, world!", glyph.TextConfig{
+//	    Style: glyph.TextStyle{FontName: "Sans 18"},
+//	})
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
 //
-//	layout, err := ctx.LayoutText("Hello, world!", glyph.TextConfig{
-//	    Style: glyph.TextStyle{FontName: "Sans 18"},
-//	    Block: glyph.DefaultBlockStyle(),
-//	})
-//
-//	renderer := glyph.NewRenderer(backend, ctx)
-//	renderer.DrawLayout(layout, 10, 10)
+//	ts.DrawLayout(layout, 10, 10)
 //
 // # Architecture
 //
-// [Context] owns FreeType and Pango state. [Renderer] draws shaped layouts
-// through a [DrawBackend]. Two backends are provided:
+// [Context] owns platform-specific shaper and font state. [Renderer] draws
+// shaped layouts through a [DrawBackend]. Six backends are provided:
 //   - [github.com/go-gui-org/go-glyph/backend/ebitengine]: Ebitengine integration.
-//   - [github.com/go-gui-org/go-glyph/backend/gpu]: raw OpenGL 3.3 via SDL2.
+//   - [github.com/go-gui-org/go-glyph/backend/gpu]: raw OpenGL 3.3 / Metal.
+//   - [github.com/go-gui-org/go-glyph/backend/sdl2]: SDL2 rendering.
+//   - [github.com/go-gui-org/go-glyph/backend/web]: HTML Canvas (WASM).
+//   - [github.com/go-gui-org/go-glyph/backend/android]: Android GPU.
+//   - [github.com/go-gui-org/go-glyph/backend/ios]: iOS Metal.
 //
 // # Thread Safety
 //

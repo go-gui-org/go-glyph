@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Phase B regression tests** (9 new test files, 15 fuzz targets, 1,378 LOC):
+  cache-key regression, layout equivalence across Pango/Darwin, backend contract
+  tests, accessibility manager tests, layout mutation and query fuzzing.
+- **Phase C benchmarks:** `BenchmarkLayoutText`, `BenchmarkLayoutTextCached`,
+  `BenchmarkLayoutRichText` in `context_darwin_test.go`. Baseline on Apple M5:
+  cached layout 68 ns/op (0 allocs, ~500× faster than uncached 33.7 µs).
+- Platform matrix in `doc.go` and `README.md` (shaper/rasterizer per OS).
+  All six backends documented: ebitengine, gpu, sdl2, web, android, ios.
+
+### Changed
+
+- **Phase D de-duplication:** Extracted `parseSizeFromStyle` and `mergeStyles`
+  to `layout_shared.go` (pure Go, no build tags). Removed duplicates from
+  `layout_darwin.go`, `layout_wasm.go`, `layout_android.go`.
+- Prerequisites in `README.md` now list platform-specific requirements
+  (macOS and Windows need no native C libraries for the root package).
+- Module path: `github.com/mike-ward/go-glyph` → `github.com/go-gui-org/go-glyph`.
+- Migrated `.golangci.yml` to v2 schema.
+
+### Fixed
+
+- **Glyph cache key collision:** cache keys now hash text (plus features, with
+  GlyphID as ligature tiebreaker) — `GlyphID` alone was not unique across fonts
+  or sizes.
+- FreeType download: added SourceForge fallback and XZ validation.
+- CGo export comments: added Go-style comments to single exported consts in
+  `pango_cgo.go` for staticcheck compliance.
+- Ebitengine CI: fixed headless environment detection in `examples/gpu`.
+
 ## [1.8.1] - 2026-06-03
 
 ### Changed

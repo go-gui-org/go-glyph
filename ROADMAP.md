@@ -115,7 +115,7 @@ and `mergeStyles` are duplicated across `layout_darwin.go`,
 
 **Where:** `layout_*.go`, `doc.go`, `README.md`.
 
-**Landed — De-duplication:**
+**Landed — De-duplication + docs:**
 - Extracted `parseSizeFromStyle` and `mergeStyles` to `layout_shared.go`
   (pure Go, no build tags). Both functions were byte-for-byte identical
   across all three platform files.
@@ -123,12 +123,11 @@ and `mergeStyles` are duplicated across `layout_darwin.go`,
   `layout_android.go`; removed now-unused `cmp` imports.
 - Moved `mergeStyles` tests from `layout_darwin_test.go` to
   `layout_shared_test.go` (no build tags, runs on all platforms).
+- Platform matrix added to `doc.go` and `README.md` (shaper/rasterizer
+  per OS, all six backends listed).
 - All tests pass, zero lint issues.
 
 **Remaining:**
-- Add a platform matrix to `doc.go` / `README.md` (shaper/rasterizer per
-  OS; list all backends — SDL2, web/WASM, iOS, Android, not just
-  Ebitengine and GPU).
 - When touching a platform file, add a minimal platform-specific test
   (`layout_darwin_test.go`, `dwrite_smoke_windows_test.go` pattern).
 
@@ -146,8 +145,9 @@ test beyond `dwrite_smoke_windows_test.go`. Wire `isEmojiRune` in
 **SVG diagonal gradients.** One remaining code TODO in
   `gui/svg_cache.go` — blocked on glyph angle support.
 
-**Changelog:** Record unreleased fixes (glyph cache key hashing) in
-`CHANGELOG.md` before the next tag.
+**Changelog:** Recorded unreleased fixes (glyph cache key hashing, Phase B
+tests, Phase C benchmarks, Phase D de-duplication, platform matrix,
+FreeType download fix, module rename) in `CHANGELOG.md`.
 
 ---
 

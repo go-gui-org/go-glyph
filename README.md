@@ -4,10 +4,17 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mike-ward/go-glyph)
 
-High-performance text rendering library for Go. Uses Pango, FreeType,
-and FontConfig on Linux/macOS; native GDI on Windows; CoreText on iOS.
-Provides text shaping, layout, rasterization, and editing with
-pluggable rendering backends.
+High-performance text rendering library for Go with pluggable rendering
+backends. Provides text shaping, layout, rasterization, and editing with
+platform-appropriate shapers and rasterizers per operating system.
+
+| OS | Shaper | Rasterizer |
+|---|---|---|
+| Linux / BSD | Pango + HarfBuzz | FreeType + FontConfig |
+| macOS | CoreText | CoreText / CoreGraphics |
+| Windows | GDI + DirectWrite | GDI + DirectWrite |
+| Android | FreeType | FreeType |
+| WASM | Canvas2D | Canvas2D |
 
 ![screenshot](assets/a.png)
 
@@ -29,17 +36,19 @@ pluggable rendering backends.
 - **Text mutation** - insert, delete, selection, undo/redo
 - **IME support** with composition/preedit rendering
 - **Accessibility** - screen reader announcements, text field nodes
-- **Pluggable backends** - Ebitengine, SDL2, GPU (Metal/OpenGL)
+- **Pluggable backends** — Ebitengine, SDL2, GPU (Metal/OpenGL), Web (WASM), Android, iOS
 
 ## Prerequisites
 
-Go-Glyph uses CGo bindings to the following C libraries:
+Library requirements depend on the target platform:
 
-- Pango (+ PangoFT2)
-- FreeType2
-- FontConfig
-- GLib
-- SDL2 (for SDL2 and GPU backends)
+- **Linux / BSD:** Pango (+ PangoFT2), FreeType2, FontConfig, GLib
+- **macOS:** No native libraries required (uses CoreText)
+- **Windows:** No native libraries required for the root package (uses GDI)
+- **Android:** FreeType2 (bundled with NDK)
+- **WASM:** No native libraries required (uses Canvas2D)
+
+SDL2 is required for the SDL2 and GPU backends on all platforms.
 
 ### Windows (MSYS2)
 
