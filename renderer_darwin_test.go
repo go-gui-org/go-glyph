@@ -101,3 +101,60 @@ func TestGetOrLoadGlyph_EmptyText_ReturnsEmpty(t *testing.T) {
 		t.Errorf("cache len=%d, want 0 (empty text skips caching)", len(r.cache))
 	}
 }
+
+func TestGetOrLoadGlyph_SameGlyphID_DifferentText_DifferentCacheEntries(t *testing.T) {
+	r := newTestRenderer(t)
+	defer r.Free()
+
+	item := makeTestItem()
+	// Same GlyphID, same font, same size — but different text.
+	// Regression: cache key must hash the text, not just GlyphID,
+	// because GlyphID alone is not unique across fonts or sizes.
+	g1 := Glyph{Index: 0, Codepoint: 1, GlyphID: 72}
+	g2 := Glyph{Index: 1, Codepoint: 1, GlyphID: 72}
+
+	text := "Ee"
+	r.getOrLoadGlyph(text, item, g1, 0, 0)
+	r.getOrLoadGlyph(text, item, g2, 0, 0)
+
+	if len(r.cache) != 2 {
+		t.Errorf("cache len=%d, want 2 (same GlyphID but different text "+
+			"must produce distinct keys)", len(r.cache))
+	}
+}
+
+func TestGetOrLoadGlyph_SameGlyphID_DifferentFont_DifferentCacheEntries(t *testing.T) {
+	r := newTestRenderer(t)
+	defer r.Free()
+
+	g := Glyph{Index: 0, Codepoint: 1, GlyphID: 72}
+
+	item1 := Item{Style: TextStyle{FontName: "Menlo 16"}, Ascent: 20}
+	item2 := Item{Style: TextStyle{FontName: "Sans 16"}, Ascent: 20}
+
+	r.getOrLoadGlyph("E", item1, g, 0, 0)
+	r.getOrLoadGlyph("E", item2, g, 0, 0)
+
+	if len(r.cache) != 2 {
+		t.Errorf("cache len=%d, want 2 (same GlyphID but different font "+
+			"must produce distinct keys)", len(r.cache))
+	}
+}
+
+func TestGetOrLoadGlyph_SameGlyphID_DifferentSize_DifferentCacheEntries(t *testing.T) {
+	r := newTestRenderer(t)
+	defer r.Free()
+
+	g := Glyph{Index: 0, Codepoint: 1, GlyphID: 72}
+
+	item1 := Item{Style: TextStyle{FontName: "Sans 12", Size: 12}, Ascent: 16}
+	item2 := Item{Style: TextStyle{FontName: "Sans 16", Size: 16}, Ascent: 20}
+
+	r.getOrLoadGlyph("E", item1, g, 0, 0)
+	r.getOrLoadGlyph("E", item2, g, 0, 0)
+
+	if len(r.cache) != 2 {
+		t.Errorf("cache len=%d, want 2 (same GlyphID but different size "+
+			"must produce distinct keys)", len(r.cache))
+	}
+}

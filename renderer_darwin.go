@@ -153,8 +153,9 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 	bin int, strokeWidth float32) CachedGlyph {
 
 	// g.Index is a byte offset into layout.Text (not a glyph ID).
-	// g.GlyphID is the resolved CGGlyph after GSUB shaping; when non-zero
-	// it uniquely identifies the glyph bitmap so we skip feature hashing.
+	// g.GlyphID is the resolved CGGlyph after GSUB shaping; used as
+	// a tiebreaker in the cache key for ligatures where multiple
+	// glyphs share the same cluster text.
 	ch := glyphText(text, g)
 	if ch == "" {
 		return CachedGlyph{}
@@ -162,17 +163,19 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 	targetH := int(float32(item.Ascent) * r.scaleFactor)
 
 	key := fnvOffsetBasis
-	if g.GlyphID != 0 {
-		// GlyphID already encodes the post-substitution glyph uniquely.
-		key = fnvHashU64(key, uint64(g.GlyphID))
-	} else {
-		key = fnvHashString(key, ch)
-		if item.Style.Features != nil {
-			for _, f := range item.Style.Features.OpenTypeFeatures {
-				key = fnvHashString(key, f.Tag)
-				key = fnvHashU64(key, uint64(f.Value))
-			}
+	// Always hash the text — GlyphID alone is not unique
+	// across fonts or sizes.
+	key = fnvHashString(key, ch)
+	if item.Style.Features != nil {
+		for _, f := range item.Style.Features.OpenTypeFeatures {
+			key = fnvHashString(key, f.Tag)
+			key = fnvHashU64(key, uint64(f.Value))
 		}
+	}
+	if g.GlyphID != 0 {
+		// Include GlyphID as a tiebreaker for ligatures where
+		// multiple glyphs share the same cluster text.
+		key = fnvHashU64(key, uint64(g.GlyphID))
 	}
 	key = fnvHashU64(key, uint64(bin))
 	key = fnvHashU64(key, uint64(targetH))
