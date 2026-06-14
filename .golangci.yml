@@ -1,0 +1,90 @@
+# Go-Glyph lint configuration.
+# Run: golangci-lint run ./...
+#
+# On Linux CI the Pango backend path compiles; files tagged
+# darwin / android / windows / wasm are excluded by the build system.
+#
+# See https://golangci-lint.run for documentation.
+
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+  fast: false
+
+  settings:
+    govet:
+      enable:
+        - asmdecl
+        - assign
+        - atomic
+        - bools
+        - copylocks
+        - deepequalerrors
+        - defers
+        - deprecated
+        - directive
+        - errorsas
+        - framepointer
+        - httpresponse
+        - ifaceassert
+        - loopclosure
+        - lostcancel
+        - nilfunc
+        - printf
+        - reflectvaluecompare
+        - shift
+        - sigchanyzer
+        - slog
+        - stdmethods
+        - stringintconv
+        - structtag
+        - testinggoroutine
+        - tests
+        - unmarshal
+        - unreachable
+        - unsafeptr
+
+    errcheck:
+      exclude-functions:
+        - (*os.File).Close
+
+    staticcheck:
+      checks:
+        - all
+
+    unused:
+      check-exported: false
+
+  exclusions:
+    warn-unused: false
+    generated: lax
+    paths:
+      - examples/.*
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+  settings:
+    goimports:
+      local-prefixes: github.com/go-gui-org/go-glyph
+
+  exclusions:
+    warn-unused: false
+    generated: lax
+    paths:
+      - examples/.*
+
+issues:
+  exclude-use-default: false
+
+  exclude-rules:
+    - source: "defer .*Close"
+      linters:
+        - errcheck

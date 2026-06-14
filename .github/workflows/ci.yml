@@ -40,7 +40,12 @@ jobs:
       - name: Test root module
         env:
           CGO_ENABLED: "1"
-        run: go test ./...
+        run: go test -coverprofile=coverage.out ./...
+
+      - name: Vet root module
+        env:
+          CGO_ENABLED: "1"
+        run: go vet ./...
 
       - name: Build examples
         env:
@@ -59,6 +64,43 @@ jobs:
             echo "==> go build ./... ($module)"
             ( cd "$module" && go build ./... )
           done
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libfontconfig1-dev \
+            libfreetype-dev \
+            libglib2.0-dev \
+            libgl1-mesa-dev \
+            libpango1.0-dev \
+            libsdl2-dev \
+            pkg-config
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
 
   test-wasm:
     runs-on: ubuntu-latest
@@ -276,6 +318,11 @@ jobs:
         env:
           CGO_ENABLED: "1"
         run: go test ./...
+
+      - name: Vet root module
+        env:
+          CGO_ENABLED: "1"
+        run: go vet ./...
 
       - name: Build examples
         env:

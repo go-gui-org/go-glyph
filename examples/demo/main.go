@@ -9,6 +9,7 @@ import (
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/go-gui-org/go-glyph"
 	glyphebi "github.com/go-gui-org/go-glyph/backend/ebitengine"
 )

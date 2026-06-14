@@ -8,8 +8,9 @@ import (
 	"log"
 	"unsafe"
 
-	"github.com/go-gui-org/go-glyph"
 	"github.com/veandco/go-sdl2/sdl"
+
+	"github.com/go-gui-org/go-glyph"
 )
 
 // Backend implements glyph.DrawBackend using SDL2.

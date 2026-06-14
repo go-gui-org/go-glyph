@@ -17,8 +17,8 @@ type AffineTransform struct {
 }
 
 // Apply maps a point through the affine transform.
-func (t AffineTransform) Apply(x, y float32) (float32, float32) {
-	return t.XX*x + t.XY*y + t.X0, t.YX*x + t.YY*y + t.Y0
+func (a AffineTransform) Apply(x, y float32) (float32, float32) {
+	return a.XX*x + a.XY*y + a.X0, a.YX*x + a.YY*y + a.Y0
 }
 
 // AffineIdentity returns an identity transform.

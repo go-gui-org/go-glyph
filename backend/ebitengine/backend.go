@@ -7,6 +7,7 @@ import (
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/go-gui-org/go-glyph"
 )
 
