@@ -38,8 +38,23 @@ mkdir -p "$BUILD_DIR" "$PREFIX/lib/$ABI" "$PREFIX/include"
 
 echo "=== Downloading FreeType $FREETYPE_VER ==="
 FREETYPE_TAR="$BUILD_DIR/freetype-$FREETYPE_VER.tar.xz"
-curl -sL "https://download.savannah.gnu.org/releases/freetype/freetype-$FREETYPE_VER.tar.xz" \
-    -o "$FREETYPE_TAR"
+FREETYPE_URLS=(
+    "https://downloads.sourceforge.net/project/freetype/freetype2/$FREETYPE_VER/freetype-$FREETYPE_VER.tar.xz"
+    "https://download.savannah.gnu.org/releases/freetype/freetype-$FREETYPE_VER.tar.xz"
+)
+for url in "${FREETYPE_URLS[@]}"; do
+    echo "  Trying $url"
+    if curl -sfL "$url" -o "$FREETYPE_TAR"; then
+        if file "$FREETYPE_TAR" | grep -q 'XZ compressed'; then
+            break
+        fi
+        echo "  WARNING: downloaded file is not XZ, retrying..."
+    fi
+done
+if ! file "$FREETYPE_TAR" | grep -q 'XZ compressed'; then
+    echo "FATAL: failed to download valid FreeType tarball" >&2
+    exit 1
+fi
 tar xf "$FREETYPE_TAR" -C "$BUILD_DIR"
 
 echo "=== Building FreeType ==="
