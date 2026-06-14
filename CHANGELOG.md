@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-06-14
+
 ### Added
 
 - **Phase B regression tests** (9 new test files, 15 fuzz targets, 1,378 LOC):
@@ -17,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cached layout 68 ns/op (0 allocs, ~500× faster than uncached 33.7 µs).
 - Platform matrix in `doc.go` and `README.md` (shaper/rasterizer per OS).
   All six backends documented: ebitengine, gpu, sdl2, web, android, ios.
+- **`GradientDiagonal`** direction for gradient text fills (top-left to
+  bottom-right). De-duplicated `gradientColorForGlyph` across all draw backends.
 
 ### Changed
 
@@ -27,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (macOS and Windows need no native C libraries for the root package).
 - Module path: `github.com/mike-ward/go-glyph` → `github.com/go-gui-org/go-glyph`.
 - Migrated `.golangci.yml` to v2 schema.
+- README audited for stale sections: expanded backend table (6 backends),
+  examples table (8 entries), clarified macOS prerequisites, removed false
+  go.mod claim.
 
 ### Fixed
 
@@ -37,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CGo export comments: added Go-style comments to single exported consts in
   `pango_cgo.go` for staticcheck compliance.
 - Ebitengine CI: fixed headless environment detection in `examples/gpu`.
+- Build tag on `layout_shared.go` and `layout_shared_test.go` (was breaking
+  non-Darwin builds).
+- `parseSizeFromFontName` stub for Linux and unsupported platforms.
+- CONTRIBUTING license corrected to MIT (was incorrectly PolyForm
+  Noncommercial).
 
 ## [1.8.1] - 2026-06-03
 
