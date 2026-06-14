@@ -1,3 +1,5 @@
+//go:build android || (darwin && !glyph_pango) || (js && wasm)
+
 package glyph
 
 import "testing"
