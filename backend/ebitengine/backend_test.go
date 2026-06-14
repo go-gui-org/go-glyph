@@ -1,3 +1,6 @@
+// This package imports ebitengine, whose init() panics without a display.
+// Tests are skipped on headless Linux CI; they run on macOS and Windows CI.
+
 package ebitengine
 
 import (

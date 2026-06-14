@@ -55,6 +55,14 @@ deps/
 *.swo
 *~
 
+# Serena
+.serena/
+
+# Node
+node_modules/
+examples/showcase_gpu/package.json
+examples/showcase_gpu/package-lock.json
+
 # OS
 .DS_Store
 Thumbs.db

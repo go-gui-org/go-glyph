@@ -37,10 +37,12 @@ jobs:
             libsdl2-dev \
             pkg-config
 
-      - name: Test root module
+      - name: Test root module (skip ebitengine — requires display)
         env:
           CGO_ENABLED: "1"
-        run: go test -coverprofile=coverage.out ./...
+        run: |
+          go test -coverprofile=coverage.out \
+            $(go list ./... | grep -v backend/ebitengine)
 
       - name: Vet root module
         env:
