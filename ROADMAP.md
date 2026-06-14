@@ -138,12 +138,13 @@ and `mergeStyles` are duplicated across `layout_darwin.go`,
 ### Phase E — Feature completeness and release hygiene
 
 **Windows color emoji:** `dwrite_windows.go` adds DirectWrite COLR
-support; verify end-to-end rendering in an example and add a regression
-test beyond `dwrite_smoke_windows_test.go`. Wire `isEmojiRune` in
-`gdi_windows.go` if still unused.
+support and `isEmojiRune` is wired in `layout_windows.go`,
+`renderer_load_windows.go`, and tested in `helpers_windows_test.go`.
+Verify end-to-end rendering in an example and add a regression test
+beyond `dwrite_smoke_windows_test.go` (requires Windows).
 
-**SVG diagonal gradients.** One remaining code TODO in
-  `gui/svg_cache.go` — blocked on glyph angle support.
+**SVG diagonal gradients.** Planned feature — not yet started.
+Requires glyph angle support in the rasterizer.
 
 **Changelog:** Recorded unreleased fixes (glyph cache key hashing, Phase B
 tests, Phase C benchmarks, Phase D de-duplication, platform matrix,
