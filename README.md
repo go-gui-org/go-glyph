@@ -27,7 +27,7 @@ platform-appropriate shapers and rasterizers per operating system.
 - **Rich text** - mixed fonts, sizes, colors, and styles in one block
 - **Pango markup** support for inline styling
 - **Text decorations** - underline, strikethrough, stroke/outline
-- **Gradient text** - horizontal and vertical color gradients
+- **Gradient text** - horizontal, vertical, and diagonal color gradients
 - **Word wrapping** with word, character, and word-char modes
 - **Text alignment** - left, center, right
 - **Affine transforms** - rotation, skew, scale, translation
@@ -64,6 +64,9 @@ Build from an MSYS2 MinGW 64-bit shell, or add the MinGW `bin/`
 directory to `PATH` so `pkg-config` and the SDL2 DLL are found.
 
 ### macOS (Homebrew)
+
+The root package and Ebitengine backend use CoreText (no brew packages
+needed). The SDL2 and GPU backends additionally require:
 
 ```sh
 brew install pango freetype fontconfig glib sdl2
@@ -203,21 +206,9 @@ character rectangles, and logical attributes. Created by
 
 ### DrawBackend
 
-Interface for plugging in a rendering framework:
-
-```go
-type DrawBackend interface {
-    NewTexture(width, height int) TextureID
-    UpdateTexture(id TextureID, data []byte)
-    DeleteTexture(id TextureID)
-    DrawTexturedQuad(id TextureID, src, dst Rect, c Color)
-    DrawFilledRect(dst Rect, c Color)
-    DrawTexturedQuadTransformed(
-        id TextureID, src, dst Rect, c Color, t AffineTransform,
-    )
-    DPIScale() float32
-}
-```
+Interface for plugging in a rendering framework. See `DrawBackend` in
+the [package documentation](https://pkg.go.dev/github.com/go-gui-org/go-glyph).
+Each backend package provides its own implementation.
 
 ## Backends
 
@@ -226,9 +217,11 @@ type DrawBackend interface {
 | Ebitengine | `go-glyph/backend/ebitengine` | Pure Go game engine                       |
 | SDL2       | `go-glyph/backend/sdl2`       | SDL2 renderer                             |
 | GPU        | `go-glyph/backend/gpu`        | Metal (macOS), OpenGL 3.3 (Linux/Windows) |
+| Web        | `go-glyph/backend/web`        | WASM via Canvas2D                         |
+| Android    | `go-glyph/backend/android`    | Android (FreeType)                        |
+| iOS        | `go-glyph/backend/ios`        | iOS (CoreText)                            |
 
-Each backend has its own `go.mod` with framework-specific
-dependencies. Import the one matching the target framework.
+Import the package matching the target framework.
 
 ### Ebitengine
 
@@ -517,12 +510,16 @@ word echo, line changes, selection changes) with debouncing.
 
 ## Examples
 
-| Example                 | Description                                                     |
-| ----------------------- | --------------------------------------------------------------- |
-| `examples/demo`         | Ebitengine demo - basic text, styles, wrapping, emoji, CJK, RTL |
-| `examples/demo_sdl2`    | Same demo using SDL2 backend                                    |
-| `examples/demo_gpu`     | Same demo using GPU backend (Metal/OpenGL)                      |
-| `examples/showcase_gpu` | Feature gallery (22 sections)                                   |
+| Example                     | Description                                                     |
+| --------------------------- | --------------------------------------------------------------- |
+| `examples/demo`             | Ebitengine demo - basic text, styles, wrapping, emoji, CJK, RTL |
+| `examples/demo_sdl2`        | Same demo using SDL2 backend                                    |
+| `examples/demo_gpu`         | Same demo using GPU backend (Metal/OpenGL)                      |
+| `examples/showcase_gpu`     | Feature gallery (22 sections)                                   |
+| `examples/showcase_android` | Feature gallery for Android                                     |
+| `examples/showcase_ios`     | Feature gallery for iOS                                         |
+| `examples/showcase_web`     | Feature gallery for WASM/Web                                    |
+| `examples/showcase_sections`| Per-section feature demos                                       |
 
 Run an example:
 
@@ -540,23 +537,23 @@ TextSystem
   +-- Renderer
   |     +-- GlyphAtlas (multi-page, shelf-packed)
   |     +-- Glyph rasterization and caching
-  |     +-- Draw call emission (5-pass pipeline)
+  |     +-- Draw call emission
   +-- Layout cache (hash-keyed, time-based eviction)
   +-- DrawBackend (interface)
-        +-- Ebitengine / SDL2 / GPU implementations
+        +-- Ebitengine / SDL2 / GPU / Web / Android / iOS
 ```
 
-The rendering pipeline per layout:
+5-pass rendering pipeline per layout:
 
 1. Background rectangles
 2. Stroke setup
 3. Stroke outlines
-4. Fill glyphs (with subpixel positioning, emoji scaling, gradients)
+4. Fill glyphs (subpixel positioning, emoji scaling, gradients)
 5. Decorations (underline, strikethrough)
 
-## Wiki Documentation
+## Documentation
 
-https://deepwiki.com/mike-ward/go-glyph/8-glossary
+See the [DeepWiki glossary](https://deepwiki.com/mike-ward/go-glyph/8-glossary) for API reference.
 
 ## License
 
