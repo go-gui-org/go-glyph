@@ -27,7 +27,7 @@ const (
 	FTPixelModeLCDV = C.FT_PIXEL_MODE_LCD_V
 )
 
-// FreeType face flags.
+// FTFaceFlagColor is the FreeType face flag for color glyphs.
 const FTFaceFlagColor = C.FT_FACE_FLAG_COLOR
 
 // FreeType load flags.
@@ -67,8 +67,8 @@ const (
 	FTSubpixelUnit    = 16 // 0.25 pixels in 26.6.
 )
 
-// Subpixel positioning constants.
+// SubpixelBins is the number of subpixel positioning bins.
 const SubpixelBins = 4
 
-// Pango constants.
-const PangoScale = C.PANGO_SCALE // 1024
+// PangoScale is the Pango scale factor (1024 units per em).
+const PangoScale = C.PANGO_SCALE
