@@ -1,95 +1,155 @@
 # Roadmap
 
-Future work for go-glyph. Each item has a "why" anchored in measured
-allocation behavior, a "where" pointing at the code, and a sketch of
-the fix so a later session can resume without re-discovering context.
+Future work for go-glyph. Items are ordered by suggested execution phase.
+Each active item notes the problem, where in the code it lives, and the
+intended fix so a later session can resume without re-discovering context.
 
-## Performance: per-layout font-name re-parsing and metrics requery
+## Completed
 
-### Why
+### Darwin: font-name parse cache and metrics cache (2026-05-16, v1.7.1)
 
-Heap profile of a terminal emulator client (sibling repo `go-term`,
-`cmd/demo` 60s run) shows the following per-LayoutText allocators
-dominate on darwin:
+Heap profiles from a `go-term` 60s run showed per-layout-cache-miss
+allocations dominated by `parseFamilyFromFontName`, `strings.Fields`,
+and `ctFont.metrics` on every miss in `TextSystem.getOrCreateLayout`
+(`glyph.go`).
 
-| Allocator                                | Allocations / 60s |
-| ---------------------------------------- | ----------------- |
-| `parseFamilyFromFontName`                | 3.24M flat        |
-| `strings.Fields` (via the above)         | 2.39M             |
-| `ctFont.metrics`                         | 1.97M             |
-| `internal/bytealg.MakeNoZero` (Fields)   | 1.61M             |
-| `(*Context).buildLayout`                 | 2.62M             |
+**Landed:**
+- Package-level font-name parse cache in `coretext_types_darwin.go`
+  (512-entry cap, `sync.RWMutex`).
+- `ctMetricsCache` in `cache_darwin.go` / `context_darwin.go` keyed by
+  resolved font params (32-entry cap, drop-one-on-overflow).
 
-These fire on every cache miss in `TextSystem.getOrCreateLayout`
-(`glyph.go:246`). A terminal generates a new cache key for every
-unique row-text on every frame, so cache-miss frequency is high and
-each miss currently re-parses the Pango-style font name and re-queries
-CoreText for font metrics — values that are stable across an entire
-session's typical workload (one or two `TextStyle.FontName` strings,
-one or two sizes).
+**Not a problem:** `buildLayout` retained heap in pprof is the layout
+cache working as designed. Per-glyph quad struct allocs in Metal backends
+are outside go-glyph's scope.
 
-Workload-specific note: `go-term` already trims trailing whitespace
-from run text to collapse tail-padding variants into shared cache
-entries (`term/widget.go` `flushRun`). That cut roughly 25% of
-glyph-quad allocations but did nothing for these per-miss costs — the
-miss path itself is the bottleneck.
+### Glyph cache key hashing (2026-06-14)
 
-### Status: Darwin — DONE (2026-05-16)
+`GlyphID` alone is not unique across fonts or sizes. Cache keys now
+always hash text (plus features, with `GlyphID` as ligature tiebreaker).
+Regression tests in `renderer_darwin_test.go`.
 
-Both fixes landed. Uncommitted as of this writing.
+### CI and contributor hygiene (2026-06-14)
 
-**Fix 1 — font-name parse cache** (`coretext_types_darwin.go`):
-Package-level `fontNameParseCache map[string]parsedFontName` guarded
-by `fontNameParseMu sync.RWMutex`. Hot path is an RLock map read —
-zero allocations. Bounded at 512 entries; overflow is silently dropped
-(set is tiny in practice). `lookupParsedFontName` replaces the
-per-call `parseFamilyFromFontName` + `parseSizeFromFontName` +
-`strings.ToLower` chain throughout `resolveCTFontParams`.
-Cache is process-wide (not per-Context) — faster and safe because the
-parse is a pure function of the font name string.
+`CONTRIBUTING.md` and `CLAUDE.md` required `golangci-lint run ./...`,
+but there was no `.golangci.yml` and CI ran only `go test`, `go build`,
+and `go vet` — no lint, `-race`, or coverage.
 
-**Fix 2 — metrics cache** (`cache_darwin.go`, `context_darwin.go`):
-New `ctMetricsCache` keyed by `ctMetricsKey{family, size, bold, italic}`
-(resolved params, not CTFontRef pointer — correct across font
-create/close cycles). Capacity 32, drop-one-on-overflow policy.
-`Context.fontMetrics` and `Context.metricsForStyle` wrap the cache;
-`metricsForStyle` avoids the `newCTFont` CGo call entirely on cache
-hits. Old `metricsCache` (LRU, `uint64`-keyed) is now build-tagged
-`!darwin || glyph_pango`; darwin uses `ctMetricsCache` exclusively.
+**Landed:**
+- `.golangci.yml` with `govet`, `errcheck`, `staticcheck`, `unused`,
+  `gofmt`, `goimports` (v2 format, tuned for Linux CI / Pango backend).
+- CI `lint` job on `ubuntu-latest` (`golangci-lint-action@v9`).
+- `go vet` added to `test` (ubuntu) and `test-macos` jobs.
+- Coverage artifact upload in `test` job (`go test -coverprofile`).
+- Makefile targets: `check`, `test-race`, `coverage`.
+- Fixed `staticcheck` ST1016 (inconsistent receiver names in `affine.go`).
+- Fixed `gofmt`/`goimports` formatting in backend and example files.
 
-**Resolved questions:**
-- `ctx.metrics` was declared but unwired on darwin — now wired via the
-  new `ctMetricsCache` type.
-- Font-name parse cache is package-level (process-wide), not per-Context.
-- Eviction policy: cap at 512 with silent drop for parse cache; cap at
-  32 with drop-one for metrics cache.
+---
 
-### Expected impact
+## Future
 
-Eliminating these per-miss allocations should cut the alloc_objects
-top-N by roughly 50% over a `go-term` 60s scrolling session and drop
-NumGC by another 15–25% on top of the structural wins already in
-place. Steady-state per-frame heap should be dominated by
-`metalGlyphBackend.DrawTexturedQuad` (one quad per glyph, intrinsic).
+### Phase B — Regression testing
 
-### Don't get distracted by
+**Problem:** Root package has 26 test files, but backends are largely
+untested, there are no fuzz tests, and only 7 benchmarks exist. Platform
+layout code diverges across four large `layout_*.go` files.
 
-- `buildLayout` itself shows ~30 MB *in_use* in pprof — that is the
-  layout cache holding entries, working as designed, not a leak.
-- `DrawTexturedQuad` allocation count is the metal backend's per-glyph
-  quad struct. That's a different problem (pool the structs in the
-  backend), outside go-glyph's scope.
+| Package              | Source | Tests |
+| -------------------- | ------ | ----- |
+| root `glyph`         | 80     | 26    |
+| `accessibility`      | 5      | 1     |
+| `backend/ebitengine` | 1      | 0     |
+| `backend/gpu`        | 7      | 0     |
+| `backend/sdl2`       | 3      | 0     |
+| `ime`                | 2      | 1     |
 
-### Other platforms — TODO if profiling shows the same shape
+**Where:** `renderer_darwin_test.go`, `layout_test.go`, `cache.go`,
+`cache_darwin.go`, `cache_pango.go`, `backend/ebitengine/backend.go`,
+`accessibility/`.
 
-The same two fixes apply to wasm and android if heap profiles show
-equivalent hot spots. Darwin is done; apply only if measured.
+**Fix (prioritized):**
+1. **Cache-key regression suite** — Extend the `renderer_darwin_test.go`
+   pattern to atlas/layout/pango caches.
+2. **Layout equivalence fixtures** — Shared table-driven cases in
+   `layout_test.go` for line count, width/height, cursor positions, and
+   word boundaries (ASCII, emoji, RTL where the platform can run).
+3. **Backend contract tests** — `DrawBackend` fake to test `Renderer`
+   tinting, transforms, and color-glyph passthrough; ebitengine smoke
+   tests (pure Go, easiest win).
+4. **Fuzz targets** — `buildUTF16ToByteSlice`, `layout_mutation.go`,
+   `layout_query.go`.
+5. **Accessibility** — Manager tree build/announce integration tests
+   beyond emoji/announcer coverage.
 
-- `context_wasm.go:103,109` — `parseSizeFromFontName` /
-  `parseFamilyFromFontName` per call. Same package-level parse-cache
-  pattern applies.
-- `context_android.go` — `metrics metricsCache` declared; confirm
-  whether wired. `freetype_types_android.go:247,318` has the equivalent
-  FreeType metrics path.
+**Avoid:** Full GPU pixel golden tests across backends (high flake cost).
+Prefer geometry/metric assertions.
 
-Don't preemptively port — measure first.
+---
+
+## Phase C — Performance (measure, then port)
+
+**Problem:** wasm and android may still re-parse font names and re-query
+metrics on every layout cache miss, as Darwin did before v1.7.1.
+
+**Where:**
+- `context_wasm.go` — `parseSizeFromFontName` / `parseFamilyFromFontName`
+  per call.
+- `context_android.go` — `metricsCache` declared; confirm wiring.
+  `freetype_types_android.go` — FreeType metrics path.
+
+**Fix:** Do not port preemptively. Profile a real client first (e.g.
+`go-term` on wasm/android). If the alloc shape matches Darwin, apply the
+same package-level parse cache and metrics cache pattern.
+
+**Benchmarks:** Document a baseline entry point
+(`go test -bench=LayoutText -benchmem ./...` on macOS). Expand existing
+benchmarks in `atlas_test.go`, `bitmap_test.go`, and
+`coretext_types_darwin_test.go` for cache-hit steady state.
+
+---
+
+## Phase D — Platform maintenance cost
+
+**Problem:** ~102 build-tagged files; helpers like `parseSizeFromStyle`
+and `mergeStyles` are duplicated across `layout_darwin.go`,
+`layout_wasm.go`, and `layout_android.go`.
+
+**Where:** `layout_*.go`, `doc.go`, `README.md`.
+
+**Fix (incremental):**
+- Extract pure-Go helpers into `layout.go` or `layout_shared.go` (no
+  build tags). Keep CGO/platform calls in tagged files.
+- Add a platform matrix to `doc.go` / `README.md` (shaper/rasterizer per
+  OS; list all backends — SDL2, web/WASM, iOS, Android, not just
+  Ebitengine and GPU).
+- When touching a platform file, add a minimal platform-specific test
+  (`layout_darwin_test.go`, `dwrite_smoke_windows_test.go` pattern).
+
+**Do not:** Big-bang unification of `layout_*` implementations.
+
+---
+
+## Phase E — Feature completeness and release hygiene
+
+**Windows color emoji:** `dwrite_windows.go` adds DirectWrite COLR
+support; verify end-to-end rendering in an example and add a regression
+test beyond `dwrite_smoke_windows_test.go`. Wire `isEmojiRune` in
+`gdi_windows.go` if still unused.
+
+**Changelog:** Record unreleased fixes (glyph cache key hashing) in
+`CHANGELOG.md` before the next tag.
+
+---
+
+## Already in good shape
+
+- Multi-platform CI (Linux, macOS, Windows, WASM, iOS, Android)
+- Substantial root-package tests (layout, atlas, composition, context,
+  glyph)
+- Recent releases: struct alignment (v1.8.1), bidi/shaped rendering
+  (v1.8.0), Darwin alloc caches (v1.7.1)
+
+Focus new effort on **enforcement** (lint/race), **regression nets**
+(caches, layout fixtures, backends), and **measured** performance — not
+broad rewrites.
