@@ -75,7 +75,7 @@ CGo export comments added to `pango_cgo.go` (`3f62840`).
 
 ## Future
 
-### Phase C — Performance (measure, then port)
+### Phase C — Performance (measure, then port) (2026-06-14 benchmarks landed)
 
 **Problem:** wasm and android may still re-parse font names and re-query
 metrics on every layout cache miss, as Darwin did before v1.7.1.
@@ -90,14 +90,24 @@ metrics on every layout cache miss, as Darwin did before v1.7.1.
 `go-term` on wasm/android). If the alloc shape matches Darwin, apply the
 same package-level parse cache and metrics cache pattern.
 
-**Benchmarks:** Document a baseline entry point
-(`go test -bench=LayoutText -benchmem ./...` on macOS). Expand existing
-benchmarks in `atlas_test.go`, `bitmap_test.go`, and
-`coretext_types_darwin_test.go` for cache-hit steady state.
+**Landed — Benchmarks:**
+- `BenchmarkLayoutText`, `BenchmarkLayoutTextCached`,
+  `BenchmarkLayoutRichText` added to `context_darwin_test.go`.
+- `BenchmarkFontMetrics` updated with warm-up + `b.ResetTimer()`.
+- Baseline captured on Apple M5:
+  - `LayoutText`: 33.7 µs/op, 34.8 KB, 103 allocs
+  - `LayoutTextCached`: 68 ns/op, 0 B, 0 allocs (cache-hit ~500× faster)
+  - `LayoutRichText`: 76.5 µs/op, 20.3 KB, 92 allocs
+  - All cache-hit benchmarks (FontMetrics, ResolveCTFontParams,
+    LookupParsedFontName) confirm 0 allocs/op.
+- Entry point: `go test -bench=LayoutText -benchmem ./...` on macOS.
+
+**Remaining:** Profile wasm/android client (go-term) to measure uncached
+alloc shape before porting Darwin-style caches.
 
 ---
 
-### Phase D — Platform maintenance cost
+### Phase D — Platform maintenance cost (2026-06-14 de-duplication landed)
 
 **Problem:** ~102 build-tagged files; helpers like `parseSizeFromStyle`
 and `mergeStyles` are duplicated across `layout_darwin.go`,
@@ -105,9 +115,17 @@ and `mergeStyles` are duplicated across `layout_darwin.go`,
 
 **Where:** `layout_*.go`, `doc.go`, `README.md`.
 
-**Fix (incremental):**
-- Extract pure-Go helpers into `layout.go` or `layout_shared.go` (no
-  build tags). Keep CGO/platform calls in tagged files.
+**Landed — De-duplication:**
+- Extracted `parseSizeFromStyle` and `mergeStyles` to `layout_shared.go`
+  (pure Go, no build tags). Both functions were byte-for-byte identical
+  across all three platform files.
+- Removed duplicates from `layout_darwin.go`, `layout_wasm.go`,
+  `layout_android.go`; removed now-unused `cmp` imports.
+- Moved `mergeStyles` tests from `layout_darwin_test.go` to
+  `layout_shared_test.go` (no build tags, runs on all platforms).
+- All tests pass, zero lint issues.
+
+**Remaining:**
 - Add a platform matrix to `doc.go` / `README.md` (shaper/rasterizer per
   OS; list all backends — SDL2, web/WASM, iOS, Android, not just
   Ebitengine and GPU).

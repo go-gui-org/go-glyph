@@ -98,11 +98,74 @@ func BenchmarkFontMetrics(b *testing.B) {
 	}
 	defer ctx.Free()
 	cfg := TextConfig{Style: TextStyle{FontName: "Sans 20"}}
+	// Warm metrics caches.
 	if _, err := ctx.FontMetrics(cfg); err != nil {
 		b.Fatal(err)
 	}
 	b.ReportAllocs()
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = ctx.FontMetrics(cfg)
+	}
+}
+
+// BenchmarkLayoutText measures the uncached layout path (TextSystem path
+// including validation and full break/shape pipeline). This is the primary
+// entry point documented in ROADMAP.md.
+func BenchmarkLayoutText(b *testing.B) {
+	ts, err := NewTextSystem(newMockBackend())
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer ts.Free()
+	cfg := TextConfig{Style: TextStyle{FontName: "Sans 16"}}
+	text := "The quick brown fox jumps over the lazy dog."
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ts.LayoutText(text, cfg)
+	}
+}
+
+// BenchmarkLayoutTextCached measures the cache-hit steady state for
+// repeated layout of the same text with the same config.
+func BenchmarkLayoutTextCached(b *testing.B) {
+	ts, err := NewTextSystem(newMockBackend())
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer ts.Free()
+	cfg := TextConfig{Style: TextStyle{FontName: "Sans 16"}}
+	text := "The quick brown fox jumps over the lazy dog."
+	// Warm cache.
+	if _, err := ts.LayoutTextCached(text, cfg); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ts.LayoutTextCached(text, cfg)
+	}
+}
+
+// BenchmarkLayoutRichText measures the multi-style layout path.
+func BenchmarkLayoutRichText(b *testing.B) {
+	ts, err := NewTextSystem(newMockBackend())
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer ts.Free()
+	cfg := TextConfig{Style: TextStyle{FontName: "Sans 16"}}
+	rt := RichText{
+		Runs: []StyleRun{
+			{Text: "Hello ", Style: TextStyle{FontName: "Sans Bold 16", Size: 16}},
+			{Text: "bold ", Style: TextStyle{FontName: "Sans Italic 16", Size: 16}},
+			{Text: "world", Style: TextStyle{FontName: "Sans 16", Size: 16}},
+		},
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ts.LayoutRichText(rt, cfg)
 	}
 }
