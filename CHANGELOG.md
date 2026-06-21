@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-06-21
+
+### Added
+
+- **GPU backend tests:** batch vertex ordering, multi-quad offset, reset
+  capacity retention, nil-window error guard, stub-platform DPI clamping
+  and NaN/Inf handling (`backend/gpu/backend_test.go`,
+  `backend/gpu/backend_stub_test.go`).
+
+### Changed
+
+- **`backend/sdl2` extracted to separate Go module** at
+  `github.com/go-gui-org/go-glyph/backend/sdl2`. Root module no longer
+  depends on `github.com/veandco/go-sdl2`. Downstream users who do not
+  use the SDL2 backend will no longer pull the binding.
+- **`backend/gpu` Metal path no longer requires SDL2 C headers on macOS.**
+  `metalInit` accepts `CAMetalLayer*` directly instead of `SDL_Window*`.
+  Removed `-I/opt/homebrew/include/SDL2` and `-I/usr/local/include/SDL2`
+  CGO flags. The caller (e.g. go-gui) owns window and layer creation.
+- **Breaking (macOS):** `gpu.New()` parameter is now `CAMetalLayer*`
+  instead of `SDL_Window*`. `WindowFlag()` and `WindowDrawableSize()`
+  removed from macOS Metal backend (still present on Linux/Windows OpenGL).
+- **DPI guard hardened:** `!(dpiScale > 0)` catches NaN, ±Inf, zero, and
+  negative in one IEEE-754 expression. Removed `dpiScale` round-trip
+  through CGo — C init functions never used it.
+- Updated `demo_gpu` and `showcase_gpu` examples with platform-split
+  helpers for the new API.
+- CI: bumped GitHub Actions to latest major versions.
+
+### Security
+
+- `gpu.New()` nil-window guard returns error before CGo instead of passing
+  a nil pointer to C.
+- `metalInit` NULL guard in C returns early before any allocation.
+- `backend/gpu` Metal path links only Apple frameworks (Metal, QuartzCore,
+  Foundation) — no third-party C libraries.
+
 ## [1.10.0] - 2026-06-14
 
 ### Added
