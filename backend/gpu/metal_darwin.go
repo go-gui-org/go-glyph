@@ -4,8 +4,6 @@ package gpu
 
 /*
 #cgo CFLAGS: -fobjc-arc
-#cgo darwin,arm64 CFLAGS: -I/opt/homebrew/include/SDL2 -D_THREAD_SAFE
-#cgo darwin,amd64 CFLAGS: -I/usr/local/include/SDL2 -D_THREAD_SAFE
 #cgo LDFLAGS: -framework Metal -framework QuartzCore -framework Foundation
 #include "metal_darwin.h"
 */
@@ -20,8 +18,9 @@ type gpuCtx struct {
 	ptr *C.MetalCtx
 }
 
-func gpuInitGo(sdlWin unsafe.Pointer, dpiScale float32) (*gpuCtx, error) {
-	ctx := C.metalInit(sdlWin, C.float(dpiScale))
+func gpuInitGo(metalLayer unsafe.Pointer, dpiScale float32) (*gpuCtx, error) {
+	_ = dpiScale // validated by caller; stored in Backend.dpiScale
+	ctx := C.metalInit(metalLayer)
 	if ctx == nil {
 		return nil, fmt.Errorf("gpu: metalInit failed")
 	}
@@ -80,17 +79,4 @@ func (m *gpuCtx) destroy() {
 		C.metalDestroy(m.ptr)
 		m.ptr = nil
 	}
-}
-
-// WindowFlag returns SDL_WINDOW_METAL.
-func WindowFlag() uint32 {
-	return uint32(C.metalWindowFlag())
-}
-
-// WindowDrawableSize returns the physical drawable size for
-// an SDL2 Metal window. sdlWindow is unsafe.Pointer to SDL_Window.
-func WindowDrawableSize(sdlWindow unsafe.Pointer) (int, int) {
-	var w, h C.int
-	C.metalWindowDrawableSize(sdlWindow, &w, &h)
-	return int(w), int(h)
 }

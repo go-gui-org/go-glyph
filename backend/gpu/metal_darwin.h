@@ -5,8 +5,6 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-#include "SDL.h"
-#include "SDL_metal.h"
 
 // Opaque Metal context — defined in metal_darwin.m.
 typedef struct MetalCtx MetalCtx;
@@ -18,7 +16,7 @@ typedef struct {
 	int32_t  vertCount;
 } CDrawCmd;
 
-MetalCtx* metalInit(void *sdlWindow, float dpiScale);
+MetalCtx* metalInit(void *metalLayer);
 uint64_t  metalNewTex(MetalCtx *ctx, int w, int h);
 void      metalUpdateTex(MetalCtx *ctx, uint64_t tid,
                          void *data, int w, int h);
@@ -31,9 +29,5 @@ int       metalRender(MetalCtx *ctx,
                       int logicalW, int logicalH);
 void      metalDestroy(MetalCtx *ctx);
 void      metalGetDrawableSize(MetalCtx *ctx, int *w, int *h);
-
-// Helpers exposed so the demo doesn't need its own CGo SDL2 link.
-int       metalWindowFlag(void);
-void      metalWindowDrawableSize(void *sdlWindow, int *w, int *h);
 
 #endif

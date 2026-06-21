@@ -1,13 +1,16 @@
 package gpu
 
 import (
+	"fmt"
 	"unsafe"
 
 	"github.com/go-gui-org/go-glyph"
 )
 
 // Backend implements glyph.DrawBackend using a GPU backend via CGo.
-// SDL2 provides the window; rendering bypasses SDL2's renderer.
+//
+// On macOS, rendering uses Metal into a caller-provided CAMetalLayer.
+// On Linux and Windows, rendering uses OpenGL into an SDL2 window.
 type Backend struct {
 	gpu      *gpuCtx
 	widths   map[glyph.TextureID]int
@@ -16,13 +19,21 @@ type Backend struct {
 	dpiScale float32
 }
 
-// New creates a GPU backend. sdlWindow is an unsafe.Pointer to
-// the SDL_Window. dpiScale is physical pixels / logical pixels.
-func New(sdlWindow unsafe.Pointer, dpiScale float32) (*Backend, error) {
-	if dpiScale <= 0 {
+// New creates a GPU backend.
+//
+// nativeWindow is platform-dependent:
+//   - macOS: unsafe.Pointer to CAMetalLayer
+//   - Linux / Windows: unsafe.Pointer to SDL_Window
+//
+// dpiScale is physical pixels / logical pixels.
+func New(nativeWindow unsafe.Pointer, dpiScale float32) (*Backend, error) {
+	if nativeWindow == nil {
+		return nil, fmt.Errorf("gpu: nativeWindow must not be nil")
+	}
+	if !(dpiScale > 0) {
 		dpiScale = 1.0
 	}
-	g, err := gpuInitGo(sdlWindow, dpiScale)
+	g, err := gpuInitGo(nativeWindow, dpiScale)
 	if err != nil {
 		return nil, err
 	}

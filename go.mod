@@ -6,7 +6,6 @@ require (
 	github.com/hajimehoshi/ebiten/v2 v2.9.9
 	github.com/princjef/gomarkdoc v1.1.0
 	github.com/rivo/uniseg v0.4.7
-	github.com/veandco/go-sdl2 v0.4.40
 	golang.org/x/pkgsite v0.0.0-20260306132053-fd3717b20fe8
 	golang.org/x/text v0.34.0
 )

@@ -5,7 +5,6 @@ package main
 
 import (
 	"runtime"
-	"unsafe"
 
 	"github.com/go-gui-org/go-glyph"
 	"github.com/go-gui-org/go-glyph/backend/gpu"
@@ -45,27 +44,30 @@ func main() {
 	}
 	defer sdl.Quit()
 
-	win, err := sdl.CreateWindow("Go-Glyph showcase (Metal)",
+	win, err := sdl.CreateWindow("Go-Glyph showcase (GPU)",
 		sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED,
 		screenW, screenH,
 		sdl.WINDOW_SHOWN|sdl.WINDOW_RESIZABLE|
-			sdl.WINDOW_ALLOW_HIGHDPI|gpu.WindowFlag())
+			sdl.WINDOW_ALLOW_HIGHDPI|gpuWindowFlag())
 	if err != nil {
 		panic(err)
 	}
 	defer func() { _ = win.Destroy() }()
 
-	physW, _ := gpu.WindowDrawableSize(unsafe.Pointer(win))
+	physW, _ := gpuDrawableSize(win)
 	winW, _ := win.GetSize()
 	dpi := float32(1)
 	if winW > 0 {
 		dpi = float32(physW) / float32(winW)
 	}
 
-	be, err := gpu.New(unsafe.Pointer(win), dpi)
+	handle, cleanup := gpuInitHandle(win)
+	be, err := gpu.New(handle, dpi)
 	if err != nil {
+		cleanup()
 		panic(err)
 	}
+	defer cleanup()
 	defer be.Destroy()
 
 	ts, err := glyph.NewTextSystem(be)

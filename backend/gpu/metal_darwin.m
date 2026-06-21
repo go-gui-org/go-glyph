@@ -14,7 +14,6 @@ struct MetalCtx {
 	CAMetalLayer              *layer;
 	NSMutableDictionary       *textures; // NSNumber(uint64) -> id<MTLTexture>
 	id<MTLTexture>             whiteTex;
-	SDL_MetalView              view;
 	uint64_t                   nextTexID;
 };
 
@@ -46,20 +45,14 @@ static const char *shaderSource =
 	"    return tex.sample(smp, in.texcoord) * in.color;\n"
 	"}\n";
 
-MetalCtx* metalInit(void *sdlWindow, float dpiScale) {
+MetalCtx* metalInit(void *metalLayer) {
+	if (!metalLayer) return NULL;
+
 	MetalCtx *ctx = (MetalCtx *)calloc(1, sizeof(MetalCtx));
 	if (!ctx) return NULL;
 
-	SDL_Window *win = (SDL_Window *)sdlWindow;
-
-	// Create Metal view from SDL window.
-	ctx->view = SDL_Metal_CreateView(win);
-	if (!ctx->view) {
-		free(ctx);
-		return NULL;
-	}
-
-	ctx->layer = (__bridge CAMetalLayer *)SDL_Metal_GetLayer(ctx->view);
+	// The caller provides a CAMetalLayer ready for rendering.
+	ctx->layer = (__bridge CAMetalLayer *)metalLayer;
 	ctx->layer.presentsWithTransaction = YES;
 
 	ctx->device = MTLCreateSystemDefaultDevice();
@@ -76,7 +69,6 @@ MetalCtx* metalInit(void *sdlWindow, float dpiScale) {
 	                                                 error:&err];
 	if (!lib) {
 		NSLog(@"metalInit: shader compile failed: %@", err);
-		SDL_Metal_DestroyView(ctx->view);
 		free(ctx);
 		return NULL;
 	}
@@ -112,7 +104,6 @@ MetalCtx* metalInit(void *sdlWindow, float dpiScale) {
 	ctx->pipeline = [ctx->device newRenderPipelineStateWithDescriptor:pd error:&err];
 	if (!ctx->pipeline) {
 		NSLog(@"metalInit: pipeline failed: %@", err);
-		SDL_Metal_DestroyView(ctx->view);
 		free(ctx);
 		return NULL;
 	}
@@ -276,9 +267,6 @@ void metalDestroy(MetalCtx *ctx) {
 	ctx->sampler = nil;
 	ctx->queue = nil;
 	ctx->device = nil;
-	if (ctx->view) {
-		SDL_Metal_DestroyView(ctx->view);
-	}
 	free(ctx);
 }
 
@@ -287,12 +275,4 @@ void metalGetDrawableSize(MetalCtx *ctx, int *w, int *h) {
 	CGSize sz = ctx->layer.drawableSize;
 	*w = (int)sz.width;
 	*h = (int)sz.height;
-}
-
-int metalWindowFlag(void) {
-	return SDL_WINDOW_METAL;
-}
-
-void metalWindowDrawableSize(void *sdlWindow, int *w, int *h) {
-	SDL_Metal_GetDrawableSize((SDL_Window *)sdlWindow, w, h);
 }

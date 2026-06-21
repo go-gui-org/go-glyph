@@ -7,7 +7,6 @@ import (
 	"log"
 	"math"
 	"runtime"
-	"unsafe"
 
 	"github.com/go-gui-org/go-glyph"
 	"github.com/go-gui-org/go-glyph/backend/gpu"
@@ -57,28 +56,31 @@ func main() {
 	}
 	defer sdl.Quit()
 
-	window, err := sdl.CreateWindow("glyph demo (Metal)",
+	window, err := sdl.CreateWindow("glyph demo (GPU)",
 		sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED,
 		screenW, screenH,
 		sdl.WINDOW_SHOWN|sdl.WINDOW_RESIZABLE|
-			sdl.WINDOW_ALLOW_HIGHDPI|gpu.WindowFlag())
+			sdl.WINDOW_ALLOW_HIGHDPI|gpuWindowFlag())
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer window.Destroy()
 
 	// Compute DPI scale from physical/logical size ratio.
-	physW, _ := gpu.WindowDrawableSize(unsafe.Pointer(window))
+	physW, _ := gpuDrawableSize(window)
 	winW, _ := window.GetSize()
 	dpiScale := float32(1.0)
 	if winW > 0 {
 		dpiScale = float32(physW) / float32(winW)
 	}
 
-	backend, err := gpu.New(unsafe.Pointer(window), dpiScale)
+	handle, cleanup := gpuInitHandle(window)
+	backend, err := gpu.New(handle, dpiScale)
 	if err != nil {
+		cleanup()
 		log.Fatal(err)
 	}
+	defer cleanup()
 	defer backend.Destroy()
 
 	ts, err := glyph.NewTextSystem(backend)
