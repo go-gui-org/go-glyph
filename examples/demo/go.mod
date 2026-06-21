@@ -3,8 +3,8 @@ module github.com/go-gui-org/go-glyph/examples/demo
 go 1.26
 
 require (
-	github.com/hajimehoshi/ebiten/v2 v2.9.9
 	github.com/go-gui-org/go-glyph v1.4.1
+	github.com/hajimehoshi/ebiten/v2 v2.9.9
 )
 
 replace github.com/go-gui-org/go-glyph => ../..
