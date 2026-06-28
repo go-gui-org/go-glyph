@@ -51,6 +51,7 @@ typedef struct {
     CGFloat advance;
     CGGlyph glyphID;     // resolved CGGlyph after shaping
     int     isRTL;       // 1 if glyph is from a right-to-left run
+    int     isColor;     // 1 if the run font carries color glyphs (emoji)
 } CTGlyphCluster;
 
 // ctShapeGlyphClusters shapes utf8Text with font and fills out[] with
@@ -98,15 +99,25 @@ static int ctShapeGlyphClusters(CTFontRef font, const char *utf8Text,
         // the primary font (wrong glyph-ID space), so we clear them to
         // force the text-based rendering path and correct cache keys.
         bool isFallback = false;
+        // Color-glyph (emoji) detection. CoreText resolves emoji
+        // presentation during shaping: VS16/default-emoji clusters fall
+        // back to a color font (Apple Color Emoji), whose run font carries
+        // the kCTFontTraitColorGlyphs symbolic trait; VS15 text-presentation
+        // clusters resolve to a monochrome font and stay false.
+        bool isColor = false;
         CFDictionaryRef runAttrs = CTRunGetAttributes(run);
-        if (runAttrs && primaryFamily) {
+        if (runAttrs) {
             CTFontRef runFont = (CTFontRef)CFDictionaryGetValue(
                 runAttrs, kCTFontAttributeName);
             if (runFont) {
-                CFStringRef runFamily = CTFontCopyFamilyName(runFont);
-                if (runFamily) {
-                    isFallback = !CFEqual(primaryFamily, runFamily);
-                    CFRelease(runFamily);
+                isColor = (CTFontGetSymbolicTraits(runFont) &
+                    kCTFontTraitColorGlyphs) != 0;
+                if (primaryFamily) {
+                    CFStringRef runFamily = CTFontCopyFamilyName(runFont);
+                    if (runFamily) {
+                        isFallback = !CFEqual(primaryFamily, runFamily);
+                        CFRelease(runFamily);
+                    }
                 }
             }
         }
@@ -165,6 +176,7 @@ static int ctShapeGlyphClusters(CTFontRef font, const char *utf8Text,
             out[total].advance    = adv[gi].width;
             out[total].glyphID    = isFallback ? 0 : glyphs[gi];
             out[total].isRTL      = isRTL;
+            out[total].isColor    = isColor ? 1 : 0;
             total++;
         }
         free(sortOrder);
@@ -432,6 +444,7 @@ type shapedCluster struct {
 	advance   float64
 	glyphID   uint16 // CGGlyph after GSUB (calt/liga) substitution
 	isRTL     bool
+	isColor   bool // run font carries color glyphs (emoji)
 }
 
 type charInfo struct {
@@ -442,6 +455,7 @@ type charInfo struct {
 	yShift  float64
 	xPad    float64
 	glyphID uint16 // resolved CGGlyph after shaping (0 = use text)
+	isColor bool   // color/emoji cluster — render in native color, skip tint
 }
 
 // buildUTF16ToByteSlice builds a mapping where result[utf16Pos] = UTF-8 byte
@@ -623,6 +637,7 @@ func shapeTextClusters(font ctFont, text string) []shapedCluster {
 			advance:   float64(out[i].advance),
 			glyphID:   uint16(out[i].glyphID),
 			isRTL:     out[i].isRTL != 0,
+			isColor:   out[i].isColor != 0,
 		}
 		if sc.byteLen > 0 {
 			clusterMap[sc.byteStart] = sc
@@ -725,6 +740,7 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 					byteI:   cl.byteStart,
 					byteL:   cl.byteLen,
 					glyphID: cl.glyphID,
+					isColor: cl.isColor,
 				})
 			}
 		}
@@ -909,6 +925,7 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 		itemStart := len(allGlyphs)
 		itemStartByte := startByteIdx
 		itemX := cx
+		itemIsColor := false
 
 		flushItem := func(endByte int) {
 			gc := len(allGlyphs) - itemStart
@@ -931,6 +948,7 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 				StartIndex:             itemStartByte,
 				Length:                 endByte - itemStartByte,
 				Color:                  baseColor,
+				UseOriginalColor:       itemIsColor,
 				UnderlineOffset:        2.0,
 				UnderlineThickness:     1.0,
 				StrikethroughOffset:    ascent * 0.35 * pixelScale,
@@ -994,6 +1012,26 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 			ch := chars[ci]
 			if ch.text == "\n" || ch.text == "\r" {
 				continue
+			}
+			// Split the item at a color/non-color boundary so color
+			// emoji runs carry UseOriginalColor (native color + GPU
+			// emoji scaling) while text runs stay tintable.
+			//
+			// itemStartByte/Length use ch.byteI from this visual-order
+			// walk, so for an emoji embedded in RTL text the resulting
+			// per-item byte range can be inverted. That range is
+			// best-effort metadata: the draw path keys off
+			// GlyphStart/GlyphCount, and the only StartIndex/Length
+			// consumer (GetFontNameAtIndex) is inert on CoreText items
+			// (FTFace==nil). itemX is still correct because cx advances
+			// in visual order regardless of script direction.
+			if ch.isColor != itemIsColor && len(allGlyphs) > itemStart {
+				flushItem(ch.byteI)
+				itemStartByte = ch.byteI
+				itemX = cx
+			}
+			if len(allGlyphs) == itemStart {
+				itemIsColor = ch.isColor
 			}
 			emitChar(ch, ci)
 		}
