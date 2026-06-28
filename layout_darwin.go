@@ -42,6 +42,53 @@ static CGFloat ctMeasureCString(CTFontRef font, const char *text) {
     }
 }
 
+// ctMeasureColorCString measures a C string's width and reports whether the
+// cluster resolves to a color-glyph (emoji) font. It builds a single CTLine,
+// the same one measurement already requires, so it adds no CTLine over plain
+// measurement. *isColor is set to 1 when any resolved run font carries
+// kCTFontTraitColorGlyphs, else 0. CoreText resolves emoji presentation when
+// shaping the line, so VS16/default-emoji clusters flag true while VS15
+// text-presentation clusters resolve to a monochrome font and stay false.
+static CGFloat ctMeasureColorCString(CTFontRef font, const char *text,
+    int *isColor) {
+    @autoreleasepool {
+        if (isColor) *isColor = 0;
+        CFStringRef str = CFStringCreateWithCString(NULL, text,
+            kCFStringEncodingUTF8);
+        if (!str) return 0;
+        CFStringRef keys[] = { kCTFontAttributeName };
+        CFTypeRef vals[] = { font };
+        CFDictionaryRef attrs = CFDictionaryCreate(NULL,
+            (const void **)keys, (const void **)vals, 1,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        CFAttributedStringRef astr = CFAttributedStringCreate(NULL, str, attrs);
+        CTLineRef line = CTLineCreateWithAttributedString(astr);
+        CGFloat width = CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+        if (isColor) {
+            CFArrayRef runs = CTLineGetGlyphRuns(line);
+            CFIndex n = runs ? CFArrayGetCount(runs) : 0;
+            for (CFIndex i = 0; i < n; i++) {
+                CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(runs, i);
+                CFDictionaryRef runAttrs = CTRunGetAttributes(run);
+                if (!runAttrs) continue;
+                CTFontRef runFont = (CTFontRef)CFDictionaryGetValue(
+                    runAttrs, kCTFontAttributeName);
+                if (runFont && (CTFontGetSymbolicTraits(runFont) &
+                    kCTFontTraitColorGlyphs) != 0) {
+                    *isColor = 1;
+                    break;
+                }
+            }
+        }
+        CFRelease(line);
+        CFRelease(astr);
+        CFRelease(attrs);
+        CFRelease(str);
+        return width;
+    }
+}
+
 // CTGlyphCluster describes one shaped glyph's character cluster span
 // (in UTF-16 code-unit indices), typographic advance, and resolved
 // glyph ID (after GSUB substitutions like calt/liga).
@@ -764,6 +811,7 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 			}
 
 			var w float64
+			var isColor bool
 			switch {
 			case cl.text == "\n" || cl.text == "\r":
 				w = 0
@@ -772,8 +820,16 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 				// caller-supplied reservation width directly.
 				w = objectWidth
 			default:
+				// Measure and probe color presentation in one CTLine.
+				// The override path measures graphemes individually, so
+				// the resolved emoji color font is invisible to the
+				// requested measureFont's traits; reading the line's run
+				// font recovers the signal that shapeTextClusters
+				// provides on the non-override path.
 				cs := C.CString(cl.text)
-				w = float64(C.ctMeasureCString(measureFont.ref, cs))
+				var ic C.int
+				w = float64(C.ctMeasureColorCString(measureFont.ref, cs, &ic))
+				isColor = ic != 0
 				C.free(unsafe.Pointer(cs))
 			}
 			totalW := w
@@ -784,6 +840,7 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 				text: cl.text, width: totalW,
 				byteI: cl.byteI, byteL: cl.byteL,
 				yShift: yShift, xPad: xPad,
+				isColor: isColor,
 			})
 		}
 	}

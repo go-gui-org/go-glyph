@@ -725,6 +725,80 @@ func TestLayoutDarwin_MixedTextEmoji_SplitsItems(t *testing.T) {
 	}
 }
 
+// TestLayoutRichText_ColorEmoji_SetsUseOriginalColor guards issue #2: the
+// rich-text override path measures graphemes individually (overrides != nil),
+// bypassing CTLine cluster shaping. It must still flag color/emoji runs so
+// emoji inside styled runs render in native color. VS16/default emoji
+// presentation is color; VS15 text presentation stays monochrome.
+func TestLayoutRichText_ColorEmoji_SetsUseOriginalColor(t *testing.T) {
+	ctx := newDarwinTestContext(t)
+	defer ctx.Free()
+
+	cfg := TextConfig{Style: TextStyle{FontName: "Sans 20"}}
+	cases := []struct {
+		name string
+		text string
+		want bool
+	}{
+		{"grinning face (default emoji)", "\U0001F600", true},
+		{"heart VS16 (emoji presentation)", "❤️", true},
+		{"heart VS15 (text presentation)", "❤︎", false},
+		{"plain ASCII", "A", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// A non-empty Style forces the override path in buildLayout.
+			rt := RichText{Runs: []StyleRun{
+				{Text: c.text, Style: TextStyle{Size: 20}},
+			}}
+			l, err := ctx.LayoutRichText(rt, cfg)
+			if err != nil {
+				t.Fatalf("LayoutRichText: %v", err)
+			}
+			if len(l.Items) == 0 {
+				t.Skip("no items produced")
+			}
+			if got := itemUsesOriginalColor(l); got != c.want {
+				t.Errorf("UseOriginalColor=%v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestLayoutRichText_MixedTextEmoji_SplitsItems verifies the override path
+// splits text adjacent to a color emoji into separate items so the text run
+// stays tintable while the emoji run carries UseOriginalColor.
+func TestLayoutRichText_MixedTextEmoji_SplitsItems(t *testing.T) {
+	ctx := newDarwinTestContext(t)
+	defer ctx.Free()
+
+	cfg := TextConfig{Style: TextStyle{FontName: "Sans 20"}}
+	rt := RichText{Runs: []StyleRun{
+		{Text: "hi\U0001F600there", Style: TextStyle{Size: 20}},
+	}}
+	l, err := ctx.LayoutRichText(rt, cfg)
+	if err != nil {
+		t.Fatalf("LayoutRichText: %v", err)
+	}
+	if len(l.Items) < 2 {
+		t.Fatalf("got %d items, want ≥2 (text/emoji split)", len(l.Items))
+	}
+	var colorItems, textItems int
+	for _, it := range l.Items {
+		if it.UseOriginalColor {
+			colorItems++
+		} else {
+			textItems++
+		}
+	}
+	if colorItems == 0 {
+		t.Error("no color item for the emoji run")
+	}
+	if textItems == 0 {
+		t.Error("no plain-text item for the surrounding text")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // buildLayout — WrapChar / WrapWordChar
 // ---------------------------------------------------------------------------
