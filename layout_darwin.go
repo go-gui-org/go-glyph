@@ -1151,6 +1151,7 @@ func (ctx *Context) buildVerticalLayout(text string, baseFont ctFont,
 	}
 
 	var allGlyphs []Glyph
+	var glyphIsColor []bool // aligned with allGlyphs: color/emoji cluster
 	var charRects []CharRect
 	charRectByIndex := make(map[int]int)
 	var logAttrs []LogAttr
@@ -1189,8 +1190,15 @@ func (ctx *Context) buildVerticalLayout(text string, baseFont ctFont,
 			}
 		}
 
+		// Measure and probe color presentation in one CTLine. The
+		// vertical path measures graphemes individually like the override
+		// path, so reading the resolved line run font's color trait
+		// recovers the emoji signal that shapeTextClusters provides on the
+		// horizontal path. CoreText resolves emoji presentation here, so
+		// VS16/default-emoji flag true while VS15 stays monochrome.
 		cs := C.CString(cl.text)
-		charW := float64(C.ctMeasureCString(measureFont.ref, cs))
+		var ic C.int
+		charW := float64(C.ctMeasureColorCString(measureFont.ref, cs, &ic))
 		C.free(unsafe.Pointer(cs))
 		centerX := (lineHeight - charW) / 2.0
 
@@ -1206,6 +1214,7 @@ func (ctx *Context) buildVerticalLayout(text string, baseFont ctFont,
 			YAdvance:  -lineHeight * pixelScale,
 			GlyphID:   gid,
 		})
+		glyphIsColor = append(glyphIsColor, ic != 0)
 
 		crIdx := len(charRects)
 		charRects = append(charRects, CharRect{
@@ -1233,22 +1242,43 @@ func (ctx *Context) buildVerticalLayout(text string, baseFont ctFont,
 	glyphCount := len(allGlyphs)
 	totalH := penY
 
+	// Split into items at color/non-color boundaries so color emoji runs
+	// carry UseOriginalColor (native color + GPU emoji scaling) while text
+	// runs stay tintable, mirroring the horizontal path. Each item's Y is
+	// its first glyph's pen position: the draw path starts at item.Y and
+	// accumulates each glyph's YAdvance (-lineHeight), so glyph s sits at
+	// (fontAscent + s*lineHeight). X is the shared column baseline.
 	var items []Item
-	if glyphCount > 0 {
+	emitItem := func(start, end int) {
+		if end <= start {
+			return
+		}
+		firstByte := int(allGlyphs[start].Index)
+		lastByte := int(allGlyphs[end-1].Index)
+		lastLen := int(allGlyphs[end-1].Codepoint)
 		items = append(items, Item{
-			Style:      cfg.Style,
-			Width:      lineHeight * pixelScale,
-			X:          fontAscent * pixelScale,
-			Y:          fontAscent * pixelScale,
-			Ascent:     fontAscent * pixelScale,
-			Descent:    fontDescent * pixelScale,
-			GlyphStart: 0,
-			GlyphCount: glyphCount,
-			StartIndex: 0,
-			Length:     len(text),
-			Color:      baseColor,
+			Style:            cfg.Style,
+			Width:            lineHeight * pixelScale,
+			X:                fontAscent * pixelScale,
+			Y:                (fontAscent + float64(start)*lineHeight) * pixelScale,
+			Ascent:           fontAscent * pixelScale,
+			Descent:          fontDescent * pixelScale,
+			GlyphStart:       start,
+			GlyphCount:       end - start,
+			StartIndex:       firstByte,
+			Length:           lastByte + lastLen - firstByte,
+			Color:            baseColor,
+			UseOriginalColor: glyphIsColor[start],
 		})
 	}
+	itemStart := 0
+	for i := 1; i < glyphCount; i++ {
+		if glyphIsColor[i] != glyphIsColor[itemStart] {
+			emitItem(itemStart, i)
+			itemStart = i
+		}
+	}
+	emitItem(itemStart, glyphCount)
 
 	lines := []Line{{
 		StartIndex: 0,
