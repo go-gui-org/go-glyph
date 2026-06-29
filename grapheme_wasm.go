@@ -5,6 +5,8 @@ package glyph
 import (
 	"syscall/js"
 	"unicode/utf8"
+
+	"github.com/rivo/uniseg"
 )
 
 // graphemeCluster represents one user-perceived character.
@@ -44,12 +46,13 @@ func getGraphemeSegmenter() (js.Value, bool) {
 }
 
 // segmentGraphemes splits text into grapheme clusters using the
-// browser's Intl.Segmenter API. Falls back to rune-by-rune
-// splitting when the API is unavailable.
+// browser's Intl.Segmenter API. Falls back to rivo/uniseg for
+// UAX #29 segmentation when the API is unavailable, matching the
+// android/windows backends.
 func segmentGraphemes(text string) []graphemeCluster {
 	seg, ok := getGraphemeSegmenter()
 	if !ok {
-		return segmentByRune(text)
+		return segmentByUniseg(text)
 	}
 	segments := seg.Call("segment", text)
 	arr := js.Global().Get("Array").Call("from", segments)
@@ -68,14 +71,19 @@ func segmentGraphemes(text string) []graphemeCluster {
 	return clusters
 }
 
-// segmentByRune is the fallback when Intl.Segmenter is
-// unavailable. Each rune becomes its own cluster.
-func segmentByRune(text string) []graphemeCluster {
+// segmentByUniseg is the fallback when Intl.Segmenter is
+// unavailable. Uses rivo/uniseg for UAX #29 grapheme cluster
+// segmentation (no cgo, compiles under js && wasm).
+func segmentByUniseg(text string) []graphemeCluster {
+	if len(text) == 0 {
+		return nil
+	}
 	clusters := make([]graphemeCluster, 0,
 		utf8.RuneCountInString(text))
+	gr := uniseg.NewGraphemes(text)
 	byteIdx := 0
-	for _, r := range text {
-		s := string(r)
+	for gr.Next() {
+		s := gr.Str()
 		clusters = append(clusters, graphemeCluster{
 			text:  s,
 			byteI: byteIdx,
