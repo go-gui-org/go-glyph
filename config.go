@@ -23,6 +23,13 @@ type TextStyle struct {
 	// LetterSpacing is extra spacing between characters (points).
 	LetterSpacing float32
 
+	// EmojiBoxWidth, when > 0, is the target box width (logical px) that a
+	// color/emoji glyph should fill. Grid callers (terminals) set it to
+	// cells×cellWidth so emoji scale to fill their reserved cell box —
+	// preserving aspect, centered — instead of the font's narrower natural
+	// emoji advance. 0 keeps the default advance-clamped sizing.
+	EmojiBoxWidth float32
+
 	// StrokeWidth is outline width in points (0 = no stroke).
 	StrokeWidth float32
 	Color       Color

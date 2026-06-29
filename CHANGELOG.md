@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-06-28
+
+### Added
+
+- **`TextStyle.EmojiBoxWidth`:** grid callers (e.g. terminals) can set a target
+  cell-box width (logical px) so color/emoji glyphs scale to fill their reserved
+  cells at any DPI, instead of the font's narrower natural emoji advance.
+  Implemented for the CoreText (Metal), pango (Linux) and Android draw paths;
+  Windows carries a documented TODO; 0 keeps the previous sizing.
+
+### Fixed
+
+- **Emoji ZWJ ligatures:** couple/kiss sequences that CoreText decomposes into a
+  zero-advance lead fragment plus a trailing glyph are now coalesced before
+  per-cluster re-rasterization, so the whole grapheme reforms its ligature
+  instead of rendering components (e.g. a standalone heart overflowing the cell).
+
 ## [1.11.0] - 2026-06-21
 
 ### Added
