@@ -259,6 +259,16 @@ func (r *Renderer) emitPlacedQuad(cg CachedGlyph, placement GlyphPlacement,
 	h := float32(cg.Height) * scaleInv
 
 	// GPU emoji scaling.
+	//
+	// TODO(emoji-box-fill): Windows does not yet honor TextStyle.EmojiBoxWidth
+	// (the grid box-fill hint implemented in draw.go/draw_darwin.go/
+	// draw_android.go). Mirroring it here is a real port, not a copy: this
+	// path is emitPlacedQuad, whose signature carries only ascent/descent/
+	// xAdvance — not item.Style — and uses w/h/dx (no drawOriginX). To match,
+	// thread EmojiBoxWidth into emitPlacedQuad (and its caller) and, when > 0,
+	// scale to min(boxW/w, targetH/h) centered in the box. Until then Windows
+	// keeps the advance-clamped sizing; EmojiBoxWidth is ignored (graceful).
+	// go-term targets only macOS + Linux, so this is unblocked for it.
 	if useOriginalColor && h > 0 {
 		targetH := ascent + descent
 		if h != targetH {
@@ -292,4 +302,3 @@ func (r *Renderer) emitPlacedQuad(cg CachedGlyph, placement GlyphPlacement,
 		r.backend.DrawTexturedQuad(page.TextureID, src, dst, color)
 	}
 }
-

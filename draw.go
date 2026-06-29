@@ -152,7 +152,20 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 				// GPU emoji scaling.
 				if item.UseOriginalColor && glyphH > 0 {
 					targetH := float32(item.Ascent + item.Descent)
-					if glyphH != targetH {
+					boxW := item.Style.EmojiBoxWidth
+					switch {
+					case boxW > 0 && glyphW > 0:
+						// Grid caller: fill the reserved cell box (boxW × line
+						// height), preserving aspect, centered on both axes, so
+						// wide glyphs (flags) and square glyphs (people) fill the
+						// same width instead of the font's narrower advance.
+						emojiScale := min(boxW/glyphW, targetH/glyphH)
+						glyphW *= emojiScale
+						glyphH *= emojiScale
+						drawX = drawOriginX*scaleInv + (boxW-glyphW)*0.5
+						drawY = drawOriginY*scaleInv - float32(item.Ascent) +
+							(targetH-glyphH)*0.5
+					case glyphH != targetH:
 						emojiScale := targetH / glyphH
 						adv := float32(g.XAdvance)
 						if adv > 0 && glyphW*emojiScale > adv {
