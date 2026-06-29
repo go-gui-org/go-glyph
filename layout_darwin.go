@@ -748,7 +748,45 @@ func shapeTextClusters(font ctFont, text string) []shapedCluster {
 		}
 		i = j
 	}
-	return merged
+
+	// Merge emoji ligature fragments. CoreText sometimes decomposes a single
+	// ligated color emoji (a couple/kiss ZWJ sequence such as
+	// 👩🏿‍❤️‍👨🏻) into a leading zero-advance glyph plus a trailing glyph that
+	// carries the advance. Re-rasterizing each fragment's byte substring on
+	// its own re-shapes an incomplete ZWJ sequence — the lead fragment renders
+	// as its components (e.g. a full-size standalone heart) that overflow the
+	// cell. Coalesce a zero-advance color cluster forward into the following
+	// cluster(s), up to and including the first one with a positive advance,
+	// so the whole grapheme re-renders as one CTLine and CoreText reforms the
+	// ligature. The summed advance is preserved; glyphID stays 0 (text path).
+	ligMerged := make([]shapedCluster, 0, len(merged))
+	for i := 0; i < len(merged); {
+		sc := merged[i]
+		if !sc.isColor || sc.advance != 0 || i+1 >= len(merged) {
+			ligMerged = append(ligMerged, sc)
+			i++
+			continue
+		}
+		j := i
+		totalAdv := 0.0
+		for j < len(merged) {
+			cl := merged[j]
+			totalAdv += cl.advance
+			j++
+			if cl.advance > 0 || !cl.isColor {
+				break
+			}
+		}
+		last := merged[j-1]
+		ligMerged = append(ligMerged, shapedCluster{
+			byteStart: sc.byteStart,
+			byteLen:   last.byteStart + last.byteLen - sc.byteStart,
+			advance:   totalAdv,
+			isColor:   true,
+		})
+		i = j
+	}
+	return ligMerged
 }
 
 // buildLayout creates a Layout from measured text with word wrapping.
