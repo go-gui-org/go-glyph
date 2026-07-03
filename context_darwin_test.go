@@ -111,7 +111,7 @@ func BenchmarkFontMetrics(b *testing.B) {
 
 // BenchmarkLayoutText measures the uncached layout path (TextSystem path
 // including validation and full break/shape pipeline). This is the primary
-// entry point documented in ROADMAP.md.
+// public entry point.
 func BenchmarkLayoutText(b *testing.B) {
 	ts, err := NewTextSystem(newMockBackend())
 	if err != nil {

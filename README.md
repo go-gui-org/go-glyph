@@ -555,6 +555,12 @@ TextSystem
 
 See the [DeepWiki glossary](https://deepwiki.com/mike-ward/go-glyph/8-glossary) for API reference.
 
+## Roadmap
+
+Planning lives in [GitHub Issues](../../issues) and the go-gui-org project
+board, not a checked-in roadmap file. Browse open issues for current and
+planned work.
+
 ## License
 
 See [LICENSE](LICENSE) for details.
