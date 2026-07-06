@@ -142,14 +142,22 @@ func (ctx *Context) discoverSystemFonts() {
 		"/usr/share/fonts",
 	}
 
+	// Script-fallback candidates, collected during the walk and
+	// assembled in priority order afterwards. Color emoji is tried
+	// before CJK so colored glyphs win over monochrome coverage.
+	var emojiPaths, cjkPaths []string
+	seenFallback := map[string]bool{}
+
 	for _, dir := range dirs {
 		_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return nil
 			}
 			lower := strings.ToLower(path)
+			// .ttc covers OpenType collections (Noto CJK ships this way).
 			if !strings.HasSuffix(lower, ".ttf") &&
-				!strings.HasSuffix(lower, ".otf") {
+				!strings.HasSuffix(lower, ".otf") &&
+				!strings.HasSuffix(lower, ".ttc") {
 				return nil
 			}
 
@@ -200,7 +208,46 @@ func (ctx *Context) discoverSystemFonts() {
 					ctx.fontPaths["sans-serif"] = path
 				}
 			}
+
+			// Collect script-fallback fonts (one path per family).
+			if !seenFallback[family] {
+				switch {
+				case isEmojiFamily(lower):
+					emojiPaths = append(emojiPaths, path)
+					seenFallback[family] = true
+				case isCJKFamily(lower):
+					cjkPaths = append(cjkPaths, path)
+					seenFallback[family] = true
+				}
+			}
 			return nil
 		})
 	}
+
+	ctx.fallbackPaths = append(ctx.fallbackPaths, emojiPaths...)
+	ctx.fallbackPaths = append(ctx.fallbackPaths, cjkPaths...)
+}
+
+// isEmojiFamily reports whether a lower-cased family name is a color
+// emoji font (e.g. "Noto Color Emoji").
+func isEmojiFamily(lowerFamily string) bool {
+	return strings.Contains(lowerFamily, "emoji")
+}
+
+// isCJKFamily reports whether a lower-cased family name covers CJK
+// scripts, matching the common Linux CJK font packages.
+func isCJKFamily(lowerFamily string) bool {
+	needles := []string{
+		"cjk", "han",
+		"wenquanyi", "wqy", "uming", "ukai", "ar pl",
+		"noto sans jp", "noto serif jp",
+		"noto sans sc", "noto sans tc", "noto sans kr",
+		"droid sans fallback", "nanum", "ipa", "vl gothic", "takao",
+	}
+	for _, n := range needles {
+		if strings.Contains(lowerFamily, n) {
+			return true
+		}
+	}
+	return false
 }
