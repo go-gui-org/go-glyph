@@ -811,7 +811,16 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 	// code points when a ligature was formed.
 	var chars []charInfo
 	if overrides == nil {
-		if sc := shapeTextClusters(baseFont, text); len(sc) > 0 {
+		// Pure-ASCII monospace runs skip the CoreText shaper entirely
+		// (no attributed string, no CTLine, no CGo shaping round trip):
+		// glyphs and fixed advances come from a cached ASCII table. The
+		// clusters are assembled into the Layout by the identical path
+		// below, so the result is equivalent to the shaper's.
+		sc, fast := ctx.tryASCIIClusters(baseFont, cfg, text)
+		if !fast {
+			sc = shapeTextClusters(baseFont, text)
+		}
+		if len(sc) > 0 {
 			chars = make([]charInfo, 0, len(sc))
 			for _, cl := range sc {
 				clText := text[cl.byteStart : cl.byteStart+cl.byteLen]
