@@ -1,4 +1,4 @@
-//go:build android
+//go:build android || (linux && !glyph_pango)
 
 package glyph
 
@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/rivo/uniseg"
 )
 
 // charFontOverride holds per-character font and position adjustments
@@ -273,6 +275,26 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		}
 	}
 
+	// Precompute UAX #14 line-break opportunities for CJK and non-space wrap.
+	canBreakBefore := make([]bool, len(chars))
+	if len(chars) > 1 {
+		byteToChar := make(map[int]int, len(chars))
+		for i, ch := range chars {
+			byteToChar[ch.byteI] = i
+		}
+		tb := []byte(text)
+		consumed := 0
+		state := -1
+		for len(tb) > 0 {
+			var seg []byte
+			seg, tb, _, state = uniseg.FirstLineSegment(tb, state)
+			consumed += len(seg)
+			if ci, ok := byteToChar[consumed]; ok {
+				canBreakBefore[ci] = true
+			}
+		}
+	}
+
 	// Word-wrap into lines.
 	wrapWidth := float64(-1)
 	if cfg.Block.Width > 0 {
@@ -287,6 +309,8 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 	lineStart := 0
 	lineW := float64(0)
 	lastSpace := -1
+	lastCJKBreak := -1
+	var lastCJKBreakW float64
 
 	for i, ch := range chars {
 		if ch.text == "\n" {
@@ -294,10 +318,14 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			lineStart = i + 1
 			lineW = 0
 			lastSpace = -1
+			lastCJKBreak = -1
 			continue
 		}
 		if ch.text == " " {
 			lastSpace = i
+		} else if i > 0 && canBreakBefore[i] {
+			lastCJKBreak = i
+			lastCJKBreakW = lineW
 		}
 
 		newW := lineW + ch.width
@@ -318,6 +346,20 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 						lineW += chars[j].width
 					}
 					lastSpace = -1
+					lastCJKBreak = -1
+					continue
+				}
+				if lastCJKBreak >= lineStart {
+					lines = append(lines, lineInfo{
+						lineStart, lastCJKBreak, lastCJKBreakW,
+					})
+					lineStart = lastCJKBreak
+					lineW = 0
+					for j := lineStart; j <= i; j++ {
+						lineW += chars[j].width
+					}
+					lastSpace = -1
+					lastCJKBreak = -1
 					continue
 				}
 			}
@@ -327,6 +369,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				lineStart = i
 				lineW = ch.width
 				lastSpace = -1
+				lastCJKBreak = -1
 				continue
 			}
 		}
@@ -334,6 +377,12 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 	}
 	if lineStart <= len(chars) {
 		lines = append(lines, lineInfo{lineStart, len(chars), lineW})
+	}
+
+	// Build bidi char info once for all lines.
+	bidiChars := make([]charBidiInfo, len(chars))
+	for i, ch := range chars {
+		bidiChars[i] = charBidiInfo{byteI: ch.byteI, byteL: ch.byteL}
 	}
 
 	// Build Layout structures.
@@ -433,7 +482,15 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			itemStart = len(allGlyphs)
 		}
 
-		for ci := li.startChar; ci < li.endChar; ci++ {
+		order := visualOrderForLine(text, bidiChars, li.startChar, li.endChar)
+		if len(order) == 0 {
+			order = make([]int, 0, li.endChar-li.startChar)
+			for ci := li.startChar; ci < li.endChar; ci++ {
+				order = append(order, ci)
+			}
+		}
+
+		for _, ci := range order {
 			ch := chars[ci]
 			if ch.text == "\n" {
 				continue

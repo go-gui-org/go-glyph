@@ -1,8 +1,9 @@
 # Go-Glyph lint configuration.
 # Run: golangci-lint run ./...
 #
-# On Linux CI the Pango backend path compiles; files tagged
-# darwin / android / windows / wasm are excluded by the build system.
+# On Linux CI the default FreeType+HarfBuzz backend path compiles
+# (*_ft.go); files tagged darwin / windows / wasm and the opt-in
+# Pango path (-tags glyph_pango) are excluded by the build system.
 #
 # See https://golangci-lint.run for documentation.
 

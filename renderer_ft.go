@@ -1,10 +1,9 @@
-//go:build android
+//go:build android || (linux && !glyph_pango)
 
 package glyph
 
 import (
 	"math"
-	"unsafe"
 )
 
 // Renderer rasterizes glyphs via FreeType, manages the glyph
@@ -232,12 +231,6 @@ func (r *Renderer) removePageKey(page int, key uint64) {
 		}
 	}
 }
-
-// ensureStroker is a no-op on Android (uses FT stroker directly).
-func (r *Renderer) ensureStroker(_ unsafe.Pointer) {}
-
-// configureStroker is a no-op on Android.
-func (r *Renderer) configureStroker(_ int64) {}
 
 func (r *Renderer) touchPage(cg CachedGlyph) {
 	if cg.Page >= 0 && cg.Page < len(r.atlas.Pages) {

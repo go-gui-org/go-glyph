@@ -1,7 +1,9 @@
 package glyph
 
 import (
+	"fmt"
 	"math"
+	"os"
 	"slices"
 	"time"
 )
@@ -21,8 +23,9 @@ type TextSystem struct {
 	ctx             *Context
 	renderer        *Renderer
 	cache           map[uint64]*cachedLayout
-	evictionAge     int64 // Milliseconds. Default 5000.
-	maxCacheEntries int   // Max layout cache entries. Default 8192.
+	evictionAge     int64    // Milliseconds. Default 5000.
+	maxCacheEntries int      // Max layout cache entries. Default 8192.
+	tempFontFiles   []string // Temp files backing AddFontBytes fonts.
 }
 
 // NewTextSystem creates a TextSystem with default atlas size (1024x1024).
@@ -83,6 +86,10 @@ func (ts *TextSystem) Free() {
 		ts.ctx.Free()
 		ts.ctx = nil
 	}
+	for _, p := range ts.tempFontFiles {
+		_ = os.Remove(p)
+	}
+	ts.tempFontFiles = nil
 	ts.cache = nil
 }
 
@@ -148,6 +155,34 @@ func (ts *TextSystem) AddFontFile(path string) error {
 	if err := ts.ctx.AddFontFile(path); err != nil {
 		return err
 	}
+	clear(ts.cache)
+	return nil
+}
+
+// AddFontBytes registers an in-memory font (TTF/OTF), e.g. one loaded
+// via go:embed. This enables single-executable / distroless builds
+// that ship their own font instead of relying on a system-installed
+// one. The bytes are persisted to a private temp file that is removed
+// when Free is called, so the font flows through the same load path as
+// AddFontFile. Requires a writable temp dir (os.TempDir); it is a
+// no-op under wasm (use the browser FontFace API instead).
+// Clears the layout cache to prevent stale FT_Face pointers.
+func (ts *TextSystem) AddFontBytes(data []byte) error {
+	if len(data) == 0 {
+		return fmt.Errorf("glyph: empty font data in AddFontBytes")
+	}
+	path, err := writeTempFontFile(data)
+	if err != nil {
+		return err
+	}
+	if path == "" {
+		return nil // wasm: no filesystem-backed fonts.
+	}
+	if err := ts.ctx.AddFontFile(path); err != nil {
+		_ = os.Remove(path)
+		return err
+	}
+	ts.tempFontFiles = append(ts.tempFontFiles, path)
 	clear(ts.cache)
 	return nil
 }
