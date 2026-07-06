@@ -35,6 +35,9 @@ type Context struct {
 	scaleFactor float32
 	scaleInv    float32
 	metrics     ctMetricsCache
+	// asciiTables memoizes per-font ASCII glyph/advance tables for the
+	// pure-ASCII monospace fast path (see ascii_fastpath_darwin.go).
+	asciiTables map[ctMetricsKey]*asciiGlyphTable
 }
 
 // NewContext creates an iOS text context.
@@ -46,12 +49,14 @@ func NewContext(scaleFactor float32) (*Context, error) {
 		scaleFactor: scaleFactor,
 		scaleInv:    1.0 / scaleFactor,
 		metrics:     newCTMetricsCache(32),
+		asciiTables: make(map[ctMetricsKey]*asciiGlyphTable, asciiTableCap),
 	}, nil
 }
 
 // Free releases resources.
 func (ctx *Context) Free() {
 	ctx.metrics = ctMetricsCache{}
+	ctx.asciiTables = nil
 }
 
 // ScaleFactor returns the DPI scale factor.
