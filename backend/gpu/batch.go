@@ -1,6 +1,7 @@
-// Package gpu provides a raw Metal DrawBackend for the glyph
-// text rendering library. SDL2 is used only for window/events;
-// rendering bypasses SDL2's renderer entirely.
+// Package gpu provides a raw GPU DrawBackend for the glyph text
+// rendering library: Metal on macOS, native GLX/OpenGL on Linux, and
+// OpenGL on Windows. The caller owns the window; gpu.New takes a native
+// handle and renders into it.
 package gpu
 
 // Vertex matches the MSL vertex layout (20 bytes).

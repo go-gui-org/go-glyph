@@ -3,9 +3,8 @@
 package gpu
 
 /*
-#cgo CFLAGS: -I/usr/include/SDL2 -D_REENTRANT
-#cgo LDFLAGS: -lSDL2 -lGL
-#include "gl_sdl.h"
+#cgo pkg-config: gl x11
+#include "gl_glx.h"
 */
 import "C"
 import (
@@ -13,13 +12,24 @@ import (
 	"unsafe"
 )
 
+// X11Handle identifies a caller-owned X11 window for the GLX backend.
+// Callers pass unsafe.Pointer(&X11Handle{...}) as gpu.New's nativeWindow.
+type X11Handle struct {
+	Display unsafe.Pointer // Xlib Display*
+	Window  uintptr        // X11 Window XID
+}
+
 // gpuCtx wraps the opaque C GLCtx pointer.
 type gpuCtx struct {
 	ptr *C.GLCtx
 }
 
-func gpuInitGo(sdlWin unsafe.Pointer, dpiScale float32) (*gpuCtx, error) {
-	ctx := C.glCtxInit(sdlWin, C.float(dpiScale))
+func gpuInitGo(nativeWindow unsafe.Pointer, dpiScale float32) (*gpuCtx, error) {
+	h := (*X11Handle)(nativeWindow)
+	if h == nil || h.Display == nil || h.Window == 0 {
+		return nil, fmt.Errorf("gpu: nativeWindow must be a valid *X11Handle")
+	}
+	ctx := C.glCtxInit(h.Display, C.ulong(h.Window), C.float(dpiScale))
 	if ctx == nil {
 		return nil, fmt.Errorf("gpu: glCtxInit failed")
 	}
@@ -78,17 +88,4 @@ func (m *gpuCtx) destroy() {
 		C.glCtxDestroy(m.ptr)
 		m.ptr = nil
 	}
-}
-
-// WindowFlag returns SDL_WINDOW_OPENGL.
-func WindowFlag() uint32 {
-	return 0x00000002 // SDL_WINDOW_OPENGL
-}
-
-// WindowDrawableSize returns the physical drawable size for
-// an SDL2 OpenGL window. sdlWindow is unsafe.Pointer to SDL_Window.
-func WindowDrawableSize(sdlWindow unsafe.Pointer) (int, int) {
-	var w, h C.int
-	C.SDL_GL_GetDrawableSize((*C.SDL_Window)(sdlWindow), &w, &h)
-	return int(w), int(h)
 }

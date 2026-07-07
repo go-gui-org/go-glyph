@@ -10,7 +10,8 @@ import (
 // Backend implements glyph.DrawBackend using a GPU backend via CGo.
 //
 // On macOS, rendering uses Metal into a caller-provided CAMetalLayer.
-// On Linux and Windows, rendering uses OpenGL into an SDL2 window.
+// On Linux, rendering uses a native GLX OpenGL context on a caller X11
+// window. On Windows, rendering uses OpenGL into an SDL2 window.
 type Backend struct {
 	gpu      *gpuCtx
 	widths   map[glyph.TextureID]int
@@ -23,7 +24,8 @@ type Backend struct {
 //
 // nativeWindow is platform-dependent:
 //   - macOS: unsafe.Pointer to CAMetalLayer
-//   - Linux / Windows: unsafe.Pointer to SDL_Window
+//   - Linux: unsafe.Pointer to a gpu.X11Handle{Display, Window}
+//   - Windows: unsafe.Pointer to SDL_Window
 //
 // dpiScale is physical pixels / logical pixels.
 func New(nativeWindow unsafe.Pointer, dpiScale float32) (*Backend, error) {
