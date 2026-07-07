@@ -1,4 +1,4 @@
-//go:build android
+//go:build linux && !android && !glyph_pango
 
 package glyph
 
@@ -109,7 +109,7 @@ type ftFont struct {
 func resolveFTFontParams(style TextStyle, scaleFactor float32) (
 	family string, size float64, bold, italic bool,
 ) {
-	family = resolveFontFamilyAndroid(style.FontName)
+	family = resolveFontFamilyLinux(style.FontName)
 
 	rawSize := style.Size
 	if rawSize <= 0 {
@@ -137,8 +137,8 @@ func resolveFTFontParams(style TextStyle, scaleFactor float32) (
 }
 
 // newFTFont creates a FreeType+HarfBuzz font from a TextStyle.
-// Falls back to the regular variant, then to Roboto-Regular if
-// the requested style cannot be opened.
+// Falls back to the regular variant, then to sans-serif if the
+// requested style cannot be opened.
 func newFTFont(lib C.FT_Library, fontPaths map[string]string,
 	style TextStyle, scaleFactor float32) ftFont {
 
@@ -161,7 +161,7 @@ func newFTFont(lib C.FT_Library, fontPaths map[string]string,
 }
 
 // fontFallbackPaths returns a list of font paths to try in order:
-// requested style → regular variant → Roboto-Regular fallback.
+// requested style → regular variant → sans-serif fallback.
 func fontFallbackPaths(fontPaths map[string]string,
 	family string, bold, italic bool) []string {
 
@@ -175,9 +175,10 @@ func fontFallbackPaths(fontPaths map[string]string,
 		}
 	}
 
-	const fallback = "/system/fonts/Roboto-Regular.ttf"
-	if paths[len(paths)-1] != fallback {
-		paths = append(paths, fallback)
+	if fallback, ok := fontPaths["sans-serif"]; ok {
+		if paths[len(paths)-1] != fallback {
+			paths = append(paths, fallback)
+		}
 	}
 	return paths
 }
@@ -250,20 +251,20 @@ func (f ftFont) measureString(text string) float64 {
 	return float64(C.ftMeasureString(f.hb, cs, C.int(len(text))))
 }
 
-// resolveFontFamilyAndroid maps generic Pango-style font names to
-// Android system font families.
-func resolveFontFamilyAndroid(fontName string) string {
+// resolveFontFamilyLinux maps generic font names to Linux font
+// families (DejaVu / Liberation / Noto).
+func resolveFontFamilyLinux(fontName string) string {
 	family := parseFamilyFromFontName(fontName)
 	if family == "" {
-		return "Roboto"
+		return "DejaVu Sans"
 	}
 	switch strings.ToLower(family) {
 	case "sans", "sans-serif", "system":
-		return "Roboto"
+		return "DejaVu Sans"
 	case "serif":
-		return "NotoSerif"
+		return "DejaVu Serif"
 	case "monospace", "mono":
-		return "DroidSansMono"
+		return "DejaVu Sans Mono"
 	default:
 		return family
 	}
@@ -296,11 +297,11 @@ func resolveFontPath(fontPaths map[string]string,
 	if p, ok := fontPaths[family]; ok {
 		return p
 	}
-	// Last resort: Roboto-Regular.
-	if p, ok := fontPaths["Roboto-Regular"]; ok {
+	// Last resort: whatever sans-serif resolved to.
+	if p, ok := fontPaths["sans-serif"]; ok {
 		return p
 	}
-	return "/system/fonts/Roboto-Regular.ttf"
+	return ""
 }
 
 // parseSizeFromFontName extracts trailing numeric size from Pango

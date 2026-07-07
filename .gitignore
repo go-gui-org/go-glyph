@@ -45,6 +45,9 @@ vendor/
 deps/
 .build_android_deps/
 
+# tokensave code-graph tool state
+.tokensave/
+
 # Claude Code
 .claude/
 

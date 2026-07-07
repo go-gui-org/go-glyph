@@ -1,4 +1,4 @@
-//go:build android
+//go:build android || (linux && !glyph_pango)
 
 package glyph
 
@@ -389,6 +389,10 @@ var ftFontPathsSingleton map[string]string
 // scripts not covered by the primary font (CJK, Arabic, etc.).
 var ftScriptFallbacksSingleton []string
 
+// ftColorFallbacksSingleton holds color-emoji font paths (CBDT/CBLC)
+// used to render UseOriginalColor glyphs in their own colors.
+var ftColorFallbacksSingleton []string
+
 // setFTLib stores the library handle for bitmap rendering. Called
 // by NewContext.
 func setFTLib(lib C.FT_Library) {
@@ -405,6 +409,12 @@ func setFTFontPaths(paths map[string]string) {
 // not in the primary font.
 func setFTScriptFallbacks(paths []string) {
 	ftScriptFallbacksSingleton = paths
+}
+
+// setFTColorFallbacks stores color-emoji font paths for rendering
+// UseOriginalColor glyphs. Called by NewContext.
+func setFTColorFallbacks(paths []string) {
+	ftColorFallbacksSingleton = paths
 }
 
 // loadGlyphFT rasterizes a character using FreeType.
@@ -432,16 +442,36 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, item Item,
 	var w, h, left, top C.int
 	var data unsafe.Pointer
 
+	// Color-emoji items resolve against the script fallbacks first
+	// (color fonts are ordered ahead of CJK). The primary text font
+	// often carries a monochrome glyph for the same codepoint, which
+	// would otherwise win and render as a tinted/blank box.
+	if item.UseOriginalColor {
+		for _, fp := range ftColorFallbacksSingleton {
+			cPath := C.CString(fp)
+			data = C.ftRenderGlyph(ftLibSingleton, cPath,
+				C.double(fontSize), 0, 0,
+				subpixelShift, cText, C.int(len(ch)),
+				&w, &h, &left, &top, 1)
+			C.free(unsafe.Pointer(cPath))
+			if data != nil {
+				break
+			}
+		}
+	}
+
 	// Try primary font paths (rejectNotdef=1).
-	for _, fontPath := range paths {
-		cPath := C.CString(fontPath)
-		data = C.ftRenderGlyph(ftLibSingleton, cPath,
-			C.double(fontSize), boldInt, italicInt,
-			subpixelShift, cText, C.int(len(ch)),
-			&w, &h, &left, &top, 1)
-		C.free(unsafe.Pointer(cPath))
-		if data != nil {
-			break
+	if data == nil {
+		for _, fontPath := range paths {
+			cPath := C.CString(fontPath)
+			data = C.ftRenderGlyph(ftLibSingleton, cPath,
+				C.double(fontSize), boldInt, italicInt,
+				subpixelShift, cText, C.int(len(ch)),
+				&w, &h, &left, &top, 1)
+			C.free(unsafe.Pointer(cPath))
+			if data != nil {
+				break
+			}
 		}
 	}
 

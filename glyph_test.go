@@ -1,4 +1,4 @@
-//go:build !js && !android && !windows && (!darwin || glyph_pango)
+//go:build !js && !android && !windows && (!darwin || glyph_pango) && (!linux || glyph_pango)
 
 package glyph
 
@@ -467,6 +467,23 @@ func TestTextSystemAddFontFile(t *testing.T) {
 	err = ts.AddFontFile("")
 	if err == nil {
 		t.Error("expected error for empty path")
+	}
+}
+
+func TestTextSystemAddFontBytes(t *testing.T) {
+	backend := newRecordingBackend()
+	ts, err := NewTextSystem(backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Free()
+
+	if err := ts.AddFontBytes(nil); err == nil {
+		t.Error("expected error for empty font data")
+	}
+	if len(ts.tempFontFiles) != 0 {
+		t.Errorf("no temp files expected after failure, got %d",
+			len(ts.tempFontFiles))
 	}
 }
 
