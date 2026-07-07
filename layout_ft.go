@@ -13,10 +13,11 @@ import (
 // charFontOverride holds per-character font and position adjustments
 // for rich text runs.
 type charFontOverride struct {
-	font   ftFont
-	style  TextStyle
-	yShift float64
-	xPad   float64
+	font    ftFont
+	style   TextStyle
+	yShift  float64
+	xPad    float64
+	isColor bool // fallback is a color-emoji font (CBDT/CBLC)
 }
 
 // LayoutText shapes and wraps text using FreeType+HarfBuzz.
@@ -65,7 +66,11 @@ func (ctx *Context) buildScriptFallbacks(text string,
 		if cl.text == "\n" || cl.text == "\r" {
 			continue
 		}
-		if baseFont.hasGlyphs(cl.text) {
+		// Emoji clusters prefer a color font even when the base font
+		// carries a monochrome glyph for the codepoint (DejaVu covers
+		// many emoji as text), so they still render in color.
+		wantColor := clusterIsEmoji(cl.text)
+		if !wantColor && baseFont.hasGlyphs(cl.text) {
 			continue
 		}
 		for _, path := range ctx.fallbackPaths {
@@ -80,16 +85,52 @@ func (ctx *Context) buildScriptFallbacks(text string,
 			if fb.face == nil {
 				continue
 			}
+			// For emoji hold out for a color font; fallbackPaths lists
+			// color-emoji fonts ahead of CJK, so this succeeds when one
+			// is installed and otherwise leaves the base text glyph.
+			if wantColor && !fb.isColorFont() {
+				continue
+			}
 			if fb.hasGlyphs(cl.text) {
 				if overrides == nil {
 					overrides = make(map[int]charFontOverride)
 				}
-				overrides[cl.byteI] = charFontOverride{font: fb}
+				overrides[cl.byteI] = charFontOverride{
+					font: fb, isColor: fb.isColorFont(),
+				}
 				break
 			}
 		}
 	}
 	return overrides, fontsToClose
+}
+
+// clusterIsEmoji reports whether a grapheme cluster should render with
+// a color-emoji font. It matches the common emoji code blocks plus the
+// variation selectors, ZWJ, and keycap combiner used in emoji
+// sequences.
+func clusterIsEmoji(cluster string) bool {
+	for _, r := range cluster {
+		switch {
+		case r >= 0x1F300 && r <= 0x1FAFF: // pictographs, emoticons, symbols
+			return true
+		case r >= 0x2600 && r <= 0x27BF: // misc symbols + dingbats
+			return true
+		case r >= 0x1F000 && r <= 0x1F0FF: // mahjong, dominoes, cards
+			return true
+		case r >= 0x2300 && r <= 0x23FF: // misc technical (⌚⌛⏰)
+			return true
+		case r == 0x2764 || r == 0x2763: // hearts
+			return true
+		case r >= 0xFE00 && r <= 0xFE0F: // variation selectors
+			return true
+		case r == 0x200D || r == 0x20E3: // ZWJ, keycap combiner
+			return true
+		case r >= 0x1F1E6 && r <= 0x1F1FF: // regional indicators (flags)
+			return true
+		}
+	}
+	return false
 }
 
 // LayoutRichText shapes multi-styled text.
@@ -226,17 +267,19 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 
 	// Measure each grapheme cluster.
 	type charInfo struct {
-		text   string
-		width  float64
-		byteI  int
-		byteL  int
-		yShift float64
-		xPad   float64
+		text    string
+		width   float64
+		byteI   int
+		byteL   int
+		yShift  float64
+		xPad    float64
+		isColor bool
 	}
 	clusters := segmentGraphemes(text)
 	chars := make([]charInfo, 0, len(clusters))
 	for _, cl := range clusters {
 		var yShift, xPad float64
+		var isColor bool
 		measureFont := baseFont
 		if overrides != nil {
 			if ov, ok := overrides[cl.byteI]; ok {
@@ -245,19 +288,27 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				}
 				yShift = ov.yShift
 				xPad = ov.xPad
+				isColor = ov.isColor
 			}
 		}
 
 		var w float64
-		if cl.text == "\n" || cl.text == "\r" {
+		switch {
+		case cl.text == "\n" || cl.text == "\r":
 			w = 0
-		} else {
+		case isColor:
+			// Color-bitmap fonts report advances at their fixed strike
+			// size (e.g. 136px), which would blow up the layout. Emoji
+			// are square by convention, so reserve one line-height cell;
+			// the renderer scales the bitmap to fit.
+			w = lineHeight
+		default:
 			w = measureFont.measureString(cl.text)
 		}
 		chars = append(chars, charInfo{
 			text: cl.text, width: w + xPad*float64(ctx.scaleFactor),
 			byteI: cl.byteI, byteL: cl.byteL,
-			yShift: yShift, xPad: xPad,
+			yShift: yShift, xPad: xPad, isColor: isColor,
 		})
 	}
 
@@ -445,8 +496,9 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		itemStart := len(allGlyphs)
 		itemStartByte := startByteIdx
 		itemX := cx
+		itemColor := false // whether the current item is a color-emoji run
 
-		flushItem := func(endByte int) {
+		flushItem := func(endByte int, useOrig bool) {
 			gc := len(allGlyphs) - itemStart
 			if gc <= 0 {
 				return
@@ -454,6 +506,10 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			var w float64
 			for _, gl := range allGlyphs[itemStart : itemStart+gc] {
 				w += gl.XAdvance
+			}
+			length := endByte - itemStartByte
+			if length < 0 {
+				length = 0
 			}
 			items = append(items, Item{
 				Style:                  cfg.Style,
@@ -465,19 +521,20 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				GlyphStart:             itemStart,
 				GlyphCount:             gc,
 				StartIndex:             itemStartByte,
-				Length:                 endByte - itemStartByte,
+				Length:                 length,
 				Color:                  baseColor,
+				UseOriginalColor:       useOrig,
 				UnderlineOffset:        2.0,
 				UnderlineThickness:     1.0,
 				StrikethroughOffset:    ascent * 0.35 * pixelScale,
 				StrikethroughThickness: 1.0,
-				HasUnderline:           cfg.Style.Underline,
-				HasStrikethrough:       cfg.Style.Strikethrough,
+				HasUnderline:           cfg.Style.Underline && !useOrig,
+				HasStrikethrough:       cfg.Style.Strikethrough && !useOrig,
 				HasBgColor:             cfg.Style.BgColor.A > 0,
 				BgColor:                cfg.Style.BgColor,
 				StrokeWidth:            cfg.Style.StrokeWidth,
 				StrokeColor:            cfg.Style.StrokeColor,
-				HasStroke:              cfg.Style.StrokeWidth > 0,
+				HasStroke:              cfg.Style.StrokeWidth > 0 && !useOrig,
 			})
 			itemStart = len(allGlyphs)
 		}
@@ -495,6 +552,16 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			if ch.text == "\n" {
 				continue
 			}
+
+			// Split the run whenever the color-emoji state changes so
+			// emoji glyphs get their own item with UseOriginalColor set;
+			// otherwise the color bitmap renders tinted and unscaled.
+			if len(allGlyphs) > itemStart && ch.isColor != itemColor {
+				flushItem(ch.byteI, itemColor)
+				itemStartByte = ch.byteI
+				itemX = cx
+			}
+			itemColor = ch.isColor
 
 			allGlyphs = append(allGlyphs, Glyph{
 				Index:     uint32(ch.byteI),
@@ -533,7 +600,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			cx += ch.width
 		}
 
-		flushItem(endByteIdx)
+		flushItem(endByteIdx, itemColor)
 
 		layoutLines = append(layoutLines, Line{
 			StartIndex: startByteIdx,

@@ -210,6 +210,15 @@ func (f ftFont) hasGlyphs(text string) bool {
 	return C.ftHasGlyphs(f.hb, cs, C.int(len(text))) != 0
 }
 
+// isColorFont reports whether the face carries color bitmap glyphs
+// (CBDT/CBLC emoji fonts such as Noto Color Emoji).
+func (f ftFont) isColorFont() bool {
+	if f.face == nil {
+		return false
+	}
+	return int64(f.face.face_flags)&int64(C.FT_FACE_FLAG_COLOR) != 0
+}
+
 // close releases the FreeType face and HarfBuzz font.
 func (f *ftFont) close() {
 	if f.hb != nil {

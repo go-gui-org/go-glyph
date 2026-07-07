@@ -26,6 +26,7 @@ type Context struct {
 	metrics       metricsCache
 	fontPaths     map[string]string
 	fallbackPaths []string // script fallback fonts (CJK, Arabic, etc.)
+	colorPaths    []string // color-emoji fonts (CBDT/CBLC), render side
 }
 
 // NewContext creates a Linux text context backed by FreeType+HarfBuzz.
@@ -50,6 +51,7 @@ func NewContext(scaleFactor float32) (*Context, error) {
 	ctx.discoverSystemFonts()
 	setFTFontPaths(ctx.fontPaths)
 	setFTScriptFallbacks(ctx.fallbackPaths)
+	setFTColorFallbacks(ctx.colorPaths)
 	return ctx, nil
 }
 
@@ -145,8 +147,9 @@ func (ctx *Context) discoverSystemFonts() {
 	// Script-fallback candidates, collected during the walk and
 	// assembled in priority order afterwards. Color emoji is tried
 	// before CJK so colored glyphs win over monochrome coverage.
-	var emojiPaths, cjkPaths []string
+	var emojiPaths, cjkPaths, colorPaths []string
 	seenFallback := map[string]bool{}
+	seenColor := map[string]bool{}
 
 	for _, dir := range dirs {
 		_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
@@ -171,6 +174,8 @@ func (ctx *Context) discoverSystemFonts() {
 
 			family := C.GoString(face.family_name)
 			style := C.GoString(face.style_name)
+			isColorFace := int64(face.face_flags)&
+				int64(C.FT_FACE_FLAG_COLOR) != 0
 			C.FT_Done_Face(face)
 
 			if family == "" {
@@ -209,6 +214,16 @@ func (ctx *Context) discoverSystemFonts() {
 				}
 			}
 
+			// Color-emoji fonts (CBDT/CBLC) are tracked separately so
+			// the renderer can pick a true color font over a monochrome
+			// emoji font (e.g. Noto Emoji) that also covers the glyph.
+			if isColorFace && !seenColor[family] {
+				colorPaths = append(colorPaths, path)
+				seenColor[family] = true
+				// Already leads the general fallback list; don't re-add.
+				seenFallback[family] = true
+			}
+
 			// Collect script-fallback fonts (one path per family).
 			if !seenFallback[family] {
 				switch {
@@ -224,6 +239,10 @@ func (ctx *Context) discoverSystemFonts() {
 		})
 	}
 
+	// Color emoji leads the general fallback list so colored glyphs win
+	// over monochrome coverage; colorPaths drives the render color path.
+	ctx.colorPaths = colorPaths
+	ctx.fallbackPaths = append(ctx.fallbackPaths, colorPaths...)
 	ctx.fallbackPaths = append(ctx.fallbackPaths, emojiPaths...)
 	ctx.fallbackPaths = append(ctx.fallbackPaths, cjkPaths...)
 }

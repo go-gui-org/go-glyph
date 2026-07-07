@@ -9,8 +9,9 @@
 # Slow path (fallback): downloads source tarballs and compiles from scratch.
 # Use this for CI, containers, or when version pinning is required.
 #
-# Output: deps/lib/linux_amd64/{libfreetype.a,libharfbuzz.a}  (on x86_64)
-#         deps/lib/linux_arm64/{libfreetype.a,libharfbuzz.a}  (on aarch64)
+# Output: deps/lib/<arch>/libfreetype.a, libharfbuzz.a, and the static
+#         support libs FreeType references (libpng16.a, libz.a, and — for a
+#         system build — libbrotli*.a, libbz2.a) for self-contained linking.
 #         deps/include/{ft2build.h,freetype/,hb.h,...}        (shared)
 #
 # Fast-path prerequisites (Debian/Ubuntu):
@@ -52,6 +53,26 @@ LIB_OUT="$PREFIX/lib/$ARCH_DIR"
 
 mkdir -p "$LIB_OUT" "$PREFIX/include"
 
+# Copy the static support libraries FreeType may reference into deps so
+# the CGo link stays self-contained: libpng (color-emoji CBDT bitmaps are
+# PNG-compressed, e.g. Noto Color Emoji), zlib, brotli (WOFF2) and bzip2.
+# Any that are absent are skipped — the matching -l is harmless when the
+# freetype archive does not reference it.
+copy_support_libs() {
+    local names=(libpng16.a libz.a libbrotlidec.a libbrotlicommon.a libbz2.a)
+    local dirs=(
+        "$(pkg-config --variable=libdir libpng 2>/dev/null)"
+        "/usr/lib/$(uname -m)-linux-gnu"
+        /usr/lib /usr/local/lib "/lib/$(uname -m)-linux-gnu"
+    )
+    local n d
+    for n in "${names[@]}"; do
+        for d in "${dirs[@]}"; do
+            [ -n "$d" ] && [ -f "$d/$n" ] && { cp "$d/$n" "$LIB_OUT/"; break; }
+        done
+    done
+}
+
 # ── Fast path ────────────────────────────────────────────────────────────────
 # Use system static libs if pkg-config can find both. Copies the .a files and
 # headers into deps/ so the CGo CFLAGS/-L paths resolve without change.
@@ -68,6 +89,7 @@ use_system_libs() {
     echo "=== Fast path: copying system static libs ==="
     cp "$FT_LIBDIR/libfreetype.a" "$LIB_OUT/"
     cp "$HB_LIBDIR/libharfbuzz.a" "$LIB_OUT/"
+    copy_support_libs
 
     # Copy FreeType headers.
     FT_INCDIR=$(pkg-config --variable=includedir freetype2)
@@ -120,14 +142,27 @@ fi
 tar xf "$FREETYPE_TAR" -C "$BUILD_DIR"
 
 cd "$BUILD_DIR/freetype-$FREETYPE_VER"
+# Enable PNG so FreeType can decode PNG-compressed color-emoji bitmaps
+# (CBDT/CBLC, e.g. Noto Color Emoji); requires libpng dev headers. Fall
+# back to png=no if libpng is unavailable so the build still succeeds
+# (color emoji then renders as tofu). brotli/bzip2 stay off to keep the
+# dependency surface minimal.
+if pkg-config --exists libpng 2>/dev/null; then
+    PNG_OPT="--with-png=yes --with-zlib=yes"
+else
+    echo "  WARNING: libpng not found — color emoji will not render." >&2
+    PNG_OPT="--with-png=no --with-zlib=no"
+fi
+# shellcheck disable=SC2086
 ./configure \
     --prefix="$PREFIX" \
     --enable-static --disable-shared \
-    --with-zlib=no --with-bzip2=no --with-png=no --with-brotli=no \
+    $PNG_OPT --with-bzip2=no --with-brotli=no \
     CC="$CC" CXX="$CXX" \
     CFLAGS="-O2 -fPIC"
 make -j"$NJOBS" install
 cp "$PREFIX/lib/libfreetype.a" "$LIB_OUT/"
+copy_support_libs
 
 echo "=== Building HarfBuzz $HARFBUZZ_VER for $ARCH_DIR ==="
 HARFBUZZ_TAR="$BUILD_DIR/harfbuzz-$HARFBUZZ_VER.tar.xz"
