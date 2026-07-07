@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`backend/gpu` Windows path replaced SDL2 with native WGL.** OpenGL context
+  and window handling now use Win32 WGL (`gl_wgl.c`/`gl_wgl.h`) instead of SDL2.
+  Removed `#cgo pkg-config: sdl2`; the backend links only OS-default libraries
+  (`opengl32`, `gdi32`, `user32`). Deleted `gl_sdl.c`/`gl_sdl.h`. Consumers no
+  longer need SDL2 on Windows.
+- **Breaking (Windows):** `gpu.New()`'s `nativeWindow` is now a
+  `*gpu.Win32Handle{HWND}` instead of an `SDL_Window*`. `WindowFlag()` and
+  `WindowDrawableSize()` removed from the Windows backend (callers provide the
+  HWND directly). `demo_gpu`/`showcase_gpu` add a Windows init helper that
+  extracts the HWND from SDL (examples may still use SDL2 for windowing).
+
 ## [1.12.0] - 2026-06-28
 
 ### Added

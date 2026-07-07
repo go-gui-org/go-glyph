@@ -243,18 +243,20 @@ defer backend.Destroy()
 
 ### GPU (Metal / OpenGL)
 
-Uses Metal on macOS and OpenGL 3.3 on Linux. The API is identical
-on both platforms:
+Uses Metal on macOS and native OpenGL 3.3 on Linux (GLX) and Windows (WGL).
+The caller owns the window and passes a native handle to `gpu.New`; the
+backend links only OS-default libraries (no SDL2). The API is identical
+across platforms:
 
 ```go
 import glyphgpu "github.com/go-gui-org/go-glyph/backend/gpu"
 
-// Create window with gpu.WindowFlag() (Metal or OpenGL).
-window, _ := sdl.CreateWindow("demo",
-    sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED,
-    800, 600, sdl.WINDOW_SHOWN|gpu.WindowFlag())
-
-backend, err := glyphgpu.New(sdlWindow, float32(dpiScale))
+// The caller creates a window and builds a native handle:
+//   - macOS:   a CAMetalLayer
+//   - Linux:   &gpu.X11Handle{Display, Window}
+//   - Windows: &gpu.Win32Handle{HWND}
+// See examples/demo_gpu for per-platform window setup.
+backend, err := glyphgpu.New(nativeWindow, float32(dpiScale))
 defer backend.Destroy()
 
 // Per frame:
