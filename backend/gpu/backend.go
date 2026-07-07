@@ -11,7 +11,8 @@ import (
 //
 // On macOS, rendering uses Metal into a caller-provided CAMetalLayer.
 // On Linux, rendering uses a native GLX OpenGL context on a caller X11
-// window. On Windows, rendering uses OpenGL into an SDL2 window.
+// window. On Windows, rendering uses a native WGL OpenGL context on a
+// caller Win32 window.
 type Backend struct {
 	gpu      *gpuCtx
 	widths   map[glyph.TextureID]int
@@ -25,7 +26,7 @@ type Backend struct {
 // nativeWindow is platform-dependent:
 //   - macOS: unsafe.Pointer to CAMetalLayer
 //   - Linux: unsafe.Pointer to a gpu.X11Handle{Display, Window}
-//   - Windows: unsafe.Pointer to SDL_Window
+//   - Windows: unsafe.Pointer to a gpu.Win32Handle{HWND}
 //
 // dpiScale is physical pixels / logical pixels.
 func New(nativeWindow unsafe.Pointer, dpiScale float32) (*Backend, error) {
@@ -55,10 +56,15 @@ func (b *Backend) NewTexture(width, height int) glyph.TextureID {
 	return id
 }
 
-// UpdateTexture uploads RGBA data to an existing texture.
+// UpdateTexture uploads RGBA data to an existing texture. A short or empty
+// buffer is ignored: the C backends read w*h*4 bytes, so a smaller slice
+// would read out of bounds. int64 arithmetic avoids overflow on the product.
 func (b *Backend) UpdateTexture(id glyph.TextureID, data []byte) {
 	w := b.widths[id]
 	h := b.heights[id]
+	if w <= 0 || h <= 0 || int64(len(data)) < int64(w)*int64(h)*4 {
+		return
+	}
 	b.gpu.updateTexture(uint64(id), data, w, h)
 }
 

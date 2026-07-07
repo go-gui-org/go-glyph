@@ -1,4 +1,4 @@
-//go:build (!darwin && !linux) || ios
+//go:build (!darwin && !linux && !windows) || ios
 
 package main
 

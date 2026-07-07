@@ -2,6 +2,8 @@ package gpu
 
 import (
 	"testing"
+
+	glyph "github.com/go-gui-org/go-glyph"
 )
 
 // --- Batch tests (pure Go, no CGo) ---
@@ -91,6 +93,34 @@ func TestBatchReset(t *testing.T) {
 	if cap(b.cmds) == 0 {
 		t.Errorf("cmds capacity lost after reset")
 	}
+}
+
+// --- UpdateTexture guard tests (no CGo) ---
+//
+// UpdateTexture must reject a buffer smaller than w*h*4 and an unknown
+// texture ID before calling into the C backend, which reads w*h*4 bytes
+// and would read out of bounds otherwise. A nil gpu makes a regressed
+// guard panic, so "no panic" is a real assertion of the early return.
+
+func TestUpdateTexture_ShortBufferNoOp(t *testing.T) {
+	const id = glyph.TextureID(7)
+	b := &Backend{
+		gpu:     nil, // any CGo call would panic
+		widths:  map[glyph.TextureID]int{id: 2},
+		heights: map[glyph.TextureID]int{id: 2},
+	}
+	// 2x2 RGBA needs 16 bytes; supply fewer.
+	b.UpdateTexture(id, make([]byte, 4))
+}
+
+func TestUpdateTexture_UnknownIDNoOp(t *testing.T) {
+	b := &Backend{
+		gpu:     nil,
+		widths:  map[glyph.TextureID]int{},
+		heights: map[glyph.TextureID]int{},
+	}
+	// Unknown id → w==h==0 → guard returns before touching gpu.
+	b.UpdateTexture(glyph.TextureID(99), make([]byte, 16))
 }
 
 // TestNew_NilWindow verifies the nil-pointer guard in New returns

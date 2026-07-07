@@ -1,15 +1,15 @@
 // Package gpu provides a native GPU [glyph.DrawBackend] via CGo.
 //
-// On macOS, rendering uses Metal into a caller-provided CAMetalLayer
-// (no SDL2 required). On Linux and Windows, rendering uses OpenGL 3.3
-// into an SDL2 window.
+// Rendering uses Metal on macOS and native OpenGL 3.3 on Linux (GLX) and
+// Windows (WGL). No platform requires SDL2; the caller owns the window and
+// passes a native handle to [New].
 //
 // Create a backend with [New], then pass it to glyph.NewRenderer each frame:
 //
 //	// macOS (Metal)
 //	b, err := gpu.New(metalLayerPtr, dpiScale)
-//	// Linux / Windows (OpenGL)
-//	b, err := gpu.New(sdlWindowPtr, dpiScale)
+//	// Linux (GLX):  gpu.New(unsafe.Pointer(&gpu.X11Handle{Display, Window}), dpiScale)
+//	// Windows (WGL): gpu.New(unsafe.Pointer(&gpu.Win32Handle{HWND}), dpiScale)
 //
 //	renderer := glyph.NewRenderer(b, ctx)
 //

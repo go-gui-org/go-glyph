@@ -1,13 +1,12 @@
 //go:build windows
 
-#ifndef GL_SDL_H
-#define GL_SDL_H
+#ifndef GL_WGL_H
+#define GL_WGL_H
 
 #include <stdint.h>
 #include <stdlib.h>
-#include "SDL.h"
 
-// Opaque OpenGL context — defined in gl_linux.c.
+// Opaque OpenGL context — defined in gl_wgl.c.
 typedef struct GLCtx GLCtx;
 
 // Packed draw command matching Go drawCmd layout.
@@ -17,7 +16,9 @@ typedef struct {
 	int32_t  vertCount;
 } CDrawCmd;
 
-GLCtx*    glCtxInit(void *sdlWindow, float dpiScale);
+// glCtxInit creates a GL 3.3 core context via WGL on a caller-provided
+// Win32 window. hwnd is a Win32 HWND passed as an integer handle.
+GLCtx*    glCtxInit(uintptr_t hwnd, float dpiScale);
 uint64_t  glCtxNewTex(GLCtx *ctx, int w, int h);
 void      glCtxUpdateTex(GLCtx *ctx, uint64_t tid,
                          void *data, int w, int h);
