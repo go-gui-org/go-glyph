@@ -35,6 +35,8 @@ jobs:
             libgl1-mesa-dev \
             libpango1.0-dev \
             libsdl2-dev \
+            fonts-noto-cjk \
+            fonts-noto-color-emoji \
             pkg-config
 
       - name: Test root module (skip ebitengine — requires display)
@@ -97,6 +99,8 @@ jobs:
             libgl1-mesa-dev \
             libpango1.0-dev \
             libsdl2-dev \
+            fonts-noto-cjk \
+            fonts-noto-color-emoji \
             pkg-config
 
       - name: Run golangci-lint
