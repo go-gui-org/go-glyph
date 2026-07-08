@@ -10,7 +10,7 @@ platform-appropriate shapers and rasterizers per operating system.
 
 | OS | Shaper | Rasterizer |
 |---|---|---|
-| Linux / BSD | Pango + HarfBuzz | FreeType + FontConfig |
+| Linux | Pango + HarfBuzz | FreeType + FontConfig |
 | macOS | CoreText | CoreText / CoreGraphics |
 | Windows | GDI + DirectWrite | GDI + DirectWrite |
 | Android | FreeType | FreeType |
@@ -42,13 +42,13 @@ platform-appropriate shapers and rasterizers per operating system.
 
 Library requirements depend on the target platform:
 
-- **Linux / BSD:** Pango (+ PangoFT2), FreeType2, FontConfig, GLib
+- **Linux:** Pango (+ PangoFT2), FreeType2, FontConfig, GLib
 - **macOS:** No native libraries required (uses CoreText)
 - **Windows:** No native libraries required for the root package (uses GDI)
 - **Android:** FreeType2 (bundled with NDK)
 - **WASM:** No native libraries required (uses Canvas2D)
 
-### Windows (MSYS2)
+### Windows
 
 The root package and Ebitengine backend require no native libraries
 on Windows (`CGO_ENABLED=0`). If using the GPU backend with native
