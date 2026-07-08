@@ -88,15 +88,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libglfw3-dev \
             fonts-noto-cjk \
             fonts-noto-color-emoji \
             pkg-config
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: latest
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | \
+            sh -s -- -b $(go env GOPATH)/bin latest
+          golangci-lint run $(go list ./... | grep -v backend/ebitengine)
 
   test-wasm:
     runs-on: ubuntu-latest

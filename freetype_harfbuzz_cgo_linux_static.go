@@ -4,8 +4,8 @@ package glyph
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/deps/include -I${SRCDIR}/deps/include/freetype2 -I${SRCDIR}/deps/include/harfbuzz
-#cgo linux,amd64 LDFLAGS: -L${SRCDIR}/deps/lib/linux_amd64 -lfreetype -lharfbuzz -lpng16 -lz -lbrotlidec -lbrotlicommon -lbz2 -lm
-#cgo linux,arm64 LDFLAGS: -L${SRCDIR}/deps/lib/linux_arm64 -lfreetype -lharfbuzz -lpng16 -lz -lbrotlidec -lbrotlicommon -lbz2 -lm
+#cgo linux,amd64 LDFLAGS: -L${SRCDIR}/deps/lib/linux_amd64 -lfreetype -lharfbuzz -lz -lm
+#cgo linux,arm64 LDFLAGS: -L${SRCDIR}/deps/lib/linux_arm64 -lfreetype -lharfbuzz -lz -lm
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
