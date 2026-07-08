@@ -20,7 +20,7 @@ platform-appropriate shapers and rasterizers per operating system.
 
 ## Features
 
-- **Text shaping** — full Unicode, BiDi, complex scripts (Pango, CoreText, DirectWrite per platform)
+- **Text shaping** — full Unicode, BiDi, complex scripts (FreeType+HarfBuzz, CoreText, DirectWrite per platform)
 - **Glyph rasterization** via FreeType2 / CoreText / GDI with subpixel positioning
 - **Multi-page glyph atlas** with automatic packing and eviction
 - **Layout caching** for efficient per-frame rendering
@@ -75,6 +75,7 @@ The GPU backend on Linux additionally requires:
 ```sh
 sudo apt install libgl-dev libx11-dev
 ```
+
 ### Fedora
 
 ```sh
@@ -89,7 +90,7 @@ The GPU backend on Linux additionally requires:
 
 ```sh
 sudo dnf install mesa-libGL-devel libX11-devel
-``````
+```
 
 ## Installation
 
