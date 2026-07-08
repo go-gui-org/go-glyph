@@ -17,7 +17,7 @@
 //
 // # Quick start
 //
-//	backend := ebitengine.NewBackend() // or sdl2, gpu, web, etc.
+//	backend := ebitengine.NewBackend() // or gpu, web, etc.
 //	ts, err := glyph.NewTextSystem(backend)
 //	if err != nil {
 //	    log.Fatal(err)
@@ -36,10 +36,9 @@
 // # Architecture
 //
 // [Context] owns platform-specific shaper and font state. [Renderer] draws
-// shaped layouts through a [DrawBackend]. Six backends are provided:
+// shaped layouts through a [DrawBackend]. Five backends are provided:
 //   - [github.com/go-gui-org/go-glyph/backend/ebitengine]: Ebitengine integration.
 //   - [github.com/go-gui-org/go-glyph/backend/gpu]: raw OpenGL 3.3 / Metal.
-//   - [github.com/go-gui-org/go-glyph/backend/sdl2]: SDL2 rendering.
 //   - [github.com/go-gui-org/go-glyph/backend/web]: HTML Canvas (WASM).
 //   - [github.com/go-gui-org/go-glyph/backend/android]: Android GPU.
 //   - [github.com/go-gui-org/go-glyph/backend/ios]: iOS Metal.

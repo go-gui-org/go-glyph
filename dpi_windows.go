@@ -5,7 +5,7 @@ package glyph
 import "syscall"
 
 // SetDPIAwareWindows marks the current process as per-monitor DPI
-// aware v2. Must be called before sdl.Init so SDL_Window queries
+// aware v2. Must be called before creating a window so window queries
 // return physical pixels and Windows DWM does not bilinear-magnify
 // the backbuffer — otherwise glyphs rasterize at 1x logical pixels
 // and look thicker/fuzzier on high-DPI displays.
