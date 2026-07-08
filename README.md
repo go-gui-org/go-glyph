@@ -10,7 +10,7 @@ platform-appropriate shapers and rasterizers per operating system.
 
 | OS | Shaper | Rasterizer |
 |---|---|---|
-| Linux | Pango + HarfBuzz | FreeType + FontConfig |
+| Linux | FreeType + HarfBuzz | FreeType |
 | macOS | CoreText | CoreText / CoreGraphics |
 | Windows | GDI + DirectWrite | GDI + DirectWrite |
 | Android | FreeType | FreeType |
@@ -42,7 +42,7 @@ platform-appropriate shapers and rasterizers per operating system.
 
 Library requirements depend on the target platform:
 
-- **Linux:** Pango (+ PangoFT2), FreeType2, FontConfig, GLib
+- **Linux:** FreeType2, HarfBuzz (statically linked from vendored libs); PNG, Brotli, Bzip2 (system packages for build)
 - **macOS:** No native libraries required (uses CoreText)
 - **Windows:** No native libraries required (uses GDI + DirectWrite)
 - **Android:** FreeType2 (bundled with NDK)
@@ -63,8 +63,11 @@ needed). The GPU backend on macOS uses Metal (no additional libraries).
 ### Ubuntu / Debian
 
 ```sh
-sudo apt install libpango1.0-dev libfreetype-dev \
-    libfontconfig1-dev libglib2.0-dev
+# Build-time dependencies for static FreeType + HarfBuzz:
+sudo apt install libpng-dev libbrotli-dev libbz2-dev
+
+# Build vendored static libs:
+./scripts/build_android_deps.sh
 ```
 
 The GPU backend on Linux additionally requires:
@@ -73,17 +76,35 @@ The GPU backend on Linux additionally requires:
 sudo apt install libgl-dev libx11-dev
 ```
 
+Pango text shaping is available as an opt-in alternative:
+
+```sh
+go build -tags glyph_pango ./...
+# Requires: sudo apt install libpango1.0-dev libfreetype-dev \
+#     libfontconfig1-dev libglib2.0-dev
+
 ### Fedora
 
 ```sh
-sudo dnf install pango-devel freetype-devel \
-    fontconfig-devel glib2-devel
+# Build-time dependencies for static FreeType + HarfBuzz:
+sudo dnf install libpng-devel brotli-devel bzip2-devel
+
+# Build vendored static libs:
+./scripts/build_android_deps.sh
 ```
 
 The GPU backend on Linux additionally requires:
 
 ```sh
 sudo dnf install mesa-libGL-devel libX11-devel
+```
+
+Pango text shaping is available as an opt-in alternative:
+
+```sh
+go build -tags glyph_pango ./...
+# Requires: sudo dnf install pango-devel freetype-devel \
+#     fontconfig-devel glib2-devel
 ```
 
 ## Installation
