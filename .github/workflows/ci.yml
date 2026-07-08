@@ -100,7 +100,7 @@ jobs:
           curl -sSfL https://github.com/golangci/golangci-lint/releases/download/${GOLANGCI_LINT_VERSION}/golangci-lint-${GOLANGCI_LINT_VERSION#v}-linux-amd64.tar.gz | \
             tar xz -C /tmp
           /tmp/golangci-lint-${GOLANGCI_LINT_VERSION#v}-linux-amd64/golangci-lint run \
-            $(go list ./... | grep -v backend/ebitengine)
+            . ./accessibility ./backend/gpu ./ime
 
   test-wasm:
     runs-on: ubuntu-latest
