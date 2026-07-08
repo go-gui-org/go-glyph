@@ -6,6 +6,10 @@ package glyph
 // on non-Darwin platforms. Darwin uses ctMetricsCache instead.
 type metricsCache struct{}
 
+func newMetricsCache(capacity int) metricsCache {
+	return metricsCache{}
+}
+
 func (c *metricsCache) get(key uint64) (struct{ Ascent, Descent, LineGap int }, bool) {
 	return struct{ Ascent, Descent, LineGap int }{}, false
 }
