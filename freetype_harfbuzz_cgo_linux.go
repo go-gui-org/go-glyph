@@ -1,4 +1,4 @@
-//go:build linux && !android && !glyph_static
+//go:build linux && !android && glyph_system
 
 package glyph
 

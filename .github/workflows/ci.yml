@@ -29,12 +29,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libfreetype-dev \
-            libharfbuzz-dev \
-            libpng-dev \
-            libbrotli-dev \
-            libbz2-dev \
             libgl1-mesa-dev \
+            libsdl2-dev \
             fonts-noto-cjk \
             fonts-noto-color-emoji \
             pkg-config
@@ -92,12 +88,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libfreetype-dev \
-            libharfbuzz-dev \
-            libpng-dev \
-            libbrotli-dev \
-            libbz2-dev \
-            libgl1-mesa-dev \
             fonts-noto-cjk \
             fonts-noto-color-emoji \
             pkg-config

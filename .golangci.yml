@@ -9,6 +9,10 @@
 
 version: "2"
 
+run:
+  skip-dirs:
+    - backend/ebitengine
+
 linters:
   enable:
     - errcheck
