@@ -9,7 +9,7 @@ import (
 )
 
 // Backend implements glyph.DrawBackend using Metal on iOS.
-// Accepts a CAMetalLayer directly (no SDL2).
+// Accepts a CAMetalLayer directly.
 type Backend struct {
 	gpu      *gpuCtx
 	batch    batch

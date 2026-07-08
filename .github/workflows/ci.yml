@@ -22,7 +22,7 @@ jobs:
             go.sum
             examples/demo/go.sum
             examples/demo_gpu/go.sum
-            examples/demo_sdl2/go.sum
+
             examples/showcase_gpu/go.sum
 
       - name: Install native dependencies
@@ -60,7 +60,6 @@ jobs:
           modules=(
             "examples/demo"
             "examples/demo_gpu"
-            "examples/demo_sdl2"
             "examples/showcase_gpu"
           )
 
@@ -311,7 +310,7 @@ jobs:
             go.sum
             examples/demo/go.sum
             examples/demo_gpu/go.sum
-            examples/demo_sdl2/go.sum
+
             examples/showcase_gpu/go.sum
 
       - name: Install native dependencies
@@ -339,7 +338,6 @@ jobs:
           modules=(
             "examples/demo"
             "examples/demo_gpu"
-            "examples/demo_sdl2"
             "examples/showcase_gpu"
           )
 

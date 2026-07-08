@@ -36,7 +36,7 @@ platform-appropriate shapers and rasterizers per operating system.
 - **Text mutation** - insert, delete, selection, undo/redo
 - **IME support** with composition/preedit rendering
 - **Accessibility** - screen reader announcements, text field nodes
-- **Pluggable backends** — Ebitengine, SDL2, GPU (Metal/OpenGL), Web (WASM), Android, iOS
+- **Pluggable backends** — Ebitengine, GPU (Metal/OpenGL), Web (WASM), Android, iOS
 
 ## Prerequisites
 
@@ -48,42 +48,42 @@ Library requirements depend on the target platform:
 - **Android:** FreeType2 (bundled with NDK)
 - **WASM:** No native libraries required (uses Canvas2D)
 
-SDL2 is required for the SDL2 and GPU backends on all platforms.
-
 ### Windows (MSYS2)
 
 The root package and Ebitengine backend require no native libraries
-on Windows (`CGO_ENABLED=0`). The SDL2 and GPU backends need SDL2
-via [MSYS2](https://www.msys2.org):
-
-```sh
-pacman -S mingw-w64-x86_64-SDL2 mingw-w64-x86_64-pkg-config
-```
-
-Build from an MSYS2 MinGW 64-bit shell, or add the MinGW `bin/`
-directory to `PATH` so `pkg-config` and the SDL2 DLL are found.
+on Windows (`CGO_ENABLED=0`). If using the GPU backend with native
+Windows rendering (WGL), no additional libraries are needed — WGL is
+part of the standard Windows OpenGL stack.
 
 ### macOS (Homebrew)
 
 The root package and Ebitengine backend use CoreText (no brew packages
-needed). The SDL2 and GPU backends additionally require:
-
-```sh
-brew install pango freetype fontconfig glib sdl2
-```
+needed). The GPU backend on macOS uses Metal (no additional libraries).
 
 ### Ubuntu / Debian
 
 ```sh
 sudo apt install libpango1.0-dev libfreetype-dev \
-    libfontconfig1-dev libglib2.0-dev libsdl2-dev
+    libfontconfig1-dev libglib2.0-dev
+```
+
+The GPU backend on Linux additionally requires:
+
+```sh
+sudo apt install libgl-dev libx11-dev
 ```
 
 ### Fedora
 
 ```sh
 sudo dnf install pango-devel freetype-devel \
-    fontconfig-devel glib2-devel SDL2-devel
+    fontconfig-devel glib2-devel
+```
+
+The GPU backend on Linux additionally requires:
+
+```sh
+sudo dnf install mesa-libGL-devel libX11-devel
 ```
 
 ## Installation
@@ -215,7 +215,6 @@ Each backend package provides its own implementation.
 | Backend    | Package                       | Notes                                     |
 | ---------- | ----------------------------- | ----------------------------------------- |
 | Ebitengine | `go-glyph/backend/ebitengine` | Pure Go game engine                       |
-| SDL2       | `go-glyph/backend/sdl2`       | SDL2 renderer                             |
 | GPU        | `go-glyph/backend/gpu`        | Metal (macOS), OpenGL 3.3 (Linux/Windows) |
 | Web        | `go-glyph/backend/web`        | WASM via Canvas2D                         |
 | Android    | `go-glyph/backend/android`    | Android (FreeType)                        |
@@ -232,20 +231,11 @@ backend := glyphebi.New(nil, float32(dpiScale))
 // Call backend.SetTarget(screen) each frame before drawing.
 ```
 
-### SDL2
-
-```go
-import glyphsdl "github.com/go-gui-org/go-glyph/backend/sdl2"
-
-backend := glyphsdl.New(sdlRenderer, float32(dpiScale))
-defer backend.Destroy()
-```
-
 ### GPU (Metal / OpenGL)
 
 Uses Metal on macOS and native OpenGL 3.3 on Linux (GLX) and Windows (WGL).
 The caller owns the window and passes a native handle to `gpu.New`; the
-backend links only OS-default libraries (no SDL2). The API is identical
+backend links only OS-default libraries. The API is identical
 across platforms:
 
 ```go
@@ -515,7 +505,6 @@ word echo, line changes, selection changes) with debouncing.
 | Example                     | Description                                                     |
 | --------------------------- | --------------------------------------------------------------- |
 | `examples/demo`             | Ebitengine demo - basic text, styles, wrapping, emoji, CJK, RTL |
-| `examples/demo_sdl2`        | Same demo using SDL2 backend                                    |
 | `examples/demo_gpu`         | Same demo using GPU backend (Metal/OpenGL)                      |
 | `examples/showcase_gpu`     | Feature gallery (22 sections)                                   |
 | `examples/showcase_android` | Feature gallery for Android                                     |
@@ -542,7 +531,7 @@ TextSystem
   |     +-- Draw call emission
   +-- Layout cache (hash-keyed, time-based eviction)
   +-- DrawBackend (interface)
-        +-- Ebitengine / SDL2 / GPU / Web / Android / iOS
+        +-- Ebitengine / GPU / Web / Android / iOS
 ```
 
 5-pass rendering pipeline per layout:
