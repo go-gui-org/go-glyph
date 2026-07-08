@@ -24,7 +24,7 @@ build_freetype() {
     make distclean 2>/dev/null || true
     ./configure --host="$HOST" --prefix="$PREFIX" \
         --enable-static --disable-shared \
-        --with-zlib=no --with-bzip2=no --with-png=no --with-brotli=no \
+        --with-zlib=yes --with-bzip2=no --with-png=yes --with-brotli=no \
         CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" \
         CFLAGS="-O2 -fPIC"
     make -j"$NJOBS" install
