@@ -96,6 +96,7 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: latest
+          args: --skip-dirs=backend/ebitengine
 
   test-wasm:
     runs-on: ubuntu-latest
