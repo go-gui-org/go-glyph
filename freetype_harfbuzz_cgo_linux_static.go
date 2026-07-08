@@ -1,9 +1,11 @@
-//go:build linux && !android && glyph_system
+//go:build linux && !android && !glyph_system
 
 package glyph
 
 /*
-#cgo pkg-config: freetype2 harfbuzz
+#cgo CFLAGS: -I${SRCDIR}/deps/include -I${SRCDIR}/deps/include/freetype2 -I${SRCDIR}/deps/include/harfbuzz
+#cgo linux,amd64 LDFLAGS: -L${SRCDIR}/deps/lib/linux_amd64 -lfreetype -lharfbuzz -lpng16 -lz -lm
+#cgo linux,arm64 LDFLAGS: -L${SRCDIR}/deps/lib/linux_arm64 -lfreetype -lharfbuzz -lpng16 -lz -lm
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -20,6 +22,8 @@ static char* ftFaceFamilyName(FT_Face face) {
 */
 import "C"
 import "unsafe"
+
+// Stub RAII types — no Pango on Linux.
 
 type FTLibrary struct{}
 

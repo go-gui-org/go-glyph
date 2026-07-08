@@ -29,11 +29,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libfontconfig1-dev \
-            libfreetype-dev \
-            libglib2.0-dev \
             libgl1-mesa-dev \
-            libpango1.0-dev \
+            libpng-dev \
             libsdl2-dev \
             fonts-noto-cjk \
             fonts-noto-color-emoji \
@@ -92,20 +89,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libfontconfig1-dev \
-            libfreetype-dev \
-            libglib2.0-dev \
             libgl1-mesa-dev \
-            libpango1.0-dev \
-            libsdl2-dev \
+            libx11-dev \
             fonts-noto-cjk \
             fonts-noto-color-emoji \
             pkg-config
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: latest
+        env:
+          GOLANGCI_LINT_VERSION: v2.12.2
+        run: |
+          curl -sSfL https://github.com/golangci/golangci-lint/releases/download/${GOLANGCI_LINT_VERSION}/golangci-lint-${GOLANGCI_LINT_VERSION#v}-linux-amd64.tar.gz | \
+            tar xz -C /tmp
+          /tmp/golangci-lint-${GOLANGCI_LINT_VERSION#v}-linux-amd64/golangci-lint run \
+            . ./accessibility ./backend/gpu ./ime
 
   test-wasm:
     runs-on: ubuntu-latest
@@ -272,11 +269,6 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-pkg-config
-            mingw-w64-ucrt-x86_64-freetype
-            mingw-w64-ucrt-x86_64-harfbuzz
-            mingw-w64-ucrt-x86_64-pango
-            mingw-w64-ucrt-x86_64-fontconfig
-            mingw-w64-ucrt-x86_64-SDL2
 
       - name: Set CGo environment
         shell: msys2 {0}
@@ -314,7 +306,7 @@ jobs:
             examples/showcase_gpu/go.sum
 
       - name: Install native dependencies
-        run: brew install sdl2 pango pkg-config
+        run: brew install sdl2 pkg-config
 
       - name: Clear Go build cache
         run: go clean -cache
