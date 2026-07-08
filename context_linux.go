@@ -1,4 +1,4 @@
-//go:build linux && !android && !glyph_pango
+//go:build linux && !android
 
 package glyph
 

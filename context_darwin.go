@@ -1,4 +1,4 @@
-//go:build darwin && !glyph_pango
+//go:build darwin
 
 package glyph
 

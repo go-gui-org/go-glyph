@@ -6,14 +6,11 @@
 // # Platform matrix
 //
 //	OS          Shaper              Rasterizer
-//	Linux/BSD   Pango + HarfBuzz    FreeType + FontConfig
-//	macOS *     CoreText            CoreText / CoreGraphics
+//	Linux       FreeType + HarfBuzz FreeType
+//	macOS       CoreText            CoreText / CoreGraphics
 //	Windows     GDI + DirectWrite   GDI + DirectWrite
 //	Android     FreeType            FreeType
 //	WASM        Canvas2D            Canvas2D
-//
-//	* macOS can also use the Pango/FreeType stack with the glyph_pango
-//	  build tag.
 //
 // # Quick start
 //

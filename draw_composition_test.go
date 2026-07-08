@@ -1,4 +1,4 @@
-//go:build !js && !android && !windows && (!darwin || glyph_pango) && (!linux || glyph_pango)
+//go:build !js && !windows
 
 package glyph
 
@@ -22,21 +22,30 @@ func TestDrawCompositionNotComposing(t *testing.T) {
 
 func TestDrawCompositionClauses(t *testing.T) {
 	backend := newRecordingBackend()
-	renderer, err := NewRenderer(backend, 1.0)
+	ts, err := NewTextSystem(backend)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer renderer.Free()
+	defer ts.Free()
 
-	l := testLayout()
+	cfg := TextConfig{
+		Style: TextStyle{
+			FontName: "Sans 16",
+			Color:    Color{0, 0, 0, 255},
+		},
+	}
+	l, err := ts.LayoutText("He", cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	cs := NewCompositionState()
 	cs.Start(0)
 	cs.SetMarkedText("He", 2)
 
+	renderer := ts.Renderer()
 	renderer.DrawComposition(l, 0, 0, &cs, Color{0, 0, 0, 255})
 
-	// Should have drawn at least underline and cursor rects.
 	if len(backend.filledRects) == 0 {
 		t.Error("expected filled rects for composition")
 	}
@@ -65,7 +74,6 @@ func TestDrawLayoutWithComposition(t *testing.T) {
 	ts.Renderer().DrawLayoutWithComposition(layout, 10, 10, &cs)
 	ts.Commit()
 
-	// Should produce draw calls (normal layout rendering).
 	if len(backend.drawCalls) == 0 {
 		t.Error("no draw calls from DrawLayoutWithComposition")
 	}

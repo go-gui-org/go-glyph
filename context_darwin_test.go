@@ -1,4 +1,4 @@
-//go:build darwin && !glyph_pango
+//go:build darwin
 
 package glyph
 
@@ -6,7 +6,7 @@ import "testing"
 
 // TestFontMetricsDarwin mirrors the Pango-build TestFontMetrics under
 // the default CoreText build. The Pango variant in context_test.go is
-// gated by !darwin || glyph_pango, so the metrics path here is
+// gated by !darwin, so the metrics path here is
 // otherwise untested in CI.
 func TestFontMetricsDarwin(t *testing.T) {
 	ctx, err := NewContext(1.0)

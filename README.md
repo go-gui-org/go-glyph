@@ -75,14 +75,6 @@ The GPU backend on Linux additionally requires:
 ```sh
 sudo apt install libgl-dev libx11-dev
 ```
-
-Pango text shaping is available as an opt-in alternative:
-
-```sh
-go build -tags glyph_pango ./...
-# Requires: sudo apt install libpango1.0-dev libfreetype-dev \
-#     libfontconfig1-dev libglib2.0-dev
-
 ### Fedora
 
 ```sh
@@ -97,15 +89,7 @@ The GPU backend on Linux additionally requires:
 
 ```sh
 sudo dnf install mesa-libGL-devel libX11-devel
-```
-
-Pango text shaping is available as an opt-in alternative:
-
-```sh
-go build -tags glyph_pango ./...
-# Requires: sudo dnf install pango-devel freetype-devel \
-#     fontconfig-devel glib2-devel
-```
+``````
 
 ## Installation
 

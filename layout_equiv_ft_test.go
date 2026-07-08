@@ -1,4 +1,4 @@
-//go:build linux && !glyph_pango
+//go:build linux
 
 package glyph
 
