@@ -20,12 +20,12 @@ platform-appropriate shapers and rasterizers per operating system.
 
 ## Features
 
-- **Text shaping** via Pango - full Unicode, BiDi, complex scripts
-- **Glyph rasterization** via FreeType2 with subpixel positioning
+- **Text shaping** — full Unicode, BiDi, complex scripts (Pango, CoreText, DirectWrite per platform)
+- **Glyph rasterization** via FreeType2 / CoreText / GDI with subpixel positioning
 - **Multi-page glyph atlas** with automatic packing and eviction
 - **Layout caching** for efficient per-frame rendering
 - **Rich text** - mixed fonts, sizes, colors, and styles in one block
-- **Pango markup** support for inline styling
+- **Pango markup** support for inline styling (all platforms)
 - **Text decorations** - underline, strikethrough, stroke/outline
 - **Gradient text** - horizontal, vertical, and diagonal color gradients
 - **Word wrapping** with word, character, and word-char modes
@@ -44,18 +44,18 @@ Library requirements depend on the target platform:
 
 - **Linux:** Pango (+ PangoFT2), FreeType2, FontConfig, GLib
 - **macOS:** No native libraries required (uses CoreText)
-- **Windows:** No native libraries required for the root package (uses GDI)
+- **Windows:** No native libraries required (uses GDI + DirectWrite)
 - **Android:** FreeType2 (bundled with NDK)
 - **WASM:** No native libraries required (uses Canvas2D)
 
 ### Windows
 
 The root package and Ebitengine backend require no native libraries
-on Windows (`CGO_ENABLED=0`). If using the GPU backend with native
-Windows rendering (WGL), no additional libraries are needed — WGL is
-part of the standard Windows OpenGL stack.
+on Windows. If using the GPU backend with native Windows rendering
+(WGL), no additional libraries are needed — WGL is part of the
+standard Windows OpenGL stack.
 
-### macOS (Homebrew)
+### macOS
 
 The root package and Ebitengine backend use CoreText (no brew packages
 needed). The GPU backend on macOS uses Metal (no additional libraries).
@@ -152,8 +152,8 @@ func main() {
 
 ### TextSystem
 
-The main entry point. Manages a `Context` (Pango/FreeType state),
-a `Renderer` (glyph atlas + draw calls), and a layout cache.
+The main entry point. Manages a platform-appropriate text context,
+a Renderer (glyph atlas + draw calls), and a layout cache.
 
 ```go
 ts, err := glyph.NewTextSystem(backend)
@@ -178,7 +178,7 @@ Controls all aspects of text rendering:
 ```go
 cfg := glyph.TextConfig{
     Style: glyph.TextStyle{
-        FontName:      "Sans 16",       // Pango font description
+        FontName:      "Sans 16",       // Font description
         Typeface:      glyph.TypefaceBold,
         Color:         glyph.Color{R: 255, A: 255},
         Underline:     true,
@@ -355,7 +355,7 @@ layout, err := ts.LayoutRichText(rt, cfg)
 ts.DrawLayout(layout, x, y)
 ```
 
-### Pango Markup
+### Markup
 
 ```go
 cfg := glyph.TextConfig{
