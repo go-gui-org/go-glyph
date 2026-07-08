@@ -272,11 +272,6 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-pkg-config
-            mingw-w64-ucrt-x86_64-freetype
-            mingw-w64-ucrt-x86_64-harfbuzz
-            mingw-w64-ucrt-x86_64-pango
-            mingw-w64-ucrt-x86_64-fontconfig
-            mingw-w64-ucrt-x86_64-SDL2
 
       - name: Set CGo environment
         shell: msys2 {0}
@@ -314,7 +309,7 @@ jobs:
             examples/showcase_gpu/go.sum
 
       - name: Install native dependencies
-        run: brew install sdl2 pango pkg-config
+        run: brew install sdl2 pkg-config
 
       - name: Clear Go build cache
         run: go clean -cache
