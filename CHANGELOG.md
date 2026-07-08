@@ -5,20 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0] - 2026-07-08
+
+### Added
+
+- **FreeType+HarfBuzz text backend (Linux default).** Pango/CGo code path
+  removed; Linux now uses statically-linked FreeType+HarfBuzz with color emoji
+  support. Links only OS-default libraries (libc, libm, libz, libstdc++).
+  Includes bidi, CJK line-wrap, pure-Go font discovery, and `AddFontBytes`.
+  (#10, #16)
+- **Native GLX backend on Linux.** `backend/gpu` now uses native GLX for
+  OpenGL context and window handling — no SDL2 required. Links only X11,
+  GL, and GLX. (#11, #18)
+- **Native WGL backend on Windows.** `backend/gpu` now uses native WGL for
+  OpenGL context and window handling — no SDL2 required. Links only
+  `opengl32`, `gdi32`, `user32`. (#17, #19)
+- **Vendored static libraries.** FreeType+HarfBuzz static libs are vendored
+  in the repository; no build script required on Linux.
+- **Darwin ASCII monospace fast-path.** Pure-Go shaping for ASCII content in
+  monospace fonts skips CoreText, yielding ~500× speedup for cached layouts
+  (68 ns/op, 0 allocs). (#13, #15)
+
+### Removed
+
+- **Pango** text backend removed entirely. FreeType+HarfBuzz is now the sole
+  Linux text path.
+- **SDL2 backend** deleted (`backend/sdl2` module and `demo_sdl2` example).
+  All GPU backends (macOS, Linux, Windows) now use native OS windowing.
+- **ROADMAP.md** retired; planning moves to GitHub issues and project board.
+- Stale BSD/MSYS2 install instructions removed from README.
 
 ### Changed
 
-- **`backend/gpu` Windows path replaced SDL2 with native WGL.** OpenGL context
-  and window handling now use Win32 WGL (`gl_wgl.c`/`gl_wgl.h`) instead of SDL2.
-  Removed `#cgo pkg-config: sdl2`; the backend links only OS-default libraries
-  (`opengl32`, `gdi32`, `user32`). Deleted `gl_sdl.c`/`gl_sdl.h`. Consumers no
-  longer need SDL2 on Windows.
-- **Breaking (Windows):** `gpu.New()`'s `nativeWindow` is now a
-  `*gpu.Win32Handle{HWND}` instead of an `SDL_Window*`. `WindowFlag()` and
-  `WindowDrawableSize()` removed from the Windows backend (callers provide the
-  HWND directly). `demo_gpu`/`showcase_gpu` add a Windows init helper that
-  extracts the HWND from SDL (examples may still use SDL2 for windowing).
+- **Breaking (Linux GPU):** `gpu.New()` parameter is now
+  `*gpu.X11Handle{Display, Window}` instead of `SDL_Window*`.
+  `WindowFlag()` and `WindowDrawableSize()` removed from the Linux backend.
+- **Breaking (Windows GPU):** `gpu.New()` parameter is now
+  `*gpu.Win32Handle{HWND}` instead of `SDL_Window*`.
+  `WindowFlag()` and `WindowDrawableSize()` removed from the Windows backend.
+- Linux: system pkg-config FreeType+HarfBuzz used by default (static
+  vendored libs remain as fallback for systems without pkg-config).
+- README rewritten for conciseness; expanded godoc for public API.
+
+### Fixed
+
+- `uniseg` used for wasm grapheme fallback, fixing emoji sequence rendering
+  in wasm builds. (#8, #9)
+- Layout items now split at rich-text run boundaries respecting per-run
+  appearance; Pango markup demo dropped. (#22)
+- PNG support enabled in vendored FreeType for color bitmap glyphs.
+- CI modernized: removed stale Pango/SDL2 dependencies from Linux, Windows,
+  and macOS jobs; lint now uses filtered package list with direct
+  golangci-lint download.
 
 ## [1.12.0] - 2026-06-28
 
