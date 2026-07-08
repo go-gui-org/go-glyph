@@ -4,9 +4,8 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mike-ward/go-glyph)
 
-High-performance text rendering library for Go with pluggable rendering
-backends. Provides text shaping, layout, rasterization, and editing with
-platform-appropriate shapers and rasterizers per operating system.
+High-performance text rendering for Go. Shaping, layout, rasterization, and
+editing with platform-appropriate backends per OS.
 
 | OS | Shaper | Rasterizer |
 |---|---|---|
@@ -18,81 +17,19 @@ platform-appropriate shapers and rasterizers per operating system.
 
 ![screenshot](assets/a.png)
 
-## Features
-
-- **Text shaping** — full Unicode, BiDi, complex scripts (FreeType+HarfBuzz, CoreText, DirectWrite per platform)
-- **Glyph rasterization** via FreeType2 / CoreText / GDI with subpixel positioning
-- **Multi-page glyph atlas** with automatic packing and eviction
-- **Layout caching** for efficient per-frame rendering
-- **Rich text** - mixed fonts, sizes, colors, and styles in one block
-- **Pango markup** support for inline styling (all platforms)
-- **Text decorations** - underline, strikethrough, stroke/outline
-- **Gradient text** - horizontal, vertical, and diagonal color gradients
-- **Word wrapping** with word, character, and word-char modes
-- **Text alignment** - left, center, right
-- **Affine transforms** - rotation, skew, scale, translation
-- **Glyph placements** - per-glyph positioning (text on a path)
-- **Hit testing** and cursor position queries
-- **Text mutation** - insert, delete, selection, undo/redo
-- **IME support** with composition/preedit rendering
-- **Accessibility** - screen reader announcements, text field nodes
-- **Pluggable backends** — Ebitengine, GPU (Metal/OpenGL), Web (WASM), Android, iOS
-
 ## Prerequisites
 
-Library requirements depend on the target platform:
+| Platform | Requirements |
+|---|---|
+| macOS | None |
+| Windows | None |
+| Linux | `libpng-dev libbrotli-dev libbz2-dev` then `./scripts/build_android_deps.sh` |
+| Android | NDK; run `./scripts/build_android_deps.sh` |
+| WASM | None |
 
-- **Linux:** FreeType2, HarfBuzz (statically linked from vendored libs); PNG, Brotli, Bzip2 (system packages for build)
-- **macOS:** No native libraries required (uses CoreText)
-- **Windows:** No native libraries required (uses GDI + DirectWrite)
-- **Android:** FreeType2 (bundled with NDK)
-- **WASM:** No native libraries required (uses Canvas2D)
+GPU backend on Linux additionally needs `libgl-dev libx11-dev`.
 
-### Windows
-
-The root package and Ebitengine backend require no native libraries
-on Windows. If using the GPU backend with native Windows rendering
-(WGL), no additional libraries are needed — WGL is part of the
-standard Windows OpenGL stack.
-
-### macOS
-
-The root package and Ebitengine backend use CoreText (no brew packages
-needed). The GPU backend on macOS uses Metal (no additional libraries).
-
-### Ubuntu / Debian
-
-```sh
-# Build-time dependencies for static FreeType + HarfBuzz:
-sudo apt install libpng-dev libbrotli-dev libbz2-dev
-
-# Build vendored static libs:
-./scripts/build_android_deps.sh
-```
-
-The GPU backend on Linux additionally requires:
-
-```sh
-sudo apt install libgl-dev libx11-dev
-```
-
-### Fedora
-
-```sh
-# Build-time dependencies for static FreeType + HarfBuzz:
-sudo dnf install libpng-devel brotli-devel bzip2-devel
-
-# Build vendored static libs:
-./scripts/build_android_deps.sh
-```
-
-The GPU backend on Linux additionally requires:
-
-```sh
-sudo dnf install mesa-libGL-devel libX11-devel
-```
-
-## Installation
+## Install
 
 ```sh
 go get github.com/go-gui-org/go-glyph@latest
@@ -100,464 +37,39 @@ go get github.com/go-gui-org/go-glyph@latest
 
 ## Quick Start
 
-Minimal Ebitengine example:
-
-```go
-package main
-
-import (
-    "log"
-
-    "github.com/hajimehoshi/ebiten/v2"
-    "github.com/go-gui-org/go-glyph"
-    glyphebi "github.com/go-gui-org/go-glyph/backend/ebitengine"
-)
-
-type Game struct {
-    ts      *glyph.TextSystem
-    backend *glyphebi.Backend
-}
-
-func (g *Game) Update() error { return nil }
-
-func (g *Game) Draw(screen *ebiten.Image) {
-    g.backend.SetTarget(screen)
-
-    _ = g.ts.DrawText(20, 20, "Hello, World!", glyph.TextConfig{
-        Style: glyph.TextStyle{
-            FontName: "Sans 24",
-            Color:    glyph.Color{A: 255},
-        },
-    })
-
-    g.ts.Commit()
-}
-
-func (g *Game) Layout(w, h int) (int, int) { return w, h }
-
-func main() {
-    scale := ebiten.Monitor().DeviceScaleFactor()
-    backend := glyphebi.New(nil, float32(scale))
-
-    ts, err := glyph.NewTextSystem(backend)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer ts.Free()
-
-    ebiten.SetWindowSize(800, 600)
-    if err := ebiten.RunGame(&Game{ts: ts, backend: backend}); err != nil {
-        log.Fatal(err)
-    }
-}
-```
-
-## Core Concepts
-
-![screenshot](assets/b.png)
-
-### TextSystem
-
-The main entry point. Manages a platform-appropriate text context,
-a Renderer (glyph atlas + draw calls), and a layout cache.
-
 ```go
 ts, err := glyph.NewTextSystem(backend)
+if err != nil {
+    log.Fatal(err)
+}
 defer ts.Free()
 
-// Simple rendering (uses cache automatically):
-ts.DrawText(x, y, "text", cfg)
-ts.Commit() // Upload atlas textures, call once per frame.
+ts.DrawText(x, y, "Hello, World!", glyph.TextConfig{
+    Style: glyph.TextStyle{FontName: "Sans 24", Color: glyph.Color{A: 255}},
+})
+ts.Commit()
 ```
 
-For pre-computed layouts:
-
-```go
-layout, err := ts.LayoutText("text", cfg)
-ts.DrawLayout(layout, x, y)
-```
-
-### TextConfig
-
-Controls all aspects of text rendering:
-
-```go
-cfg := glyph.TextConfig{
-    Style: glyph.TextStyle{
-        FontName:      "Sans 16",       // Font description
-        Typeface:      glyph.TypefaceBold,
-        Color:         glyph.Color{R: 255, A: 255},
-        Underline:     true,
-        Strikethrough:  false,
-        LetterSpacing: 2.0,             // Extra spacing (points)
-        StrokeWidth:   1.5,             // Outline width (points)
-        StrokeColor:   glyph.Color{A: 255},
-    },
-    Block: glyph.BlockStyle{
-        Wrap:   glyph.WrapWord,
-        Width:  400,                    // Wrap width (-1 = none)
-        Align:  glyph.AlignCenter,
-        Indent: 20,                     // First-line indent
-    },
-    UseMarkup: false,
-    Gradient:  nil,
-}
-```
-
-### Layout
-
-A computed text layout containing glyph positions, line breaks,
-character rectangles, and logical attributes. Created by
-`LayoutText`, `LayoutRichText`, or `LayoutTextCached`.
-
-### DrawBackend
-
-Interface for plugging in a rendering framework. See `DrawBackend` in
-the [package documentation](https://pkg.go.dev/github.com/go-gui-org/go-glyph).
-Each backend package provides its own implementation.
-
-## Backends
-
-| Backend    | Package                       | Notes                                     |
-| ---------- | ----------------------------- | ----------------------------------------- |
-| Ebitengine | `go-glyph/backend/ebitengine` | Pure Go game engine                       |
-| GPU        | `go-glyph/backend/gpu`        | Metal (macOS), OpenGL 3.3 (Linux/Windows) |
-| Web        | `go-glyph/backend/web`        | WASM via Canvas2D                         |
-| Android    | `go-glyph/backend/android`    | Android (FreeType)                        |
-| iOS        | `go-glyph/backend/ios`        | iOS (CoreText)                            |
-
-Import the package matching the target framework.
-
-### Ebitengine
-
-```go
-import glyphebi "github.com/go-gui-org/go-glyph/backend/ebitengine"
-
-backend := glyphebi.New(nil, float32(dpiScale))
-// Call backend.SetTarget(screen) each frame before drawing.
-```
-
-### GPU (Metal / OpenGL)
-
-Uses Metal on macOS and native OpenGL 3.3 on Linux (GLX) and Windows (WGL).
-The caller owns the window and passes a native handle to `gpu.New`; the
-backend links only OS-default libraries. The API is identical
-across platforms:
-
-```go
-import glyphgpu "github.com/go-gui-org/go-glyph/backend/gpu"
-
-// The caller creates a window and builds a native handle:
-//   - macOS:   a CAMetalLayer
-//   - Linux:   &gpu.X11Handle{Display, Window}
-//   - Windows: &gpu.Win32Handle{HWND}
-// See examples/demo_gpu for per-platform window setup.
-backend, err := glyphgpu.New(nativeWindow, float32(dpiScale))
-defer backend.Destroy()
-
-// Per frame:
-backend.BeginFrame()
-// ... draw text ...
-backend.EndFrame(0.96, 0.96, 0.96, 1.0, logicalW, logicalH)
-```
-
-## Text Styling
-
-![screenshot](assets/c.png)
-
-### Bold, Italic
-
-```go
-glyph.TextStyle{FontName: "Sans 18", Typeface: glyph.TypefaceBold}
-glyph.TextStyle{FontName: "Sans 18", Typeface: glyph.TypefaceItalic}
-glyph.TextStyle{FontName: "Sans 18", Typeface: glyph.TypefaceBoldItalic}
-```
-
-### Underline and Strikethrough
-
-```go
-glyph.TextStyle{FontName: "Sans 16", Underline: true}
-glyph.TextStyle{FontName: "Sans 16", Strikethrough: true}
-```
-
-### Letter Spacing
-
-```go
-glyph.TextStyle{FontName: "Sans 16", LetterSpacing: 3.0}  // wider
-glyph.TextStyle{FontName: "Sans 16", LetterSpacing: -1.0}  // tighter
-```
-
-### Stroke / Outline
-
-```go
-glyph.TextStyle{
-    FontName:    "Sans 28",
-    Color:       glyph.Color{R: 255, G: 255, B: 255, A: 255},
-    StrokeWidth: 2.0,
-    StrokeColor: glyph.Color{A: 255},
-}
-```
-
-### Gradients
-
-```go
-cfg := glyph.TextConfig{
-    Style: glyph.TextStyle{FontName: "Sans 28"},
-    Gradient: &glyph.GradientConfig{
-        Direction: glyph.GradientHorizontal,
-        Stops: []glyph.GradientStop{
-            {Color: glyph.Color{R: 255, A: 255}, Position: 0},
-            {Color: glyph.Color{B: 255, A: 255}, Position: 1},
-        },
-    },
-}
-```
-
-## Layout Features
-
-### Word Wrapping
-
-```go
-glyph.BlockStyle{Wrap: glyph.WrapWord, Width: 300}
-glyph.BlockStyle{Wrap: glyph.WrapChar, Width: 300}
-glyph.BlockStyle{Wrap: glyph.WrapWordChar, Width: 300}
-```
-
-### Alignment
-
-```go
-glyph.BlockStyle{Width: 400, Align: glyph.AlignLeft}
-glyph.BlockStyle{Width: 400, Align: glyph.AlignCenter}
-glyph.BlockStyle{Width: 400, Align: glyph.AlignRight}
-```
-
-### Indentation
-
-```go
-glyph.BlockStyle{Width: 400, Indent: 30}   // first-line indent
-glyph.BlockStyle{Width: 400, Indent: -30}  // hanging indent
-```
-
-### Rich Text
-
-Render multiple styles in a single layout:
-
-```go
-rt := glyph.RichText{
-    Runs: []glyph.StyleRun{
-        {Text: "Bold ", Style: glyph.TextStyle{
-            FontName: "Sans 16",
-            Typeface: glyph.TypefaceBold,
-            Color:    glyph.Color{A: 255},
-        }},
-        {Text: "and italic", Style: glyph.TextStyle{
-            FontName: "Sans 16",
-            Typeface: glyph.TypefaceItalic,
-            Color:    glyph.Color{R: 200, A: 255},
-        }},
-    },
-}
-layout, err := ts.LayoutRichText(rt, cfg)
-ts.DrawLayout(layout, x, y)
-```
-
-### Markup
-
-```go
-cfg := glyph.TextConfig{
-    Style:     glyph.TextStyle{FontName: "Sans 16"},
-    UseMarkup: true,
-}
-ts.DrawText(x, y, "<b>Bold</b> and <i>italic</i>", cfg)
-```
-
-## Text Queries
-
-All query methods operate on a pre-computed `Layout`:
-
-```go
-layout, _ := ts.LayoutText(text, cfg)
-
-// Hit testing: byte index at screen coordinates.
-idx := layout.HitTest(mouseX-originX, mouseY-originY)
-
-// Character bounding box.
-rect, ok := layout.GetCharRect(byteIndex)
-
-// Cursor position geometry.
-cursor, ok := layout.GetCursorPos(byteIndex)
-
-// Closest byte index (clamps to text bounds).
-idx = layout.GetClosestOffset(localX, localY)
-
-// Selection rectangles.
-rects := layout.GetSelectionRects(start, end)
-
-// Cursor navigation.
-next := layout.MoveCursorRight(byteIndex)
-prev := layout.MoveCursorLeft(byteIndex)
-wordNext := layout.MoveCursorWordRight(byteIndex)
-wordPrev := layout.MoveCursorWordLeft(byteIndex)
-lineStart := layout.MoveCursorLineStart(byteIndex)
-lineEnd := layout.MoveCursorLineEnd(byteIndex)
-up := layout.MoveCursorUp(byteIndex, preferredX)
-down := layout.MoveCursorDown(byteIndex, preferredX)
-
-// Word / paragraph boundaries.
-start, end := layout.GetWordAtIndex(byteIndex)
-pStart, pEnd := layout.GetParagraphAtIndex(byteIndex, text)
-```
-
-## Text Mutation
-
-Package-level functions for editing text:
-
-```go
-// Insert and delete.
-result := glyph.InsertText(text, cursor, "hello")
-result = glyph.DeleteBackward(text, layout, cursor)
-result = glyph.DeleteForward(text, layout, cursor)
-
-// Word/line deletion.
-result = glyph.DeleteToWordBoundary(text, layout, cursor)
-result = glyph.DeleteToWordEnd(text, layout, cursor)
-result = glyph.DeleteToLineStart(text, layout, cursor)
-result = glyph.DeleteToLineEnd(text, layout, cursor)
-
-// Selection operations.
-result = glyph.DeleteSelection(text, cursor, anchor)
-result = glyph.InsertReplacingSelection(text, cursor, anchor, "new")
-selected := glyph.GetSelectedText(text, cursor, anchor)
-clipboard, result := glyph.CutSelection(text, cursor, anchor)
-```
-
-### Undo / Redo
-
-```go
-um := glyph.NewUndoManager(100)
-
-// After each mutation:
-um.RecordMutation(result, insertedText, cursorBefore, anchorBefore)
-
-// Undo / redo:
-if undoResult := um.Undo(currentText); undoResult != nil {
-    text = undoResult.Text
-    cursor = undoResult.Cursor
-}
-if redoResult := um.Redo(currentText); redoResult != nil {
-    text = redoResult.Text
-    cursor = redoResult.Cursor
-}
-```
-
-## Advanced Rendering
-
-### Affine Transforms
-
-```go
-transform := glyph.AffineRotation(0.3).
-    Multiply(glyph.AffineSkew(0.2, 0))
-
-ts.DrawLayoutTransformed(layout, x, y, transform)
-```
-
-### Rotated Text
-
-```go
-ts.DrawLayoutRotated(layout, x, y, angleRadians)
-```
-
-### Glyph Placements (Text on a Path)
-
-Position each glyph independently:
-
-```go
-glyphs := layout.GlyphPositions()
-placements := make([]glyph.GlyphPlacement, len(glyphs))
-for i, g := range glyphs {
-    t := float64(g.X) / totalWidth
-    placements[i] = glyph.GlyphPlacement{
-        X:     pathX(t),
-        Y:     pathY(t),
-        Angle: pathAngle(t),
-    }
-}
-ts.DrawLayoutPlaced(layout, placements)
-```
-
-### Subpixel Rendering
-
-Glyph positions use subpixel offsets for smooth text at all sizes.
-The renderer quantizes to 4 horizontal subpixel bins.
-
-## Subsystems
-
-### IME (Input Method Editor)
-
-The `ime` package provides a `Bridge` interface for platform-native
-IME integration. Composition state (preedit text, clause styling,
-cursor offset) is tracked in `CompositionState` and rendered with
-clause underlines and cursor feedback.
-
-### Accessibility
-
-The `accessibility` package provides a `Manager` for building an
-accessibility tree with text nodes and text field nodes.
-An `Announcer` handles screen reader announcements (character echo,
-word echo, line changes, selection changes) with debouncing.
+See [package docs](https://pkg.go.dev/github.com/go-gui-org/go-glyph) for the
+full API — text styling, layout queries, rich text, transforms, text mutation,
+IME, and accessibility.
 
 ## Examples
 
-| Example                     | Description                                                     |
-| --------------------------- | --------------------------------------------------------------- |
-| `examples/demo`             | Ebitengine demo - basic text, styles, wrapping, emoji, CJK, RTL |
-| `examples/demo_gpu`         | Same demo using GPU backend (Metal/OpenGL)                      |
-| `examples/showcase_gpu`     | Feature gallery (22 sections)                                   |
-| `examples/showcase_android` | Feature gallery for Android                                     |
-| `examples/showcase_ios`     | Feature gallery for iOS                                         |
-| `examples/showcase_web`     | Feature gallery for WASM/Web                                    |
-| `examples/showcase_sections`| Per-section feature demos                                       |
-
-Run an example:
+| Example | Description |
+|---|---|
+| `examples/demo` | Ebitengine — text, styles, wrapping, emoji, CJK, RTL |
+| `examples/demo_gpu` | GPU backend (Metal/OpenGL) |
+| `examples/showcase_gpu` | Feature gallery (22 sections) |
+| `examples/showcase_android` | Android feature gallery |
+| `examples/showcase_ios` | iOS feature gallery |
+| `examples/showcase_web` | WASM/Web feature gallery |
+| `examples/showcase_sections` | Per-section feature demos |
 
 ```sh
 cd examples/demo && go run .
 ```
 
-## Architecture
-
-```
-TextSystem
-  +-- Context (platform text engine)
-  |     +-- Text shaping and layout computation
-  |     +-- Font resolution and metrics
-  +-- Renderer
-  |     +-- GlyphAtlas (multi-page, shelf-packed)
-  |     +-- Glyph rasterization and caching
-  |     +-- Draw call emission
-  +-- Layout cache (hash-keyed, time-based eviction)
-  +-- DrawBackend (interface)
-        +-- Ebitengine / GPU / Web / Android / iOS
-```
-
-5-pass rendering pipeline per layout:
-
-1. Background rectangles
-2. Stroke setup
-3. Stroke outlines
-4. Fill glyphs (subpixel positioning, emoji scaling, gradients)
-5. Decorations (underline, strikethrough)
-
-## Documentation
-
-See the [DeepWiki glossary](https://deepwiki.com/mike-ward/go-glyph/8-glossary) for API reference.
-
-## Roadmap
-
-Planning lives in [GitHub Issues](../../issues) and the go-gui-org project
-board, not a checked-in roadmap file. Browse open issues for current and
-planned work.
-
 ## License
 
-See [LICENSE](LICENSE) for details.
+See [LICENSE](LICENSE).
