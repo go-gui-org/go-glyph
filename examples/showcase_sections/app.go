@@ -54,7 +54,6 @@ func BuildSections() []Section {
 		{"TEXT STROKE", 150, DrawStroke},
 		{"LAYOUT", 220, DrawLayout},
 		{"RICH TEXT", 60, DrawRichText},
-		{"PANGO MARKUP", 60, DrawMarkup},
 		{"GRADIENTS", 160, DrawGradients},
 		{"INTERNATIONALIZATION", 260, DrawI18n},
 		{"BIDIRECTIONAL TEXT", 120, DrawBidi},

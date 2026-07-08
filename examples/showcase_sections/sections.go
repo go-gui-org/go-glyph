@@ -190,18 +190,6 @@ func DrawRichText(a *App, x, y, w float32) {
 	}
 }
 
-func DrawMarkup(a *App, x, y, w float32) {
-	markup := `<b>Bold</b>, <i>italic</i>, ` +
-		`<span foreground="#ff9966">orange</span>, ` +
-		`<span size="x-large">large</span>, ` +
-		`<u>underline</u>, ` +
-		`<span font_family="monospace">mono</span>`
-	_ = a.TS.DrawText(x, y, markup, glyph.TextConfig{
-		Style:     glyph.TextStyle{FontName: "Sans 16", Color: TextColor},
-		UseMarkup: true,
-	})
-}
-
 func DrawGradients(a *App, x, y, w float32) {
 	rainbow := &glyph.GradientConfig{
 		Direction: glyph.GradientHorizontal,

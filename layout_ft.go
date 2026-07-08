@@ -13,11 +13,12 @@ import (
 // charFontOverride holds per-character font and position adjustments
 // for rich text runs.
 type charFontOverride struct {
-	font    ftFont
-	style   TextStyle
-	yShift  float64
-	xPad    float64
-	isColor bool // fallback is a color-emoji font (CBDT/CBLC)
+	font      ftFont
+	style     TextStyle
+	yShift    float64
+	xPad      float64
+	isColor   bool // fallback is a color-emoji font (CBDT/CBLC)
+	isRichRun bool // override comes from a rich-text run (style is authored)
 }
 
 // LayoutText shapes and wraps text using FreeType+HarfBuzz.
@@ -207,10 +208,11 @@ func (ctx *Context) LayoutRichText(rt RichText,
 	for _, r := range runs {
 		for i := r.start; i < r.end; {
 			overrides[i] = charFontOverride{
-				font:   r.font,
-				style:  r.resolved,
-				yShift: r.yShift,
-				xPad:   r.xPad,
+				font:      r.font,
+				style:     r.resolved,
+				yShift:    r.yShift,
+				xPad:      r.xPad,
+				isRichRun: true,
 			}
 			_, sz := utf8.DecodeRuneInString(text[i:])
 			i += sz
@@ -267,19 +269,21 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 
 	// Measure each grapheme cluster.
 	type charInfo struct {
-		text    string
-		width   float64
-		byteI   int
-		byteL   int
-		yShift  float64
-		xPad    float64
-		isColor bool
+		text     string
+		width    float64
+		byteI    int
+		byteL    int
+		yShift   float64
+		xPad     float64
+		isColor  bool
+		styleKey uint64 // per-run appearance identity; splits items
 	}
 	clusters := segmentGraphemes(text)
 	chars := make([]charInfo, 0, len(clusters))
 	for _, cl := range clusters {
 		var yShift, xPad float64
 		var isColor bool
+		var styleKey uint64
 		measureFont := baseFont
 		if overrides != nil {
 			if ov, ok := overrides[cl.byteI]; ok {
@@ -289,6 +293,26 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				yShift = ov.yShift
 				xPad = ov.xPad
 				isColor = ov.isColor
+				// Rich-text runs carry an authored style; glyphs
+				// rasterize from item.Style, so items must split wherever
+				// a run's rasterized appearance changes. Script fallbacks
+				// (LayoutText) are not rich runs and keep key 0.
+				if ov.isRichRun {
+					styleKey = fnvOffsetBasis
+					styleKey = fnvHashString(styleKey, ov.style.FontName)
+					styleKey = fnvHashF32(styleKey, ov.style.Size)
+					styleKey = fnvHashU64(styleKey,
+						uint64(ov.style.Typeface))
+					styleKey = fnvHashColor(styleKey, ov.style.Color)
+					styleKey = fnvHashColor(styleKey, ov.style.BgColor)
+					styleKey = fnvHashF32(styleKey, float32(yShift))
+					if ov.style.Underline {
+						styleKey = fnvHashU64(styleKey, 1)
+					}
+					if ov.style.Strikethrough {
+						styleKey = fnvHashU64(styleKey, 2)
+					}
+				}
 			}
 		}
 
@@ -309,6 +333,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			text: cl.text, width: w + xPad*float64(ctx.scaleFactor),
 			byteI: cl.byteI, byteL: cl.byteL,
 			yShift: yShift, xPad: xPad, isColor: isColor,
+			styleKey: styleKey,
 		})
 	}
 
@@ -497,6 +522,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		itemStartByte := startByteIdx
 		itemX := cx
 		itemColor := false // whether the current item is a color-emoji run
+		itemStyleKey := uint64(0)
 
 		flushItem := func(endByte int, useOrig bool) {
 			gc := len(allGlyphs) - itemStart
@@ -553,15 +579,19 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				continue
 			}
 
-			// Split the run whenever the color-emoji state changes so
-			// emoji glyphs get their own item with UseOriginalColor set;
-			// otherwise the color bitmap renders tinted and unscaled.
-			if len(allGlyphs) > itemStart && ch.isColor != itemColor {
+			// Split the item whenever the color-emoji state changes (so
+			// emoji glyphs get their own item with UseOriginalColor set,
+			// otherwise the color bitmap renders tinted and unscaled) or
+			// the style-run appearance changes (so each run's glyphs
+			// rasterize with its own font size and color).
+			if len(allGlyphs) > itemStart &&
+				(ch.isColor != itemColor || ch.styleKey != itemStyleKey) {
 				flushItem(ch.byteI, itemColor)
 				itemStartByte = ch.byteI
 				itemX = cx
 			}
 			itemColor = ch.isColor
+			itemStyleKey = ch.styleKey
 
 			allGlyphs = append(allGlyphs, Glyph{
 				Index:     uint32(ch.byteI),
