@@ -253,125 +253,40 @@ func IsDeadKey(r rune) bool {
 	return false
 }
 
+var deadKeyTable = map[[2]rune]rune{
+	{'`', 'a'}: 0x00E0, {'`', 'e'}: 0x00E8, {'`', 'i'}: 0x00EC,
+	{'`', 'o'}: 0x00F2, {'`', 'u'}: 0x00F9,
+	{'`', 'A'}: 0x00C0, {'`', 'E'}: 0x00C8, {'`', 'I'}: 0x00CC,
+	{'`', 'O'}: 0x00D2, {'`', 'U'}: 0x00D9,
+
+	{'\'', 'a'}: 0x00E1, {'\'', 'e'}: 0x00E9, {'\'', 'i'}: 0x00ED,
+	{'\'', 'o'}: 0x00F3, {'\'', 'u'}: 0x00FA,
+	{'\'', 'A'}: 0x00C1, {'\'', 'E'}: 0x00C9, {'\'', 'I'}: 0x00CD,
+	{'\'', 'O'}: 0x00D3, {'\'', 'U'}: 0x00DA,
+
+	{'^', 'a'}: 0x00E2, {'^', 'e'}: 0x00EA, {'^', 'i'}: 0x00EE,
+	{'^', 'o'}: 0x00F4, {'^', 'u'}: 0x00FB,
+	{'^', 'A'}: 0x00C2, {'^', 'E'}: 0x00CA, {'^', 'I'}: 0x00CE,
+	{'^', 'O'}: 0x00D4, {'^', 'U'}: 0x00DB,
+
+	{'~', 'a'}: 0x00E3, {'~', 'n'}: 0x00F1, {'~', 'o'}: 0x00F5,
+	{'~', 'A'}: 0x00C3, {'~', 'N'}: 0x00D1, {'~', 'O'}: 0x00D5,
+
+	{'"', 'a'}: 0x00E4, {'"', 'e'}: 0x00EB, {'"', 'i'}: 0x00EF,
+	{'"', 'o'}: 0x00F6, {'"', 'u'}: 0x00FC, {'"', 'y'}: 0x00FF,
+	{'"', 'A'}: 0x00C4, {'"', 'E'}: 0x00CB, {'"', 'I'}: 0x00CF,
+	{'"', 'O'}: 0x00D6, {'"', 'U'}: 0x00DC,
+
+	{':', 'a'}: 0x00E4, {':', 'e'}: 0x00EB, {':', 'i'}: 0x00EF,
+	{':', 'o'}: 0x00F6, {':', 'u'}: 0x00FC, {':', 'y'}: 0x00FF,
+	{':', 'A'}: 0x00C4, {':', 'E'}: 0x00CB, {':', 'I'}: 0x00CF,
+	{':', 'O'}: 0x00D6, {':', 'U'}: 0x00DC,
+
+	{',', 'c'}: 0x00E7, {',', 'C'}: 0x00C7,
+}
+
 // combineDeadKey returns combined character or ok=false.
 func combineDeadKey(dead, base rune) (rune, bool) {
-	switch dead {
-	case '`':
-		switch base {
-		case 'a':
-			return 0x00E0, true
-		case 'e':
-			return 0x00E8, true
-		case 'i':
-			return 0x00EC, true
-		case 'o':
-			return 0x00F2, true
-		case 'u':
-			return 0x00F9, true
-		case 'A':
-			return 0x00C0, true
-		case 'E':
-			return 0x00C8, true
-		case 'I':
-			return 0x00CC, true
-		case 'O':
-			return 0x00D2, true
-		case 'U':
-			return 0x00D9, true
-		}
-	case '\'':
-		switch base {
-		case 'a':
-			return 0x00E1, true
-		case 'e':
-			return 0x00E9, true
-		case 'i':
-			return 0x00ED, true
-		case 'o':
-			return 0x00F3, true
-		case 'u':
-			return 0x00FA, true
-		case 'A':
-			return 0x00C1, true
-		case 'E':
-			return 0x00C9, true
-		case 'I':
-			return 0x00CD, true
-		case 'O':
-			return 0x00D3, true
-		case 'U':
-			return 0x00DA, true
-		}
-	case '^':
-		switch base {
-		case 'a':
-			return 0x00E2, true
-		case 'e':
-			return 0x00EA, true
-		case 'i':
-			return 0x00EE, true
-		case 'o':
-			return 0x00F4, true
-		case 'u':
-			return 0x00FB, true
-		case 'A':
-			return 0x00C2, true
-		case 'E':
-			return 0x00CA, true
-		case 'I':
-			return 0x00CE, true
-		case 'O':
-			return 0x00D4, true
-		case 'U':
-			return 0x00DB, true
-		}
-	case '~':
-		switch base {
-		case 'a':
-			return 0x00E3, true
-		case 'n':
-			return 0x00F1, true
-		case 'o':
-			return 0x00F5, true
-		case 'A':
-			return 0x00C3, true
-		case 'N':
-			return 0x00D1, true
-		case 'O':
-			return 0x00D5, true
-		}
-	case '"', ':':
-		switch base {
-		case 'a':
-			return 0x00E4, true
-		case 'e':
-			return 0x00EB, true
-		case 'i':
-			return 0x00EF, true
-		case 'o':
-			return 0x00F6, true
-		case 'u':
-			return 0x00FC, true
-		case 'y':
-			return 0x00FF, true
-		case 'A':
-			return 0x00C4, true
-		case 'E':
-			return 0x00CB, true
-		case 'I':
-			return 0x00CF, true
-		case 'O':
-			return 0x00D6, true
-		case 'U':
-			return 0x00DC, true
-		}
-	case ',':
-		switch base {
-		case 'c':
-			return 0x00E7, true
-		case 'C':
-			return 0x00C7, true
-		}
-	}
-	return 0, false
+	r, ok := deadKeyTable[[2]rune{dead, base}]
+	return r, ok
 }
