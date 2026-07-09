@@ -58,6 +58,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and macOS jobs; lint now uses filtered package list with direct
   golangci-lint download.
 
+## [1.13.1] - 2026-07-09
+
+### Fixed
+
+- **Windows:** detect proportional font substitution when the configured font
+  family is unavailable and fall back to Consolas, preserving fixed-advance
+  grid rendering. (#25)
+
+### Changed
+
+- Refactor: deduplicate draw and renderer logic between FreeType (Linux) and
+  CoreText (Darwin) paths. (#23)
+
 ## [1.12.0] - 2026-06-28
 
 ### Added
