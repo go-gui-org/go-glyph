@@ -3,7 +3,9 @@
 package glyph
 
 import (
+	"log"
 	"math"
+	"strings"
 	"sync"
 	"syscall"
 	"unicode/utf16"
@@ -19,7 +21,10 @@ const (
 	_ANTIALIASED_QUALITY = 4
 	_CLEARTYPE_QUALITY   = 5
 	_DEFAULT_PITCH       = 0
+	_FIXED_PITCH         = 1
 	_FF_DONTCARE         = 0
+	_FF_MODERN           = 48 // 0x30
+	_TMPF_FIXED_PITCH    = 0x01
 	_FW_NORMAL           = 400
 	_FW_BOLD             = 700
 	_DIB_RGB_COLORS      = 0
@@ -121,6 +126,7 @@ var (
 	procSelectObject          = gdi32.NewProc("SelectObject")
 	procDeleteObject          = gdi32.NewProc("DeleteObject")
 	procGetTextMetricsW       = gdi32.NewProc("GetTextMetricsW")
+	procGetTextFaceW          = gdi32.NewProc("GetTextFaceW")
 	procGetTextExtentPoint32W = gdi32.NewProc("GetTextExtentPoint32W")
 	procSetBkMode             = gdi32.NewProc("SetBkMode")
 	procSetTextColor          = gdi32.NewProc("SetTextColor")
@@ -246,9 +252,35 @@ func (g *gdiContext) selectFont(family string, heightPx int32, weight int32, ita
 		if len(g.fontCache) >= maxFontCacheEntries {
 			g.evictFonts()
 		}
-		hf = createFontW(family, heightPx, weight, italic)
+		hf = createFontW(family, heightPx, weight, italic, _DEFAULT_PITCH|_FF_DONTCARE)
 		if hf == 0 {
 			return g.curFont // Keep current font on failure.
+		}
+		// Detect silent GDI font substitution.
+		prevFont := g.curFont
+		procSelectObject.Call(g.hdc, hf)
+		actual := g.actualFaceName()
+		if !strings.EqualFold(actual, family) {
+			tm := g.getTextMetrics()
+			if tm.TmPitchAndFamily&_TMPF_FIXED_PITCH == 0 {
+				// GDI gave us a proportional substitute.
+				// Recreate with FIXED_PITCH so terminal grids
+				// don't misalign.
+				procSelectObject.Call(g.hdc, prevFont)
+				procDeleteObject.Call(hf)
+				hf = createFontW("Consolas", heightPx, weight,
+					italic, _FIXED_PITCH|_FF_MODERN)
+				if hf != 0 {
+					log.Printf("glyph: GDI substituted proportional font for %q; falling back to %q",
+						family, "Consolas")
+				}
+			}
+			// If GDI substituted a fixed-pitch face: keep it. It
+			// won't break grids.
+		}
+		procSelectObject.Call(g.hdc, prevFont)
+		if hf == 0 {
+			return g.curFont
 		}
 		g.fontCache[key] = hf
 	}
@@ -270,7 +302,7 @@ func (g *gdiContext) evictFonts() {
 	}
 }
 
-func createFontW(family string, height int32, weight int32, italic bool) uintptr {
+func createFontW(family string, height int32, weight int32, italic bool, pitchAndFamily uintptr) uintptr {
 	name := utf16.Encode([]rune(family))
 	if len(name) > 31 {
 		name = name[:31]
@@ -284,19 +316,19 @@ func createFontW(family string, height int32, weight int32, italic bool) uintptr
 	}
 
 	hf, _, _ := procCreateFontW.Call(
-		uintptr(height),             // nHeight (negative = character height)
-		0,                           // nWidth
-		0,                           // nEscapement
-		0,                           // nOrientation
-		uintptr(weight),             // fnWeight
-		ital,                        // fdwItalic
-		0,                           // fdwUnderline
-		0,                           // fdwStrikeOut
-		_DEFAULT_CHARSET,            // fdwCharSet
-		_OUT_TT_PRECIS,              // fdwOutputPrecision
-		_CLIP_DEFAULT,               // fdwClipPrecision
-		_CLEARTYPE_QUALITY,          // fdwQuality
-		_DEFAULT_PITCH|_FF_DONTCARE, // fdwPitchAndFamily
+		uintptr(height),    // nHeight (negative = character height)
+		0,                  // nWidth
+		0,                  // nEscapement
+		0,                  // nOrientation
+		uintptr(weight),    // fnWeight
+		ital,               // fdwItalic
+		0,                  // fdwUnderline
+		0,                  // fdwStrikeOut
+		_DEFAULT_CHARSET,   // fdwCharSet
+		_OUT_TT_PRECIS,     // fdwOutputPrecision
+		_CLIP_DEFAULT,      // fdwClipPrecision
+		_CLEARTYPE_QUALITY, // fdwQuality
+		pitchAndFamily,     // fdwPitchAndFamily
 		uintptr(unsafe.Pointer(&faceName[0])),
 	)
 	return hf
@@ -307,6 +339,14 @@ func (g *gdiContext) getTextMetrics() _TEXTMETRICW {
 	var tm _TEXTMETRICW
 	procGetTextMetricsW.Call(g.hdc, uintptr(unsafe.Pointer(&tm)))
 	return tm
+}
+
+// actualFaceName returns the face name of the font currently selected
+// into the DC via GetTextFaceW.
+func (g *gdiContext) actualFaceName() string {
+	var buf [32]uint16
+	procGetTextFaceW.Call(g.hdc, 32, uintptr(unsafe.Pointer(&buf[0])))
+	return syscall.UTF16ToString(buf[:])
 }
 
 // measureString returns the width and height of a string in pixels.
@@ -361,7 +401,7 @@ func (g *gdiContext) renderGlyphBitmap(ch string, heightPx int) (Bitmap, int, in
 	}
 	ssFont, ok := g.fontCache[ssKey]
 	if !ok {
-		ssFont = createFontW(ssKey.family, ssKey.height, ssKey.weight, ssKey.italic)
+		ssFont = createFontW(ssKey.family, ssKey.height, ssKey.weight, ssKey.italic, _DEFAULT_PITCH|_FF_DONTCARE)
 		g.fontCache[ssKey] = ssFont
 	}
 
