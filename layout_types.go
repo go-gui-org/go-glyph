@@ -63,7 +63,7 @@ type Line struct {
 type Item struct {
 	Style TextStyle
 
-	FTFace   unsafe.Pointer // *C.FT_FaceRec, set during layout.
+	ftFace   unsafe.Pointer // *C.FT_FaceRec, set during layout.
 	RunText  string
 	ObjectID string
 

@@ -1,10 +1,10 @@
-//go:build android || linux
+//go:build android || linux || darwin
 
 package glyph
 
 // drawLayoutImpl is the shared implementation for all DrawLayout*
-// variants on Android. Uses atlas-based rendering like the iOS
-// backend.
+// variants on FreeType/CoreText platforms. Uses atlas-based rendering
+// like the native backend.
 func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 	transform AffineTransform, gradient *GradientConfig) {
 
@@ -369,4 +369,9 @@ func gradientStripCount(glyphH float32) int {
 	return max(4, min(16, int(glyphH+0.5)))
 }
 
-func clamp01(v float32) float32 { return max(0, min(1, v)) }
+func clamp01(v float32) float32 {
+	if v != v || v > 1e20 || v < -1e20 {
+		return 0
+	}
+	return max(0, min(1, v))
+}

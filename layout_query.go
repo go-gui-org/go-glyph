@@ -557,8 +557,8 @@ func (l *Layout) GetParagraphAtIndex(byteIndex int, text string) (int, int) {
 func (l *Layout) GetFontNameAtIndex(index int) string {
 	for _, item := range l.Items {
 		if index >= item.StartIndex && index < item.StartIndex+item.Length {
-			if item.FTFace != nil {
-				return getFontFamilyName(item.FTFace)
+			if item.ftFace != nil {
+				return getFontFamilyName(item.ftFace)
 			}
 		}
 	}

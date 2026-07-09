@@ -1020,7 +1020,7 @@ func (ctx *Context) buildLayout(text string, baseFont ctFont,
 			// best-effort metadata: the draw path keys off
 			// GlyphStart/GlyphCount, and the only StartIndex/Length
 			// consumer (GetFontNameAtIndex) is inert on CoreText items
-			// (FTFace==nil). itemX is still correct because cx advances
+			// (ftFace is nil). itemX is still correct because cx advances
 			// in visual order regardless of script direction.
 			if ch.isColor != itemIsColor && len(allGlyphs) > itemStart {
 				flushItem(ch.byteI)
