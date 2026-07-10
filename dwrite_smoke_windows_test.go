@@ -4,6 +4,7 @@ package glyph
 
 import (
 	"errors"
+	"math"
 	"testing"
 )
 
@@ -40,7 +41,6 @@ func TestDWriteRasterizerSmoke(t *testing.T) {
 				r, len(bmp.Data), bmp.Width, bmp.Height)
 			continue
 		}
-		// Sanity: sum of alpha should be > 0 (non-empty coverage).
 		var alphaSum int
 		for i := 3; i < len(bmp.Data); i += 4 {
 			alphaSum += int(bmp.Data[i])
@@ -52,9 +52,51 @@ func TestDWriteRasterizerSmoke(t *testing.T) {
 			r, bmp.Width, bmp.Height, left, top, alphaSum)
 	}
 
-	// Plain ASCII should report no color glyph.
 	_, _, _, err = dw.RenderColorGlyph(32.0, 'A')
 	if !errors.Is(err, errNoColorGlyph) {
 		t.Errorf("'A': expected errNoColorGlyph, got %v", err)
+	}
+}
+
+// TestDWriteRasterizer_CloseNilSafe verifies Close does not panic on
+// a nil receiver, and that double-close is safe.
+func TestDWriteRasterizer_CloseNilSafe(t *testing.T) {
+	var dw *dwriteRasterizer
+	dw.Close() // nil receiver
+
+	dw2, err := newDWriteRasterizer()
+	if err != nil {
+		t.Skipf("DirectWrite unavailable: %v", err)
+	}
+	dw2.Close()
+	dw2.Close() // double-close
+}
+
+// TestDWriteRasterizer_RenderColorGlyph_InvalidSize verifies that
+// zero, negative, and NaN emSizePx values return errNoColorGlyph
+// without crashing.
+func TestDWriteRasterizer_RenderColorGlyph_InvalidSize(t *testing.T) {
+	dw, err := newDWriteRasterizer()
+	if err != nil {
+		t.Skipf("DirectWrite unavailable: %v", err)
+	}
+	defer dw.Close()
+
+	for _, sz := range []float32{0, -1, float32(math.NaN())} {
+		_, _, _, err := dw.RenderColorGlyph(sz, 0x1F600)
+		if !errors.Is(err, errNoColorGlyph) {
+			t.Errorf("emSizePx=%v: want errNoColorGlyph, got %v", sz, err)
+		}
+	}
+}
+
+// TestDWriteRasterizer_RenderColorGlyph_NilReceiver verifies
+// RenderColorGlyph on a nil receiver returns an error without
+// crashing.
+func TestDWriteRasterizer_RenderColorGlyph_NilReceiver(t *testing.T) {
+	var dw *dwriteRasterizer
+	_, _, _, err := dw.RenderColorGlyph(32.0, 0x1F600)
+	if err == nil {
+		t.Error("expected error on nil receiver")
 	}
 }
