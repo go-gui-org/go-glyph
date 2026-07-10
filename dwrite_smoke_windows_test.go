@@ -6,7 +6,41 @@ import (
 	"errors"
 	"math"
 	"testing"
+	"unsafe"
 )
+
+// TestColorGlyphRunLayout pins the binary layout of
+// _DWRITE_COLOR_GLYPH_RUN1 to the COM ABI it aliases. Unlike the smoke
+// test, it needs no font and no DirectWrite runtime, so it guards the
+// load-bearing field offsets on every Windows build — including CI
+// hosts without Segoe UI Emoji, where the smoke test skips. A wrong
+// offset here silently mis-decodes color runs (the CGo->syscall port
+// regression: glyphImageFormat read 4 bytes early, discarding layers).
+func TestColorGlyphRunLayout(t *testing.T) {
+	if got := unsafe.Sizeof(_DWRITE_GLYPH_RUN{}); got != 48 {
+		t.Errorf("sizeof(_DWRITE_GLYPH_RUN) = %d, want 48", got)
+	}
+	var r _DWRITE_COLOR_GLYPH_RUN1
+	checks := []struct {
+		name string
+		got  uintptr
+		want uintptr
+	}{
+		{"GlyphRunDescription", unsafe.Offsetof(r.GlyphRunDescription), 48},
+		{"BaselineOriginX", unsafe.Offsetof(r.BaselineOriginX), 56},
+		{"BaselineOriginY", unsafe.Offsetof(r.BaselineOriginY), 60},
+		{"RunColor", unsafe.Offsetof(r.RunColor), 64},
+		{"PaletteIndex", unsafe.Offsetof(r.PaletteIndex), 80},
+		{"GlyphImageFormat", unsafe.Offsetof(r.GlyphImageFormat), 88},
+		{"MeasuringMode", unsafe.Offsetof(r.MeasuringMode), 92},
+		{"sizeof", unsafe.Sizeof(r), 96},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s offset/size = %d, want %d", c.name, c.got, c.want)
+		}
+	}
+}
 
 // TestDWriteRasterizerSmoke verifies end-to-end that the DirectWrite
 // color glyph path initializes, renders common emoji with non-empty
@@ -41,15 +75,29 @@ func TestDWriteRasterizerSmoke(t *testing.T) {
 				r, len(bmp.Data), bmp.Width, bmp.Height)
 			continue
 		}
-		var alphaSum int
-		for i := 3; i < len(bmp.Data); i += 4 {
-			alphaSum += int(bmp.Data[i])
+		var alphaSum, chromatic int
+		for i := 0; i+3 < len(bmp.Data); i += 4 {
+			alphaSum += int(bmp.Data[i+3])
+			// A colored glyph must contain at least one chromatic
+			// pixel (channels not all equal). If the color path
+			// silently falls back to a monochrome foreground fill,
+			// every opaque pixel is gray/white and this stays zero —
+			// the exact regression from the CGo->syscall port.
+			r8, g8, b8 := bmp.Data[i], bmp.Data[i+1], bmp.Data[i+2]
+			hi, lo := max(r8, max(g8, b8)), min(r8, min(g8, b8))
+			if bmp.Data[i+3] > 0 && hi-lo > 24 {
+				chromatic++
+			}
 		}
 		if alphaSum == 0 {
 			t.Errorf("U+%04X: bitmap has zero total alpha", r)
 		}
-		t.Logf("U+%04X: %dx%d left=%d top=%d alphaSum=%d",
-			r, bmp.Width, bmp.Height, left, top, alphaSum)
+		if chromatic == 0 {
+			t.Errorf("U+%04X: no chromatic pixels — color path likely "+
+				"fell back to a monochrome outline", r)
+		}
+		t.Logf("U+%04X: %dx%d left=%d top=%d alphaSum=%d chromatic=%d",
+			r, bmp.Width, bmp.Height, left, top, alphaSum, chromatic)
 	}
 
 	_, _, _, err = dw.RenderColorGlyph(32.0, 'A')
