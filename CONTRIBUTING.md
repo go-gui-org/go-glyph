@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Go 1.26+
-- SDL2 development libraries (for the SDL2 backend)
+- SDL2 development libraries (for GPU examples only; not required for the root module)
 - [golangci-lint](https://golangci-lint.run/)
 
 ## Build and Test
