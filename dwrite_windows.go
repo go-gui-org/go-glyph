@@ -25,9 +25,12 @@ type _GUID struct {
 	Data4 [8]byte
 }
 
+// {4B0B5BD3-0797-4549-8AC5-FE915CC53856} — IID_IDWriteFactory4 from
+// dwrite_3.h. DWriteCreateFactory returns E_NOINTERFACE for any other
+// value, which kills the entire color-emoji path.
 var _IID_IDWriteFactory4 = _GUID{
-	0xA5D41E20, 0xF5FD, 0x4E95,
-	[8]byte{0x87, 0xA0, 0x90, 0xE1, 0x3D, 0x16, 0x57, 0x76},
+	0x4B0B5BD3, 0x0797, 0x4549,
+	[8]byte{0x8A, 0xC5, 0xFE, 0x91, 0x5C, 0xC5, 0x38, 0x56},
 }
 
 // DWrite constants.
@@ -38,7 +41,10 @@ const (
 	_DWRITE_FONT_STRETCH_NORMAL = 5
 	_DWRITE_FONT_STYLE_NORMAL   = 0
 
-	_DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC = 6
+	// DWRITE_RENDERING_MODE: NATURAL_SYMMETRIC is 5; 6 is OUTLINE, which
+	// CreateGlyphRunAnalysis rejects with E_INVALIDARG (no alpha texture
+	// can be produced from outline mode).
+	_DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC = 5
 	_DWRITE_MEASURING_MODE_NATURAL           = 0
 	_DWRITE_TEXTURE_CLEARTYPE_3x1            = 1
 
@@ -81,18 +87,29 @@ type _DWRITE_GLYPH_RUN struct {
 	BidiLevel     uint32
 }
 
-// _DWRITE_COLOR_GLYPH_RUN1 mirrors the layout expected by the COM
-// runtime.  baselineOriginX / baselineOriginY are included because
-// MinGW's dwrite_3.h adds them after measuringMode; the binary
-// layout and field accesses in the original C code depend on this.
+// _DWRITE_COLOR_GLYPH_RUN1 mirrors the exact binary layout of the COM
+// struct from dwrite_3.h. The base DWRITE_COLOR_GLYPH_RUN carries
+// glyphRunDescription, the baseline origins, runColor and paletteIndex;
+// the RUN1 derivative appends glyphImageFormat and measuringMode. Field
+// order and the glyphRunDescription pointer are load-bearing: an
+// incorrect layout makes runColor read from the wrong offset (it comes
+// back zero and every glyph renders solid white).
 type _DWRITE_COLOR_GLYPH_RUN1 struct {
-	GlyphRun         _DWRITE_GLYPH_RUN
-	GlyphImageFormat uint32
-	MeasuringMode    uint32
-	BaselineOriginX  float32
-	BaselineOriginY  float32
-	RunColor         _DWRITE_COLOR_F
-	PaletteIndex     uint16
+	GlyphRun            _DWRITE_GLYPH_RUN
+	GlyphRunDescription unsafe.Pointer
+	BaselineOriginX     float32
+	BaselineOriginY     float32
+	RunColor            _DWRITE_COLOR_F
+	PaletteIndex        uint16
+	// C++ derives RUN1 from DWRITE_COLOR_GLYPH_RUN; the base subobject
+	// contains pointers, so it is padded up to its 8-byte alignment
+	// (PaletteIndex ends at offset 82, padded to 88) before the derived
+	// glyphImageFormat/measuringMode are appended. A flat Go struct
+	// would only pad 2 bytes and read glyphImageFormat 4 bytes early —
+	// yielding a bogus format whose PNG/SVG bits discard every layer.
+	_                [6]byte // tail pad of the base subobject (82 → 88)
+	GlyphImageFormat uint32  // offset 88
+	MeasuringMode    uint32  // offset 92
 }
 
 // _maxColorGlyphLayers prevents an unbounded allocation from a
@@ -150,7 +167,11 @@ func iDWriteFactory_CreateGlyphRunAnalysis(factory unsafe.Pointer,
 	return r1
 }
 
-// IDWriteFactory4 (dwrite_3.h)
+// IDWriteFactory4 (dwrite_3.h). TranslateColorGlyphRun is the last of
+// three methods added by IDWriteFactory4, which itself sits atop
+// Factory3 (slots 31-39, ending at GetFontDownloadQueue). That places
+// this method at vtable slot 40 — the Factory2 overload at slot 28 and
+// GetSystemFontSet at slot 35 are the easy off-by-N traps here.
 func iDWriteFactory4_TranslateColorGlyphRun(factory unsafe.Pointer,
 	baselineOriginX, baselineOriginY float32,
 	glyphRun unsafe.Pointer,
@@ -161,7 +182,7 @@ func iDWriteFactory4_TranslateColorGlyphRun(factory unsafe.Pointer,
 	paletteIndex uint32,
 	colorEnum *unsafe.Pointer,
 ) uintptr {
-	fn := vtblSlot(factory, 35)
+	fn := vtblSlot(factory, 40)
 	// baselineOrigin is a D2D1_POINT_2F (two float32, 8 bytes).
 	bOrigin := uintptr(math.Float32bits(baselineOriginX)) |
 		(uintptr(math.Float32bits(baselineOriginY)) << 32)
