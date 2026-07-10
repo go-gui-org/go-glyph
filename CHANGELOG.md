@@ -58,6 +58,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and macOS jobs; lint now uses filtered package list with direct
   golangci-lint download.
 
+## [1.14.0] - 2026-07-10
+
+### Changed
+
+- **Windows:** DirectWrite backend rewritten from CGo to pure syscall bindings,
+  removing the C compiler requirement for the DirectWrite path. (#28)
+
+### Fixed
+
+- **Windows:** color emoji rendering in DirectWrite fixed after CGo→syscall
+  port. (#29)
+- Docs: stale SDL2 prerequisite description corrected in CONTRIBUTING.md.
+
 ## [1.13.1] - 2026-07-09
 
 ### Fixed
