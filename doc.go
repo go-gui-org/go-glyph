@@ -1,15 +1,16 @@
 // Package glyph provides high-quality text shaping, layout, and rendering
-// for GPU-accelerated applications. It uses a platform-appropriate shaper
-// and rasterizer per operating system, exposed behind a backend-agnostic
+// for GPU-accelerated applications. Text shaping and rasterization are
+// pure Go on all platforms, exposed behind a backend-agnostic
 // [DrawBackend] interface.
 //
 // # Platform matrix
 //
 //	OS          Shaper              Rasterizer
-//	Linux       FreeType + HarfBuzz FreeType
-//	macOS       CoreText            CoreText / CoreGraphics
-//	Windows     GDI + DirectWrite   GDI + DirectWrite
-//	Android     FreeType            FreeType
+//	Linux       HarfBuzz (go-text)  x/image/vector
+//	macOS       HarfBuzz (go-text)  x/image/vector
+//	iOS         HarfBuzz (go-text)  x/image/vector
+//	Windows     HarfBuzz (go-text)  x/image/vector
+//	Android     HarfBuzz (go-text)  x/image/vector
 //	WASM        Canvas2D            Canvas2D
 //
 // # Quick start
@@ -33,8 +34,8 @@
 //
 // # Core concepts
 //
-// [TextSystem] is the main entry point. It manages a platform-appropriate
-// text context, a [Renderer] (glyph atlas + draw calls), and a layout cache.
+// [TextSystem] is the main entry point. It manages a text context, a
+// [Renderer] (glyph atlas + draw calls), and a layout cache.
 //
 // Pre-computed layouts from [TextSystem.LayoutText] or
 // [TextSystem.LayoutRichText] can be drawn repeatedly. For one-shot rendering,
