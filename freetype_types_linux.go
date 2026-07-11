@@ -4,6 +4,7 @@ package glyph
 
 import (
 	"bytes"
+	"container/list"
 	"math"
 	"os"
 	"strings"
@@ -25,19 +26,47 @@ var colorTableTags = []ot.Tag{
 }
 
 // cachedFace holds a parsed go-text face plus the cheap-to-read
-// attributes the backend queries repeatedly. Faces are immutable after
-// parsing (apart from SetPpem, applied under faceCacheMu at the bitmap
-// call site), so a single parsed face is shared across ftFont values.
+// attributes the backend queries repeatedly. The parsed face is shared
+// across ftFont values; its only mutable state is the bitmap ppem, set
+// under mu by the color-glyph path (renderColorGlyph), so concurrent
+// color renders across Contexts cannot corrupt each other's strike
+// selection.
 type cachedFace struct {
+	mu    sync.Mutex // guards ppem-dependent access to face (SetPpem+GlyphData)
 	face  *font.Face
 	upem  uint16
 	color bool
 }
 
-var (
-	faceCacheMu sync.Mutex
-	faceCache   = map[string]*cachedFace{}
-)
+// faceCacheCap bounds the number of parsed faces kept resident. Real
+// workloads touch far fewer fonts than this; the cap only guards against
+// unbounded growth (e.g. many AddFontFile paths), evicting least-recently
+// used entries. A shared global cache mirrors the render-side singletons.
+const faceCacheCap = 128
+
+var faceCache = newFaceLRU(faceCacheCap)
+
+// faceLRU is a bounded, concurrency-safe path→cachedFace cache. It caches
+// misses (nil) too, so a bad path is not re-read on every glyph.
+type faceLRU struct {
+	mu    sync.Mutex
+	cap   int
+	ll    *list.List // front = most recently used
+	items map[string]*list.Element
+}
+
+type faceEntry struct {
+	path string
+	face *cachedFace // may be nil (negative cache)
+}
+
+func newFaceLRU(capacity int) *faceLRU {
+	return &faceLRU{
+		cap:   capacity,
+		ll:    list.New(),
+		items: make(map[string]*list.Element, capacity),
+	}
+}
 
 // loadCachedFace parses (once) the font at path and caches it. Returns
 // nil if the file cannot be read or parsed. Handles single fonts and
@@ -47,15 +76,44 @@ func loadCachedFace(path string) *cachedFace {
 	if path == "" {
 		return nil
 	}
-	faceCacheMu.Lock()
-	defer faceCacheMu.Unlock()
-	if cf, ok := faceCache[path]; ok {
+	if cf, ok := faceCache.get(path); ok {
 		return cf // may be nil: negative cache
 	}
-
 	cf := parseFace(path)
-	faceCache[path] = cf
+	faceCache.add(path, cf)
 	return cf
+}
+
+// get returns the cached face for path (moving it to most-recently-used)
+// and whether it was present.
+func (c *faceLRU) get(path string) (*cachedFace, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if el, ok := c.items[path]; ok {
+		c.ll.MoveToFront(el)
+		return el.Value.(*faceEntry).face, true
+	}
+	return nil, false
+}
+
+// add inserts path→cf, evicting the least-recently-used entry when over
+// capacity. A concurrent add of the same path keeps the existing entry.
+func (c *faceLRU) add(path string, cf *cachedFace) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if el, ok := c.items[path]; ok {
+		c.ll.MoveToFront(el)
+		return
+	}
+	c.items[path] = c.ll.PushFront(&faceEntry{path: path, face: cf})
+	for c.ll.Len() > c.cap {
+		oldest := c.ll.Back()
+		if oldest == nil {
+			break
+		}
+		c.ll.Remove(oldest)
+		delete(c.items, oldest.Value.(*faceEntry).path)
+	}
 }
 
 func parseFace(path string) *cachedFace {

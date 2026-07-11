@@ -3,7 +3,6 @@
 package glyph
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -111,14 +110,17 @@ func (ctx *Context) createFTFont(style TextStyle) ftFont {
 }
 
 // describeFontFile reads a font's family/aspect and color-glyph flag
-// without building a full face. Returns ok=false if the file cannot be
-// parsed. The buffer is reused across calls to reduce allocations.
+// without building a full face. It opens the file lazily and lets the
+// loader read only the table directory and the few metadata tables it
+// needs (via ReadAt), rather than slurping the whole file — discovery
+// walks every system font, so this keeps startup I/O small.
 func describeFontFile(path string) (desc font.Description, color, ok bool) {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return desc, false, false
 	}
-	loaders, err := ot.NewLoaders(bytes.NewReader(data))
+	defer f.Close()
+	loaders, err := ot.NewLoaders(f)
 	if err != nil || len(loaders) == 0 {
 		return desc, false, false
 	}

@@ -350,12 +350,6 @@ func renderColorGlyph(path string, size float64, text string) (*rasterResult, bo
 	if cf == nil {
 		return nil, false
 	}
-	// Select the bitmap strike nearest the requested size.
-	ppem := uint16(size + 0.5)
-	if ppem == 0 {
-		ppem = 1
-	}
-	cf.face.SetPpem(ppem, ppem)
 
 	buf := shapeWith(cf, size, text)
 	if buf == nil || len(buf.Info) == 0 {
@@ -365,7 +359,20 @@ func renderColorGlyph(path string, size float64, text string) (*rasterResult, bo
 	if gid == 0 {
 		return nil, false
 	}
-	gb, ok := cf.face.GlyphData(gid).(font.GlyphBitmap)
+
+	// SetPpem selects the bitmap strike and mutates the shared face, so the
+	// SetPpem+GlyphData pair must be atomic against other color renders of
+	// the same cached face (possibly on another Context/goroutine).
+	ppem := uint16(size + 0.5)
+	if ppem == 0 {
+		ppem = 1
+	}
+	cf.mu.Lock()
+	cf.face.SetPpem(ppem, ppem)
+	gd := cf.face.GlyphData(gid)
+	cf.mu.Unlock()
+
+	gb, ok := gd.(font.GlyphBitmap)
 	if !ok || len(gb.Data) == 0 || gb.Format != font.PNG {
 		return nil, false
 	}
