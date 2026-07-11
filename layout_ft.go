@@ -298,6 +298,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		yShift   float64
 		xPad     float64
 		isColor  bool
+		absorbed bool   // consumed by a ligature; not a caret stop
 		styleKey uint64 // per-run appearance identity; splits items
 		// glyphs is the cluster's shaped-glyph stream (HarfBuzz output owned
 		// by this cluster), in visual order. Empty when the cluster was not
@@ -423,6 +424,16 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				xOff: float64(pos.XOffset) / 64.0,
 				yOff: float64(pos.YOffset) / 64.0,
 			})
+		}
+		// A cluster that received no glyph from a run that shaped successfully
+		// was absorbed into a neighbouring ligature (e.g. the alef of a
+		// lam-alef, or the second half of an "fi"). Its advance is ~0 and the
+		// caret must not stop inside it — carets land only at ligature
+		// boundaries.
+		for k := ri; k < rj; k++ {
+			if len(chars[k].glyphs) == 0 {
+				chars[k].absorbed = true
+			}
 		}
 		ri = rj
 	}
@@ -765,7 +776,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				chars[ci-1].text == "\t" ||
 				chars[ci-1].text == "\n")
 			logAttrs = append(logAttrs, LogAttr{
-				IsCursorPosition: true,
+				IsCursorPosition: !ch.absorbed,
 				IsWordStart:      !isWS && prevWS,
 				IsWordEnd: isWS && ci > 0 &&
 					chars[ci-1].text != " " &&

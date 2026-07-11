@@ -206,6 +206,60 @@ func TestRenderStreamMatchesLegacy(t *testing.T) {
 	}
 }
 
+// TestLigatureCaretSkipsInterior verifies that a cluster absorbed into a
+// ligature is not a valid caret stop — carets land only at ligature
+// boundaries. It probes a few ligating strings and skips if none ligate on
+// this host (no covering font / ligatures disabled).
+func TestLigatureCaretSkipsInterior(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	for _, s := range []string{"لا", "لام", "ffi", "fi"} {
+		layout, err := ctx.LayoutText(s, TextConfig{})
+		if err != nil {
+			continue
+		}
+		valid := make(map[int]bool)
+		for _, p := range layout.GetValidCursorPositions() {
+			valid[p] = true
+		}
+
+		foundLigature := false
+		for _, it := range layout.Items {
+			hasReal := false
+			for j := it.GlyphStart; j < it.GlyphStart+it.GlyphCount; j++ {
+				if layout.Glyphs[j].GlyphID != 0 {
+					hasReal = true
+					break
+				}
+			}
+			if !hasReal {
+				continue // run not shaped/covered on this host
+			}
+			// An absorbed cluster emits a zero-id, ~zero-advance placeholder
+			// inside an otherwise-shaped item. (A .notdef box has id 0 but a
+			// real advance, so the advance guard excludes it.)
+			for j := it.GlyphStart; j < it.GlyphStart+it.GlyphCount; j++ {
+				g := layout.Glyphs[j]
+				if g.GlyphID == 0 && g.XAdvance < 0.01 {
+					foundLigature = true
+					if valid[int(g.Index)] {
+						t.Errorf("%q: caret allowed inside ligature at byte %d",
+							s, g.Index)
+					}
+				}
+			}
+		}
+		if foundLigature {
+			return // exercised at least one ligature
+		}
+	}
+	t.Skip("no ligature formed on this host; skipping")
+}
+
 // TestLayoutArabicStream verifies Arabic shapes through the stream path: with a
 // covering font the run yields resolved glyph ids, and ligature absorption can
 // make the glyph count differ from the cluster count.
