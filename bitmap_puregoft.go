@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || darwin
 
 package glyph
 
@@ -15,10 +15,10 @@ import (
 	"golang.org/x/image/vector"
 )
 
-// This file is the pure-Go replacement for bitmap_ft.go on Linux and
-// Android (GOOS=android sets the `linux` build tag). Shaping/rasterization
-// are shared; only font discovery (see discover_linux.go / discover_android.go)
-// differs by platform.
+// This file is the pure-Go replacement for the cgo rasterizer on Linux,
+// Android, and macOS. Shaping/rasterization are shared; only font discovery
+// (see discover_linux.go / discover_android.go / discover_darwin.go) differs
+// by platform.
 // Shaping comes from go-text/typesetting/harfbuzz; monochrome glyphs are
 // rasterized with golang.org/x/image/vector; color-emoji glyphs decode
 // their embedded bitmaps (CBDT/sbix PNG); stroked text uses the pure-Go
