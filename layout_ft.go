@@ -15,7 +15,7 @@ import (
 // re-shaping. xOff/yOff are the glyph's positioning offsets (mark placement);
 // xAdv/yAdv are its advances.
 type shapedGlyph struct {
-	gid        uint16
+	gid        uint32
 	xAdv, yAdv float64
 	xOff, yOff float64
 }
@@ -301,8 +301,8 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		styleKey uint64 // per-run appearance identity; splits items
 		// glyphs is the cluster's shaped-glyph stream (HarfBuzz output owned
 		// by this cluster), in visual order. Empty when the cluster was not
-		// shaped (newline, color emoji, unloaded font, or a glyph id beyond
-		// uint16) — those fall back to text-based rasterization.
+		// shaped (newline, color emoji, or an unloaded font) — those fall back
+		// to text-based rasterization.
 		glyphs []shapedGlyph
 	}
 	clusters := segmentGraphemes(text)
@@ -407,10 +407,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		// Accumulate each shaped glyph's advance onto its owning cluster and
 		// record the glyph in that cluster's stream. HarfBuzz sets a merged
 		// glyph's cluster to the smallest rune index it covers, so the owning
-		// cluster is the last one starting at or before that rune. Glyph ids
-		// wider than uint16 cannot be stored, so such a run drops its stream
-		// and rasterizes via the text fallback.
-		bigGID := false
+		// cluster is the last one starting at or before that rune.
 		for gi := range buf.Info {
 			c := int(buf.Info[gi].Cluster)
 			k := 0
@@ -419,21 +416,13 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			}
 			pos := buf.Pos[gi]
 			chars[ri+k].width += float64(pos.XAdvance) / 64.0
-			if buf.Info[gi].Glyph > 0xFFFF {
-				bigGID = true
-			}
 			chars[ri+k].glyphs = append(chars[ri+k].glyphs, shapedGlyph{
-				gid:  uint16(buf.Info[gi].Glyph),
+				gid:  uint32(buf.Info[gi].Glyph),
 				xAdv: float64(pos.XAdvance) / 64.0,
 				yAdv: float64(pos.YAdvance) / 64.0,
 				xOff: float64(pos.XOffset) / 64.0,
 				yOff: float64(pos.YOffset) / 64.0,
 			})
-		}
-		if bigGID {
-			for k := ri; k < rj; k++ {
-				chars[k].glyphs = nil
-			}
 		}
 		ri = rj
 	}

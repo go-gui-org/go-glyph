@@ -10,7 +10,7 @@ import (
 // resolveTestGlyph loads the default font, shapes a single-glyph string, and
 // returns its path, pixel size, and glyph id. It skips the test when no font
 // is installed or the character is uncovered.
-func resolveTestGlyph(t *testing.T, ch string) (path string, size float64, gid uint16) {
+func resolveTestGlyph(t *testing.T, ch string) (path string, size float64, gid uint32) {
 	t.Helper()
 	ctx, err := NewContext(1.0)
 	if err != nil {
@@ -34,7 +34,7 @@ func resolveTestGlyph(t *testing.T, ch string) (path string, size float64, gid u
 	if buf == nil || len(buf.Info) != 1 {
 		t.Skipf("%q did not shape to a single glyph", ch)
 	}
-	g := uint16(buf.Info[0].Glyph)
+	g := uint32(buf.Info[0].Glyph)
 	if g == 0 {
 		t.Skipf("%q not covered by %q", ch, path)
 	}

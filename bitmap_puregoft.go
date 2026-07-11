@@ -169,7 +169,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 // is no fallback iteration and no notdef rejection: the layout already picked
 // the covering font when it produced the id. strokeWidth > 0 strokes the
 // outline instead of filling it.
-func loadGlyphByIDFT(atlas *GlyphAtlas, path string, gid uint16, item Item,
+func loadGlyphByIDFT(atlas *GlyphAtlas, path string, gid uint32, item Item,
 	strokeWidth float32, subpixelBin int,
 	scaleFactor float32) (LoadGlyphResult, error) {
 
@@ -301,7 +301,7 @@ func renderRun(path string, size, strokeWidth, subpixelShift float64,
 // the glyph has no outline (a space, or a bitmap/color glyph handled by the
 // color paths).
 func renderGlyphByID(path string, size, strokeWidth, subpixelShift float64,
-	gid uint16) *rasterResult {
+	gid uint32) *rasterResult {
 
 	cf := loadCachedFace(path)
 	if cf == nil {
