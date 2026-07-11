@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || darwin
 
 package glyph
 
@@ -11,10 +11,11 @@ import (
 	ot "github.com/go-text/typesetting/font/opentype"
 )
 
-// Context holds font state for text shaping on Linux and Android, backed
-// by the pure-Go go-text/typesetting stack (no cgo, no FreeType/HarfBuzz).
-// Only font discovery differs per platform (discoverSystemFonts, defined
-// in discover_linux.go / discover_android.go).
+// Context holds font state for text shaping on Linux, Android, and macOS,
+// backed by the pure-Go go-text/typesetting stack (no cgo, no system
+// font libraries). Only font discovery differs per platform
+// (discoverSystemFonts, defined in discover_linux.go / discover_android.go /
+// discover_darwin.go).
 //
 // Not safe for concurrent use.
 type Context struct {
@@ -28,7 +29,7 @@ type Context struct {
 	colorPaths    []string               // color-emoji fonts (CBDT/CBLC), render side
 }
 
-// NewContext creates a Linux/Android text context backed by go-text/typesetting.
+// NewContext creates a text context backed by go-text/typesetting.
 func NewContext(scaleFactor float32) (*Context, error) {
 	if !(scaleFactor > 0) {
 		scaleFactor = 1.0
@@ -237,6 +238,8 @@ func isCJKFamily(lowerFamily string) bool {
 		"noto sans jp", "noto serif jp",
 		"noto sans sc", "noto sans tc", "noto sans kr",
 		"droid sans fallback", "nanum", "ipa", "vl gothic", "takao",
+		"pingfang", "heiti", "hiragino",
+		"apple sd gothic neo", "applegothic",
 	}
 	for _, n := range needles {
 		if strings.Contains(lowerFamily, n) {
@@ -246,15 +249,43 @@ func isCJKFamily(lowerFamily string) bool {
 	return false
 }
 
-// fontScan accumulates discovery results across a directory walk. Both the
-// Linux and Android discovery paths (discover_linux.go / discover_android.go)
-// drive it; only the directory list and the generic-alias mapping differ per
-// platform. Color emoji is collected ahead of CJK so colored glyphs win over
-// monochrome coverage in the fallback order.
+// isScriptFamily reports whether a lower-cased family name belongs to a
+// font that covers one or more non-CJK, non-Latin scripts (Arabic, Hebrew,
+// Thai, Indic, etc.). These are collected as the lowest-priority fallback
+// tier so the layout engine can find glyphs the primary Latin font lacks.
+func isScriptFamily(lowerFamily string) bool {
+	needles := []string{
+		"arabic", "naskh", "geeza", "al nile",
+		"baghdad", "damascus", "kufi", "nadeem",
+		"hebrew", "corsiva", "peninim", "raanana",
+		"thai", "thonburi", "krungthep", "sathu", "silom",
+		"devanagari", "kohinoor", "sangam",
+		"gujarati", "gurmukhi", "kannada",
+		"malayalam", "oriya", "tamil", "telugu", "bengali",
+		"georgian", "armenian", "khmer", "lao",
+		"myanmar", "sinhala", "tibetan", "burmese",
+		"noto naskh", "noto sans arabic", "noto sans hebrew",
+		"noto sans thai", "noto sans devanagari", "noto sans tamil",
+	}
+	for _, n := range needles {
+		if strings.Contains(lowerFamily, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// fontScan accumulates discovery results across a directory walk. The
+// discover files drive it; only the directory list and the generic-alias
+// mapping differ per platform. Color emoji is collected ahead of CJK so
+// colored glyphs win over monochrome coverage in the fallback order.
+// Script fonts (Arabic, Hebrew, Thai, Indic, etc.) are collected as the
+// lowest-priority fallback tier.
 type fontScan struct {
 	ctx          *Context
 	emojiPaths   []string
 	cjkPaths     []string
+	scriptPaths  []string
 	colorPaths   []string
 	seenFallback map[string]bool
 	seenColor    map[string]bool
@@ -305,7 +336,6 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 		s.seenFallback[family] = true
 	}
 
-	// Collect script-fallback fonts (one path per family).
 	if !s.seenFallback[family] {
 		switch {
 		case isEmojiFamily(lowerFam):
@@ -314,16 +344,22 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 		case isCJKFamily(lowerFam):
 			s.cjkPaths = append(s.cjkPaths, path)
 			s.seenFallback[family] = true
+		default:
+			if isScriptFamily(lowerFam) {
+				s.scriptPaths = append(s.scriptPaths, path)
+			}
 		}
 	}
 }
 
 // finish assembles the fallback lists in priority order and stores them on
 // the Context. Color emoji leads so colored glyphs win over monochrome
-// coverage; colorPaths also drives the render-side color path.
+// coverage; colorPaths also drives the render-side color path. Script fonts
+// (Arabic, Hebrew, etc.) trail CJK as the lowest tier.
 func (s *fontScan) finish() {
 	s.ctx.colorPaths = s.colorPaths
 	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.colorPaths...)
 	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.emojiPaths...)
 	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.cjkPaths...)
+	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.scriptPaths...)
 }
