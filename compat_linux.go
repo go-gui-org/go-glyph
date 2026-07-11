@@ -1,26 +1,18 @@
-//go:build linux && !android && glyph_system
+//go:build linux && !android
 
 package glyph
 
-/*
-#cgo pkg-config: freetype2 harfbuzz
-
-#include <ft2build.h>
-#include FT_FREETYPE_H
-#include <stdlib.h>
-
-static char* ftFaceFamilyName(FT_Face face) {
-    if (!face || !face->family_name) return NULL;
-    size_t len = strlen(face->family_name);
-    char *buf = (char *)malloc(len + 1);
-    if (!buf) return NULL;
-    memcpy(buf, face->family_name, len + 1);
-    return buf;
-}
-*/
-import "C"
 import "unsafe"
 
+// This file preserves the exported types and constants that the cgo
+// FreeType/HarfBuzz Linux backend used to provide, so the pure-Go Linux
+// backend keeps the same public API surface as the other platforms
+// (backend parity). None of these carry behavior on the pure-Go path —
+// shaping and rasterization are handled by go-text/typesetting and
+// x/image/vector (see freetype_types_linux.go and bitmap_linux.go).
+
+// FTLibrary is a no-op handle retained for API parity. The pure-Go
+// backend keeps no FreeType library state.
 type FTLibrary struct{}
 
 func InitFreeType() (FTLibrary, error) { return FTLibrary{}, nil }
@@ -34,6 +26,9 @@ type FTStroker struct{}
 
 func NewFTStroker(_ FTLibrary) (FTStroker, error) { return FTStroker{}, nil }
 func (s *FTStroker) Close()                       {}
+
+// Pango stub types — Linux never used Pango; these exist only so the
+// exported symbol set matches the Pango-backed platforms.
 
 type PangoFontMapW struct{}
 
@@ -81,16 +76,14 @@ type PangoFontMetricsW struct{}
 
 func (m *PangoFontMetricsW) Close() {}
 
+// getFontFamilyName is queried by layout_query.go via item.ftFace.
+// The pure-Go path never populates ftFace, so this always reports the
+// unknown sentinel (matching the previous behavior for a nil face).
 func getFontFamilyName(face unsafe.Pointer) string {
 	if face == nil {
 		return "Unknown"
 	}
-	cs := C.ftFaceFamilyName(C.FT_Face(face))
-	if cs == nil {
-		return "Unknown"
-	}
-	defer C.free(unsafe.Pointer(cs))
-	return C.GoString(cs)
+	return "Unknown"
 }
 
 const (

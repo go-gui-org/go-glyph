@@ -2,25 +2,23 @@
 
 package glyph
 
-/*
-#include <ft2build.h>
-#include FT_FREETYPE_H
-#include <stdlib.h>
-*/
-import "C"
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"unsafe"
+
+	"github.com/go-text/typesetting/font"
+	ot "github.com/go-text/typesetting/font/opentype"
 )
 
-// Context holds FreeType state for text shaping on Linux.
+// Context holds font state for text shaping on Linux, backed by the
+// pure-Go go-text/typesetting stack (no cgo, no FreeType/HarfBuzz).
 //
 // Not safe for concurrent use.
 type Context struct {
-	ftLib         C.FT_Library
+	ftLib         FTLibrary // retained for API/shared-code compatibility
 	scaleFactor   float32
 	scaleInv      float32
 	metrics       metricsCache
@@ -29,25 +27,19 @@ type Context struct {
 	colorPaths    []string // color-emoji fonts (CBDT/CBLC), render side
 }
 
-// NewContext creates a Linux text context backed by FreeType+HarfBuzz.
+// NewContext creates a Linux text context backed by go-text/typesetting.
 func NewContext(scaleFactor float32) (*Context, error) {
 	if scaleFactor <= 0 {
 		scaleFactor = 1.0
 	}
 
-	var lib C.FT_Library
-	if rc := C.FT_Init_FreeType(&lib); rc != 0 {
-		return nil, fmt.Errorf("FT_Init_FreeType failed: %d", rc)
-	}
-
 	ctx := &Context{
-		ftLib:       lib,
 		scaleFactor: scaleFactor,
 		scaleInv:    1.0 / scaleFactor,
 		metrics:     newMetricsCache(256),
 		fontPaths:   make(map[string]string),
 	}
-	setFTLib(lib)
+	setFTLib(ctx.ftLib)
 	ctx.discoverSystemFonts()
 	setFTFontPaths(ctx.fontPaths)
 	setFTScriptFallbacks(ctx.fallbackPaths)
@@ -57,10 +49,6 @@ func NewContext(scaleFactor float32) (*Context, error) {
 
 // Free releases resources.
 func (ctx *Context) Free() {
-	if ctx.ftLib != nil {
-		C.FT_Done_FreeType(ctx.ftLib)
-		ctx.ftLib = nil
-	}
 	ctx.metrics = metricsCache{}
 	ctx.fontPaths = nil
 }
@@ -68,23 +56,14 @@ func (ctx *Context) Free() {
 // ScaleFactor returns the DPI scale factor.
 func (ctx *Context) ScaleFactor() float32 { return ctx.scaleFactor }
 
-// AddFontFile registers a font file by loading it temporarily to
-// extract the family name.
+// AddFontFile registers a font file, extracting its family name and
+// aspect (bold/italic) so it resolves through the normal path lookup.
 func (ctx *Context) AddFontFile(path string) error {
-	cPath := C.CString(path)
-	defer C.free(unsafe.Pointer(cPath))
-
-	var face C.FT_Face
-	if rc := C.FT_New_Face(ctx.ftLib, cPath, 0, &face); rc != 0 {
-		return fmt.Errorf("FT_New_Face failed for %q: %d", path, rc)
+	desc, _, ok := describeFontFile(path)
+	if !ok {
+		return fmt.Errorf("failed to parse font %q", path)
 	}
-	family := C.GoString(face.family_name)
-	style := C.GoString(face.style_name)
-	C.FT_Done_Face(face)
-
-	key := family + "-" + style
-	ctx.fontPaths[key] = path
-	ctx.fontPaths[family] = path
+	registerFontPath(ctx.fontPaths, desc.Family, desc.Aspect, path)
 	return nil
 }
 
@@ -92,7 +71,7 @@ func (ctx *Context) AddFontFile(path string) error {
 func (ctx *Context) FontHeight(cfg TextConfig) (float32, error) {
 	font := newFTFont(ctx.ftLib, ctx.fontPaths, cfg.Style, ctx.scaleFactor)
 	if font.face == nil {
-		return 0, fmt.Errorf("failed to create FT font")
+		return 0, fmt.Errorf("failed to create font")
 	}
 	defer font.close()
 
@@ -104,7 +83,7 @@ func (ctx *Context) FontHeight(cfg TextConfig) (float32, error) {
 func (ctx *Context) FontMetrics(cfg TextConfig) (TextMetrics, error) {
 	font := newFTFont(ctx.ftLib, ctx.fontPaths, cfg.Style, ctx.scaleFactor)
 	if font.face == nil {
-		return TextMetrics{}, fmt.Errorf("failed to create FT font")
+		return TextMetrics{}, fmt.Errorf("failed to create font")
 	}
 	defer font.close()
 
@@ -126,15 +105,71 @@ func (ctx *Context) ResolveFontName(fontDescStr string) (string, error) {
 	return family, nil
 }
 
-// createFTFont builds an ftFont from TextStyle. Caller must call
-// close().
+// createFTFont builds an ftFont from TextStyle. Caller must call close().
 func (ctx *Context) createFTFont(style TextStyle) ftFont {
 	return newFTFont(ctx.ftLib, ctx.fontPaths, style, ctx.scaleFactor)
 }
 
+// describeFontFile reads a font's family/aspect and color-glyph flag
+// without building a full face. Returns ok=false if the file cannot be
+// parsed. The buffer is reused across calls to reduce allocations.
+func describeFontFile(path string) (desc font.Description, color, ok bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return desc, false, false
+	}
+	loaders, err := ot.NewLoaders(bytes.NewReader(data))
+	if err != nil || len(loaders) == 0 {
+		return desc, false, false
+	}
+	ld := loaders[0]
+	desc, _ = font.Describe(ld, nil)
+	return desc, hasColorTable(ld), true
+}
+
+// aspectBoldItalic maps a go-text Aspect to the bold/italic booleans the
+// path-resolution scheme keys on.
+func aspectBoldItalic(a font.Aspect) (bold, italic bool) {
+	bold = a.Weight >= font.WeightBold
+	italic = a.Style == font.StyleItalic
+	return bold, italic
+}
+
+// registerFontPath stores a font path under its style-specific key
+// (e.g. "DejaVu Sans-Bold") and bare family key. Earlier registrations
+// win, matching the user-fonts-first discovery order.
+func registerFontPath(fontPaths map[string]string, family string,
+	aspect font.Aspect, path string) {
+	if family == "" {
+		return
+	}
+	bold, italic := aspectBoldItalic(aspect)
+	key := family + styleSuffix(bold, italic)
+	if _, exists := fontPaths[key]; !exists {
+		fontPaths[key] = path
+	}
+	if _, exists := fontPaths[family]; !exists {
+		fontPaths[family] = path
+	}
+}
+
+// styleSuffix returns the resolveFontPath key suffix for a style.
+func styleSuffix(bold, italic bool) string {
+	switch {
+	case bold && italic:
+		return "-BoldItalic"
+	case bold:
+		return "-Bold"
+	case italic:
+		return "-Italic"
+	default:
+		return "-Regular"
+	}
+}
+
 // discoverSystemFonts walks standard Linux font directories and
-// populates ctx.fontPaths using FreeType to read family names.
-// No fontconfig dependency.
+// populates ctx.fontPaths using go-text to read family names. No
+// fontconfig dependency.
 func (ctx *Context) discoverSystemFonts() {
 	home, _ := os.UserHomeDir()
 	dirs := []string{
@@ -164,51 +199,32 @@ func (ctx *Context) discoverSystemFonts() {
 				return nil
 			}
 
-			cPath := C.CString(path)
-			var face C.FT_Face
-			rc := C.FT_New_Face(ctx.ftLib, cPath, 0, &face)
-			C.free(unsafe.Pointer(cPath))
-			if rc != 0 {
+			desc, isColorFace, ok := describeFontFile(path)
+			if !ok || desc.Family == "" {
 				return nil
 			}
+			family := desc.Family
 
-			family := C.GoString(face.family_name)
-			style := C.GoString(face.style_name)
-			isColorFace := int64(face.face_flags)&
-				int64(C.FT_FACE_FLAG_COLOR) != 0
-			C.FT_Done_Face(face)
-
-			if family == "" {
-				return nil
-			}
-
-			key := family + "-" + style
-			// Earlier dirs (user fonts) take priority.
-			if _, exists := ctx.fontPaths[key]; !exists {
-				ctx.fontPaths[key] = path
-			}
-			if _, exists := ctx.fontPaths[family]; !exists {
-				ctx.fontPaths[family] = path
-			}
+			registerFontPath(ctx.fontPaths, family, desc.Aspect, path)
 
 			// Register generic aliases on first match.
-			lower = strings.ToLower(family)
+			lowerFam := strings.ToLower(family)
 			switch {
-			case strings.Contains(lower, "dejavu sans mono") ||
-				strings.Contains(lower, "liberation mono") ||
-				strings.Contains(lower, "noto mono"):
+			case strings.Contains(lowerFam, "dejavu sans mono") ||
+				strings.Contains(lowerFam, "liberation mono") ||
+				strings.Contains(lowerFam, "noto mono"):
 				if _, exists := ctx.fontPaths["monospace"]; !exists {
 					ctx.fontPaths["monospace"] = path
 				}
-			case strings.Contains(lower, "dejavu serif") ||
-				strings.Contains(lower, "liberation serif") ||
-				strings.Contains(lower, "noto serif"):
+			case strings.Contains(lowerFam, "dejavu serif") ||
+				strings.Contains(lowerFam, "liberation serif") ||
+				strings.Contains(lowerFam, "noto serif"):
 				if _, exists := ctx.fontPaths["serif"]; !exists {
 					ctx.fontPaths["serif"] = path
 				}
-			case strings.Contains(lower, "dejavu sans") ||
-				strings.Contains(lower, "liberation sans") ||
-				strings.Contains(lower, "noto sans"):
+			case strings.Contains(lowerFam, "dejavu sans") ||
+				strings.Contains(lowerFam, "liberation sans") ||
+				strings.Contains(lowerFam, "noto sans"):
 				if _, exists := ctx.fontPaths["sans-serif"]; !exists {
 					ctx.fontPaths["sans-serif"] = path
 				}
@@ -227,10 +243,10 @@ func (ctx *Context) discoverSystemFonts() {
 			// Collect script-fallback fonts (one path per family).
 			if !seenFallback[family] {
 				switch {
-				case isEmojiFamily(lower):
+				case isEmojiFamily(lowerFam):
 					emojiPaths = append(emojiPaths, path)
 					seenFallback[family] = true
-				case isCJKFamily(lower):
+				case isCJKFamily(lowerFam):
 					cjkPaths = append(cjkPaths, path)
 					seenFallback[family] = true
 				}
