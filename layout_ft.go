@@ -292,6 +292,9 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 	}
 	clusters := segmentGraphemes(text)
 	chars := make([]charInfo, 0, len(clusters))
+	// charFonts[i] is the font used to measure chars[i]; parallel slice so
+	// the run-shaping pass below can detect font boundaries.
+	charFonts := make([]ftFont, 0, len(clusters))
 	for _, cl := range clusters {
 		var yShift, xPad float64
 		var isColor bool
@@ -327,26 +330,78 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				}
 			}
 		}
-
-		var w float64
-		switch {
-		case cl.text == "\n" || cl.text == "\r":
-			w = 0
-		case isColor:
-			// Color-bitmap fonts report advances at their fixed strike
-			// size (e.g. 136px), which would blow up the layout. Emoji
-			// are square by convention, so reserve one line-height cell;
-			// the renderer scales the bitmap to fit.
-			w = lineHeight
-		default:
-			w = measureFont.measureString(cl.text)
-		}
 		chars = append(chars, charInfo{
-			text: cl.text, width: w + xPad*float64(ctx.scaleFactor),
-			byteI: cl.byteI, byteL: cl.byteL,
+			text: cl.text, byteI: cl.byteI, byteL: cl.byteL,
 			yShift: yShift, xPad: xPad, isColor: isColor,
 			styleKey: styleKey,
 		})
+		charFonts = append(charFonts, measureFont)
+	}
+
+	// Fill cluster widths from contextual run shaping. Shaping each cluster
+	// in isolation yields isolated-form glyphs and advances; scripts with
+	// joining/ligatures (Arabic, Indic) must be shaped as a run so a word's
+	// advances are correct. A run is a maximal span of consecutive text
+	// clusters sharing one font; newlines and color-emoji cells keep their
+	// fixed widths and break runs. Clusters absorbed into a ligature (e.g.
+	// the alef of a lam-alef) get zero advance, matching the single glyph
+	// the renderer produces for them.
+	scale := float64(ctx.scaleFactor)
+	for ri := 0; ri < len(chars); {
+		ch := chars[ri]
+		if ch.text == "\n" || ch.text == "\r" {
+			chars[ri].width = ch.xPad * scale
+			ri++
+			continue
+		}
+		if ch.isColor {
+			// Color-bitmap fonts report advances at their fixed strike size
+			// (e.g. 136px), which would blow up the layout. Emoji are square
+			// by convention, so reserve one line-height cell; the renderer
+			// scales the bitmap to fit.
+			chars[ri].width = lineHeight + ch.xPad*scale
+			ri++
+			continue
+		}
+		f := charFonts[ri]
+		rj := ri + 1
+		for rj < len(chars) && !chars[rj].isColor &&
+			chars[rj].text != "\n" && chars[rj].text != "\r" &&
+			charFonts[rj].face == f.face {
+			rj++
+		}
+		runStart := chars[ri].byteI
+		runEnd := chars[rj-1].byteI + chars[rj-1].byteL
+		buf := f.shape(text[runStart:runEnd])
+		if buf == nil {
+			for k := ri; k < rj; k++ {
+				chars[k].width = f.measureString(chars[k].text) +
+					chars[k].xPad*scale
+			}
+			ri = rj
+			continue
+		}
+		// Starting rune index (within the run) of each cluster.
+		startRune := make([]int, rj-ri)
+		acc := 0
+		for k := ri; k < rj; k++ {
+			startRune[k-ri] = acc
+			acc += utf8.RuneCountInString(chars[k].text)
+			chars[k].width = chars[k].xPad * scale
+		}
+		// Accumulate each shaped glyph's advance onto its owning cluster.
+		// HarfBuzz sets a merged glyph's cluster to the smallest rune index
+		// it covers, so the owning cluster is the last one starting at or
+		// before that rune.
+		for gi := range buf.Info {
+			c := int(buf.Info[gi].Cluster)
+			k := 0
+			for k+1 < len(startRune) && startRune[k+1] <= c {
+				k++
+			}
+			chars[ri+k].width += float64(buf.Pos[gi].XAdvance) / 64.0
+		}
+		ri = rj
 	}
 
 	if cfg.Style.LetterSpacing != 0 {
@@ -520,23 +575,26 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			startByteIdx = last.byteI + last.byteL
 		}
 
-		endByteIdx := startByteIdx
 		lineLen := 0
 		if li.endChar > li.startChar && li.endChar <= len(chars) {
 			lastCh := chars[li.endChar-1]
-			endByteIdx = lastCh.byteI + lastCh.byteL
-			lineLen = endByteIdx - startByteIdx
+			lineLen = lastCh.byteI + lastCh.byteL - startByteIdx
 		}
 
 		cx := alignOffset + indentPx
 
 		itemStart := len(allGlyphs)
-		itemStartByte := startByteIdx
 		itemX := cx
 		itemColor := false // whether the current item is a color-emoji run
 		itemStyleKey := uint64(0)
+		itemFace := baseFont.face
+		// Logical byte span of the current item. Clusters are visited in
+		// visual order, so for an RTL run the first-visited cluster is the
+		// logical last; track min/max to keep StartIndex/Length logical.
+		itemMinByte, itemMaxByte := startByteIdx, startByteIdx
+		itemFirst := true
 
-		flushItem := func(endByte int, useOrig bool) {
+		flushItem := func(useOrig bool) {
 			gc := len(allGlyphs) - itemStart
 			if gc <= 0 {
 				return
@@ -545,7 +603,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			for _, gl := range allGlyphs[itemStart : itemStart+gc] {
 				w += gl.XAdvance
 			}
-			length := endByte - itemStartByte
+			length := itemMaxByte - itemMinByte
 			if length < 0 {
 				length = 0
 			}
@@ -558,7 +616,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				Descent:                descent * pixelScale,
 				GlyphStart:             itemStart,
 				GlyphCount:             gc,
-				StartIndex:             itemStartByte,
+				StartIndex:             itemMinByte,
 				Length:                 length,
 				Color:                  baseColor,
 				UseOriginalColor:       useOrig,
@@ -593,17 +651,32 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 
 			// Split the item whenever the color-emoji state changes (so
 			// emoji glyphs get their own item with UseOriginalColor set,
-			// otherwise the color bitmap renders tinted and unscaled) or
-			// the style-run appearance changes (so each run's glyphs
-			// rasterize with its own font size and color).
+			// otherwise the color bitmap renders tinted and unscaled), the
+			// style-run appearance changes (so each run's glyphs rasterize
+			// with its own font size and color), or the measure font
+			// changes. Splitting at font boundaries keeps each item's text a
+			// single-script run, so the renderer reshapes exactly the run the
+			// layout measured — essential for Arabic joining/ligatures, which
+			// break when a mixed-script line is shaped as one unit.
+			face := charFonts[ci].face
 			if len(allGlyphs) > itemStart &&
-				(ch.isColor != itemColor || ch.styleKey != itemStyleKey) {
-				flushItem(ch.byteI, itemColor)
-				itemStartByte = ch.byteI
+				(ch.isColor != itemColor || ch.styleKey != itemStyleKey ||
+					face != itemFace) {
+				flushItem(itemColor)
 				itemX = cx
+				itemFirst = true
 			}
 			itemColor = ch.isColor
 			itemStyleKey = ch.styleKey
+			itemFace = face
+			if itemFirst {
+				itemMinByte = ch.byteI
+				itemMaxByte = ch.byteI + ch.byteL
+				itemFirst = false
+			} else {
+				itemMinByte = min(itemMinByte, ch.byteI)
+				itemMaxByte = max(itemMaxByte, ch.byteI+ch.byteL)
+			}
 
 			allGlyphs = append(allGlyphs, Glyph{
 				Index:     uint32(ch.byteI),
@@ -642,7 +715,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			cx += ch.width
 		}
 
-		flushItem(endByteIdx, itemColor)
+		flushItem(itemColor)
 
 		layoutLines = append(layoutLines, Line{
 			StartIndex: startByteIdx,
