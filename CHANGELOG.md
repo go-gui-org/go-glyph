@@ -5,28 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v1.15.0] - 2026-07-11
 
 ### Changed
 
-- **Pure-Go Linux text backend.** Linux replaces the cgo FreeType+HarfBuzz
-  stack with `go-text/typesetting` (shaping, font parsing, discovery) and
+- **Pure-Go text backends on all non-Darwin platforms.** Linux, Android,
+  macOS, and Windows replace the cgo FreeType+HarfBuzz stack with
+  `go-text/typesetting` (shaping, font parsing, discovery) and
   `golang.org/x/image/vector` (rasterization). Color emoji decode CBDT/sbix
   bitmaps; stroked text uses a pure-Go path stroker. The library now builds
-  with `CGO_ENABLED=0` on Linux — no `libfreetype`/`libharfbuzz`, no vendored
-  static libs, no system packages. (#31)
-- **Pure-Go Android text backend.** Android now shares the Linux pure-Go
-  engine (shaping/rasterization/stroker/color emoji); only font discovery is
-  platform-specific, walking `/system/fonts` via go-text instead of parsing
-  `/system/etc/fonts.xml`. The go-glyph library builds `CGO_ENABLED=0` on
-  Android — FreeType/HarfBuzz are gone library-wide. The example app still
-  uses cgo for its JNI/GLES shell. (#31)
+  with `CGO_ENABLED=0` on these platforms — no `libfreetype`/`libharfbuzz`,
+  no vendored static libs, no system packages. Android shares the Linux
+  engine, differing only in font discovery (`/system/fonts` via go-text);
+  example apps still use cgo for their platform shells. (#31, #32, #33,
+  #35, #36, #37)
+
+### Fixed
+
+- Rich-text emoji rendering and baseline alignment. (#38)
+- Increase subscript/superscript yShift for improved positioning. (#40)
+- Render COLR v0 color emoji and stop the whitespace-dot fallback. (#41)
 
 ### Removed
 
 - Vendored FreeType+HarfBuzz static libraries and headers (all of `deps/`),
   the Android/Docker dep-build scripts, and the `glyph_system` build tag —
-  the library no longer links any C text library on Linux or Android. (#31)
+  the library no longer links any C text library on the pure-Go platforms.
+  (#31)
 
 ## [2.0.0] - 2026-07-08
 
