@@ -12,7 +12,7 @@ editing with platform-appropriate backends per OS.
 | Linux   | HarfBuzz (go-text)  | x/image/vector          |
 | macOS   | CoreText            | CoreText / CoreGraphics |
 | Windows | GDI + DirectWrite   | GDI + DirectWrite       |
-| Android | FreeType            | FreeType                |
+| Android | HarfBuzz (go-text)  | x/image/vector          |
 | WASM    | Canvas2D            | Canvas2D                |
 
 ![screenshot](assets/a.png)
@@ -24,12 +24,12 @@ editing with platform-appropriate backends per OS.
 | macOS    | None                                                                                                          |
 | Windows  | None                                                                                                          |
 | Linux   | None                                                                                  |
-| Android  | NDK; run `./scripts/build_android_deps.sh`                                                                    |
+| Android  | NDK (only for the example app's JNI/GLES shell; the library itself needs none)                                |
 | WASM     | None                                                                                                          |
 
-Linux links no C libraries: shaping, rasterization, and font discovery are
-pure Go (`go-text/typesetting` + `x/image/vector`). Builds with
-`CGO_ENABLED=0`.
+Linux and Android link no C libraries: shaping, rasterization, and font
+discovery are pure Go (`go-text/typesetting` + `x/image/vector`). Both build
+with `CGO_ENABLED=0`.
 
 ## Install
 

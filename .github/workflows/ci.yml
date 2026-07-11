@@ -210,16 +210,24 @@ jobs:
             go.sum
             examples/showcase_android/go.sum
 
+      - name: Assert Android library builds and tests without cgo
+        env:
+          CGO_ENABLED: "0"
+          GOOS: android
+          GOARCH: arm64
+        run: |
+          set -euo pipefail
+          go build .
+          go vet .
+          go test -c -o /dev/null .
+
       - name: Resolve Android NDK toolchain
         id: ndk
         run: |
           TC="${ANDROID_NDK_LATEST_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin"
           echo "cc=${TC}/aarch64-linux-android21-clang" >> "$GITHUB_OUTPUT"
 
-      - name: Build Android native deps (FreeType + HarfBuzz)
-        run: ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME}" ./scripts/build_android_deps.sh
-
-      - name: Build root package for Android
+      - name: Build root package for Android (incl. cgo GLES backend)
         env:
           CGO_ENABLED: "1"
           GOOS: android
@@ -227,26 +235,21 @@ jobs:
           CC: ${{ steps.ndk.outputs.cc }}
         run: go build ./...
 
-      - name: Build Android example
+      - name: Build Android example (JNI shell needs cgo)
         env:
           CGO_ENABLED: "1"
           GOOS: android
           GOARCH: arm64
           CC: ${{ steps.ndk.outputs.cc }}
-          CGO_LDFLAGS: "-L${{ github.workspace }}/deps/lib/arm64-v8a"
         run: ( cd examples/showcase_android && go build ./... )
 
-      - name: Compile tests
+      - name: Compile example tests
         env:
           CGO_ENABLED: "1"
           GOOS: android
           GOARCH: arm64
           CC: ${{ steps.ndk.outputs.cc }}
-          CGO_LDFLAGS: "-L${{ github.workspace }}/deps/lib/arm64-v8a"
-        run: |
-          set -euo pipefail
-          go test -c -o /dev/null .
-          ( cd examples/showcase_android && go test -c -o /dev/null . )
+        run: ( cd examples/showcase_android && go test -c -o /dev/null . )
 
       - name: Vet Android packages
         env:

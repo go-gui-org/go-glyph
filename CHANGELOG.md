@@ -14,13 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `golang.org/x/image/vector` (rasterization). Color emoji decode CBDT/sbix
   bitmaps; stroked text uses a pure-Go path stroker. The library now builds
   with `CGO_ENABLED=0` on Linux — no `libfreetype`/`libharfbuzz`, no vendored
-  static libs, no system packages. Android remains on cgo FreeType+HarfBuzz.
-  (#31)
+  static libs, no system packages. (#31)
+- **Pure-Go Android text backend.** Android now shares the Linux pure-Go
+  engine (shaping/rasterization/stroker/color emoji); only font discovery is
+  platform-specific, walking `/system/fonts` via go-text instead of parsing
+  `/system/etc/fonts.xml`. The go-glyph library builds `CGO_ENABLED=0` on
+  Android — FreeType/HarfBuzz are gone library-wide. The example app still
+  uses cgo for its JNI/GLES shell. (#31)
 
 ### Removed
 
-- Vendored Linux FreeType+HarfBuzz static libraries (`deps/lib/linux_*`) and
-  the `glyph_system` build tag — Linux no longer links any C library. (#31)
+- Vendored FreeType+HarfBuzz static libraries and headers (all of `deps/`),
+  the Android/Docker dep-build scripts, and the `glyph_system` build tag —
+  the library no longer links any C text library on Linux or Android. (#31)
 
 ## [2.0.0] - 2026-07-08
 

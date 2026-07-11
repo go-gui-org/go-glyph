@@ -1,19 +1,20 @@
-//go:build linux && !android
+//go:build linux
 
 package glyph
 
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/go-text/typesetting/font"
 	ot "github.com/go-text/typesetting/font/opentype"
 )
 
-// Context holds font state for text shaping on Linux, backed by the
-// pure-Go go-text/typesetting stack (no cgo, no FreeType/HarfBuzz).
+// Context holds font state for text shaping on Linux and Android, backed
+// by the pure-Go go-text/typesetting stack (no cgo, no FreeType/HarfBuzz).
+// Only font discovery differs per platform (discoverSystemFonts, defined
+// in discover_linux.go / discover_android.go).
 //
 // Not safe for concurrent use.
 type Context struct {
@@ -27,9 +28,9 @@ type Context struct {
 	colorPaths    []string               // color-emoji fonts (CBDT/CBLC), render side
 }
 
-// NewContext creates a Linux text context backed by go-text/typesetting.
+// NewContext creates a Linux/Android text context backed by go-text/typesetting.
 func NewContext(scaleFactor float32) (*Context, error) {
-	if scaleFactor <= 0 {
+	if !(scaleFactor > 0) {
 		scaleFactor = 1.0
 	}
 
@@ -101,9 +102,9 @@ func (ctx *Context) FontMetrics(cfg TextConfig) (TextMetrics, error) {
 	}, nil
 }
 
-// ResolveFontName returns the resolved Linux font family name.
+// ResolveFontName returns the resolved platform font family name.
 func (ctx *Context) ResolveFontName(fontDescStr string) (string, error) {
-	family := resolveFontFamilyLinux(fontDescStr)
+	family := resolveFontFamily(fontDescStr)
 	return family, nil
 }
 
@@ -221,103 +222,6 @@ func styleSuffix(bold, italic bool) string {
 	}
 }
 
-// discoverSystemFonts walks standard Linux font directories and
-// populates ctx.fontPaths using go-text to read family names. No
-// fontconfig dependency.
-func (ctx *Context) discoverSystemFonts() {
-	home, _ := os.UserHomeDir()
-	dirs := []string{
-		filepath.Join(home, ".local", "share", "fonts"),
-		filepath.Join(home, ".fonts"),
-		"/usr/local/share/fonts",
-		"/usr/share/fonts",
-	}
-
-	// Script-fallback candidates, collected during the walk and
-	// assembled in priority order afterwards. Color emoji is tried
-	// before CJK so colored glyphs win over monochrome coverage.
-	var emojiPaths, cjkPaths, colorPaths []string
-	seenFallback := map[string]bool{}
-	seenColor := map[string]bool{}
-
-	for _, dir := range dirs {
-		_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				return nil
-			}
-			lower := strings.ToLower(path)
-			// .ttc covers OpenType collections (Noto CJK ships this way).
-			if !strings.HasSuffix(lower, ".ttf") &&
-				!strings.HasSuffix(lower, ".otf") &&
-				!strings.HasSuffix(lower, ".ttc") {
-				return nil
-			}
-
-			desc, isColorFace, ok := describeFontFile(path)
-			if !ok || desc.Family == "" {
-				return nil
-			}
-			family := desc.Family
-
-			registerFontPath(ctx.fontPaths, ctx.fontWeights,
-				family, desc.Aspect, path)
-
-			// Register generic aliases on first match.
-			lowerFam := strings.ToLower(family)
-			switch {
-			case strings.Contains(lowerFam, "dejavu sans mono") ||
-				strings.Contains(lowerFam, "liberation mono") ||
-				strings.Contains(lowerFam, "noto mono"):
-				if _, exists := ctx.fontPaths["monospace"]; !exists {
-					ctx.fontPaths["monospace"] = path
-				}
-			case strings.Contains(lowerFam, "dejavu serif") ||
-				strings.Contains(lowerFam, "liberation serif") ||
-				strings.Contains(lowerFam, "noto serif"):
-				if _, exists := ctx.fontPaths["serif"]; !exists {
-					ctx.fontPaths["serif"] = path
-				}
-			case strings.Contains(lowerFam, "dejavu sans") ||
-				strings.Contains(lowerFam, "liberation sans") ||
-				strings.Contains(lowerFam, "noto sans"):
-				if _, exists := ctx.fontPaths["sans-serif"]; !exists {
-					ctx.fontPaths["sans-serif"] = path
-				}
-			}
-
-			// Color-emoji fonts (CBDT/CBLC) are tracked separately so
-			// the renderer can pick a true color font over a monochrome
-			// emoji font (e.g. Noto Emoji) that also covers the glyph.
-			if isColorFace && !seenColor[family] {
-				colorPaths = append(colorPaths, path)
-				seenColor[family] = true
-				// Already leads the general fallback list; don't re-add.
-				seenFallback[family] = true
-			}
-
-			// Collect script-fallback fonts (one path per family).
-			if !seenFallback[family] {
-				switch {
-				case isEmojiFamily(lowerFam):
-					emojiPaths = append(emojiPaths, path)
-					seenFallback[family] = true
-				case isCJKFamily(lowerFam):
-					cjkPaths = append(cjkPaths, path)
-					seenFallback[family] = true
-				}
-			}
-			return nil
-		})
-	}
-
-	// Color emoji leads the general fallback list so colored glyphs win
-	// over monochrome coverage; colorPaths drives the render color path.
-	ctx.colorPaths = colorPaths
-	ctx.fallbackPaths = append(ctx.fallbackPaths, colorPaths...)
-	ctx.fallbackPaths = append(ctx.fallbackPaths, emojiPaths...)
-	ctx.fallbackPaths = append(ctx.fallbackPaths, cjkPaths...)
-}
-
 // isEmojiFamily reports whether a lower-cased family name is a color
 // emoji font (e.g. "Noto Color Emoji").
 func isEmojiFamily(lowerFamily string) bool {
@@ -340,4 +244,86 @@ func isCJKFamily(lowerFamily string) bool {
 		}
 	}
 	return false
+}
+
+// fontScan accumulates discovery results across a directory walk. Both the
+// Linux and Android discovery paths (discover_linux.go / discover_android.go)
+// drive it; only the directory list and the generic-alias mapping differ per
+// platform. Color emoji is collected ahead of CJK so colored glyphs win over
+// monochrome coverage in the fallback order.
+type fontScan struct {
+	ctx          *Context
+	emojiPaths   []string
+	cjkPaths     []string
+	colorPaths   []string
+	seenFallback map[string]bool
+	seenColor    map[string]bool
+}
+
+func newFontScan(ctx *Context) *fontScan {
+	return &fontScan{
+		ctx:          ctx,
+		seenFallback: map[string]bool{},
+		seenColor:    map[string]bool{},
+	}
+}
+
+// consider examines one candidate path and records it: its family/style
+// path, a generic alias (via aliasFn, which maps a lower-cased family name
+// to "sans-serif"/"serif"/"monospace" or "" for none), and its color/CJK/
+// emoji fallback role. Non-font files are ignored.
+func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
+	lower := strings.ToLower(path)
+	// .ttc covers OpenType collections (Noto CJK ships this way).
+	if !strings.HasSuffix(lower, ".ttf") &&
+		!strings.HasSuffix(lower, ".otf") &&
+		!strings.HasSuffix(lower, ".ttc") {
+		return
+	}
+	desc, isColorFace, ok := describeFontFile(path)
+	if !ok || desc.Family == "" {
+		return
+	}
+	family := desc.Family
+	registerFontPath(s.ctx.fontPaths, s.ctx.fontWeights, family, desc.Aspect, path)
+
+	// Register the generic alias on first match.
+	lowerFam := strings.ToLower(family)
+	if alias := aliasFn(lowerFam); alias != "" {
+		if _, exists := s.ctx.fontPaths[alias]; !exists {
+			s.ctx.fontPaths[alias] = path
+		}
+	}
+
+	// Color-emoji fonts (CBDT/CBLC/sbix) are tracked separately so the
+	// renderer can pick a true color font over a monochrome emoji font
+	// (e.g. Noto Emoji) that also covers the glyph.
+	if isColorFace && !s.seenColor[family] {
+		s.colorPaths = append(s.colorPaths, path)
+		s.seenColor[family] = true
+		// Already leads the general fallback list; don't re-add below.
+		s.seenFallback[family] = true
+	}
+
+	// Collect script-fallback fonts (one path per family).
+	if !s.seenFallback[family] {
+		switch {
+		case isEmojiFamily(lowerFam):
+			s.emojiPaths = append(s.emojiPaths, path)
+			s.seenFallback[family] = true
+		case isCJKFamily(lowerFam):
+			s.cjkPaths = append(s.cjkPaths, path)
+			s.seenFallback[family] = true
+		}
+	}
+}
+
+// finish assembles the fallback lists in priority order and stores them on
+// the Context. Color emoji leads so colored glyphs win over monochrome
+// coverage; colorPaths also drives the render-side color path.
+func (s *fontScan) finish() {
+	s.ctx.colorPaths = s.colorPaths
+	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.colorPaths...)
+	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.emojiPaths...)
+	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.cjkPaths...)
 }

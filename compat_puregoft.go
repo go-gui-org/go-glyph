@@ -1,49 +1,35 @@
-//go:build android
+//go:build linux
 
 package glyph
 
-/*
-#cgo CFLAGS: -I${SRCDIR}/deps/include -I${SRCDIR}/deps/include/freetype2 -I${SRCDIR}/deps/include/harfbuzz
-#cgo LDFLAGS: -L${SRCDIR}/deps/lib/arm64-v8a -lfreetype -lharfbuzz -lz -lm
-
-#include <ft2build.h>
-#include FT_FREETYPE_H
-#include <stdlib.h>
-
-// getFontFamilyNameFT returns the family name of an FT_Face as a
-// malloc'd C string. Caller must free.
-static char* ftFaceFamilyName(FT_Face face) {
-    if (!face || !face->family_name) return NULL;
-    size_t len = strlen(face->family_name);
-    char *buf = (char *)malloc(len + 1);
-    if (!buf) return NULL;
-    memcpy(buf, face->family_name, len + 1);
-    return buf;
-}
-*/
-import "C"
 import "unsafe"
 
-// Stub RAII types — no Pango on Android.
+// This file preserves the exported types and constants that the cgo
+// FreeType/HarfBuzz backend used to provide, so the pure-Go Linux/Android
+// backend keeps the same public API surface as the other platforms
+// (backend parity). None of these carry behavior on the pure-Go path —
+// shaping and rasterization are handled by go-text/typesetting and
+// x/image/vector (see freetype_types_puregoft.go and bitmap_puregoft.go).
 
-// FTLibrary is a no-op stub.
+// FTLibrary is a no-op handle retained for API parity. The pure-Go
+// backend keeps no FreeType library state.
 type FTLibrary struct{}
 
 func InitFreeType() (FTLibrary, error) { return FTLibrary{}, nil }
 func (l *FTLibrary) Close()            {}
 
-// FTFace is a no-op stub.
 type FTFace struct{}
 
 func (f *FTFace) FacePtr() unsafe.Pointer { return nil }
 
-// FTStroker is a no-op stub.
 type FTStroker struct{}
 
 func NewFTStroker(_ FTLibrary) (FTStroker, error) { return FTStroker{}, nil }
 func (s *FTStroker) Close()                       {}
 
-// PangoFontMapW is a no-op stub.
+// Pango stub types — Linux never used Pango; these exist only so the
+// exported symbol set matches the Pango-backed platforms.
+
 type PangoFontMapW struct{}
 
 func NewPangoFT2FontMap() PangoFontMapW              { return PangoFontMapW{} }
@@ -51,17 +37,14 @@ func (m PangoFontMapW) SetResolution(_, _ float64)   {}
 func (m PangoFontMapW) CreateContext() PangoContextW { return PangoContextW{} }
 func (m *PangoFontMapW) Close()                      {}
 
-// PangoContextW is a no-op stub.
 type PangoContextW struct{}
 
 func (c *PangoContextW) Close() {}
 
-// PangoLayoutW is a no-op stub.
 type PangoLayoutW struct{}
 
 func (l *PangoLayoutW) Close() {}
 
-// PangoFontDescW is a no-op stub.
 type PangoFontDescW struct{}
 
 func (d *PangoFontDescW) Close()                {}
@@ -70,48 +53,39 @@ func (d PangoFontDescW) SetWeight(_ int)        {}
 func (d PangoFontDescW) SetStyle(_ int)         {}
 func (d PangoFontDescW) SetVariations(_ string) {}
 
-// PangoAttrListW is a no-op stub.
 type PangoAttrListW struct{}
 
 func NewPangoAttrList() PangoAttrListW { return PangoAttrListW{} }
 func (a *PangoAttrListW) Close()       {}
 
-// PangoLayoutIterW is a no-op stub.
 type PangoLayoutIterW struct{}
 
 func (it *PangoLayoutIterW) Close() {}
 
-// PangoTabArrayW is a no-op stub.
 type PangoTabArrayW struct{}
 
 func NewPangoTabArray(_ int) PangoTabArrayW { return PangoTabArrayW{} }
 func (t PangoTabArrayW) SetTab(_, _ int)    {}
 func (t *PangoTabArrayW) Close()            {}
 
-// PangoFontW is a no-op stub.
 type PangoFontW struct{}
 
 func (f *PangoFontW) Close() {}
 
-// PangoFontMetricsW is a no-op stub.
 type PangoFontMetricsW struct{}
 
 func (m *PangoFontMetricsW) Close() {}
 
-// getFontFamilyName returns the family name from an FT_Face pointer.
+// getFontFamilyName is queried by layout_query.go via item.ftFace.
+// The pure-Go path never populates ftFace, so this always reports the
+// unknown sentinel (matching the previous behavior for a nil face).
 func getFontFamilyName(face unsafe.Pointer) string {
 	if face == nil {
 		return "Unknown"
 	}
-	cs := C.ftFaceFamilyName(C.FT_Face(face))
-	if cs == nil {
-		return "Unknown"
-	}
-	defer C.free(unsafe.Pointer(cs))
-	return C.GoString(cs)
+	return "Unknown"
 }
 
-// FreeType-equivalent constants (pure Go values).
 const (
 	FTPixelModeNone = 0
 	FTPixelModeMono = 1
