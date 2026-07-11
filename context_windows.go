@@ -179,5 +179,3 @@ func windowsFontDirs() []string {
 	}
 	return dirs
 }
-
-
