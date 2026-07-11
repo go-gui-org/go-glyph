@@ -69,6 +69,11 @@ type Item struct {
 
 	CSSFont string // WASM only: CSS font string for glyph rasterization.
 
+	// FontPath is the file the item's glyphs were shaped from (pure-Go FT
+	// backend only). When set, glyphs carrying a nonzero GlyphID rasterize
+	// directly by id from this font, skipping re-shaping.
+	FontPath string
+
 	Width   float64
 	X       float64 // Run position relative to layout.
 	Y       float64 // Baseline y relative to layout.

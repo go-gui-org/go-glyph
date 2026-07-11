@@ -54,19 +54,36 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 	}
 	targetH := max(1, int(float32(item.Ascent)*r.scaleFactor))
 
-	runText, targetRuneIdx := computeRunText(text, item, g)
+	// When layout resolved a concrete glyph id and its font, rasterize by id
+	// directly (no re-shaping). Otherwise fall back to text-based shaping,
+	// which handles color emoji, unloaded fonts, and ligature-absorbed
+	// clusters (GlyphID 0).
+	byID := g.GlyphID != 0 && item.FontPath != ""
+
+	var runText string
+	var targetRuneIdx int
 
 	key := fnvOffsetBasis
-	key = fnvHashString(key, ch)
-	key = fnvHashU64(key, uint64(bin))
-	key = fnvHashU64(key, uint64(targetH))
-	key = fnvHashF32(key, strokeWidth)
-	key = fnvHashString(key, item.Style.FontName)
-	key = fnvHashF32(key, item.Style.Size)
-	key = fnvHashU64(key, uint64(item.Style.Typeface))
-	if runText != "" && runText != ch {
-		key = fnvHashString(key, runText)
-		key = fnvHashU64(key, uint64(targetRuneIdx))
+	if byID {
+		key = fnvHashU64(key, uint64(g.GlyphID))
+		key = fnvHashString(key, item.FontPath)
+		key = fnvHashU64(key, uint64(bin))
+		key = fnvHashU64(key, uint64(targetH))
+		key = fnvHashF32(key, strokeWidth)
+		key = fnvHashF32(key, item.Style.Size)
+	} else {
+		runText, targetRuneIdx = computeRunText(text, item, g)
+		key = fnvHashString(key, ch)
+		key = fnvHashU64(key, uint64(bin))
+		key = fnvHashU64(key, uint64(targetH))
+		key = fnvHashF32(key, strokeWidth)
+		key = fnvHashString(key, item.Style.FontName)
+		key = fnvHashF32(key, item.Style.Size)
+		key = fnvHashU64(key, uint64(item.Style.Typeface))
+		if runText != "" && runText != ch {
+			key = fnvHashString(key, runText)
+			key = fnvHashU64(key, uint64(targetRuneIdx))
+		}
 	}
 
 	if cached, ok := r.cache[key]; ok {
@@ -79,10 +96,14 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 
 	var result LoadGlyphResult
 	var loadErr error
-	if strokeWidth > 0 {
+	switch {
+	case byID:
+		result, loadErr = loadGlyphByIDFT(r.atlas, item.FontPath,
+			g.GlyphID, item, strokeWidth, bin, r.scaleFactor)
+	case strokeWidth > 0:
 		result, loadErr = loadStrokedGlyphFT(r.atlas, ch, runText,
 			targetRuneIdx, item, strokeWidth, bin, r.scaleFactor)
-	} else {
+	default:
 		result, loadErr = loadGlyphFT(r.atlas, ch, runText,
 			targetRuneIdx, item, bin, r.scaleFactor)
 	}

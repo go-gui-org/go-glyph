@@ -10,6 +10,16 @@ import (
 	"github.com/rivo/uniseg"
 )
 
+// shapedGlyph is one HarfBuzz output glyph in device pixels, retained from
+// the layout-time shaping pass so the renderer can rasterize it by id without
+// re-shaping. xOff/yOff are the glyph's positioning offsets (mark placement);
+// xAdv/yAdv are its advances.
+type shapedGlyph struct {
+	gid        uint16
+	xAdv, yAdv float64
+	xOff, yOff float64
+}
+
 // charFontOverride holds per-character font and position adjustments
 // for rich text runs.
 type charFontOverride struct {
@@ -289,6 +299,11 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		xPad     float64
 		isColor  bool
 		styleKey uint64 // per-run appearance identity; splits items
+		// glyphs is the cluster's shaped-glyph stream (HarfBuzz output owned
+		// by this cluster), in visual order. Empty when the cluster was not
+		// shaped (newline, color emoji, unloaded font, or a glyph id beyond
+		// uint16) — those fall back to text-based rasterization.
+		glyphs []shapedGlyph
 	}
 	clusters := segmentGraphemes(text)
 	chars := make([]charInfo, 0, len(clusters))
@@ -389,17 +404,36 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			acc += utf8.RuneCountInString(chars[k].text)
 			chars[k].width = chars[k].xPad * scale
 		}
-		// Accumulate each shaped glyph's advance onto its owning cluster.
-		// HarfBuzz sets a merged glyph's cluster to the smallest rune index
-		// it covers, so the owning cluster is the last one starting at or
-		// before that rune.
+		// Accumulate each shaped glyph's advance onto its owning cluster and
+		// record the glyph in that cluster's stream. HarfBuzz sets a merged
+		// glyph's cluster to the smallest rune index it covers, so the owning
+		// cluster is the last one starting at or before that rune. Glyph ids
+		// wider than uint16 cannot be stored, so such a run drops its stream
+		// and rasterizes via the text fallback.
+		bigGID := false
 		for gi := range buf.Info {
 			c := int(buf.Info[gi].Cluster)
 			k := 0
 			for k+1 < len(startRune) && startRune[k+1] <= c {
 				k++
 			}
-			chars[ri+k].width += float64(buf.Pos[gi].XAdvance) / 64.0
+			pos := buf.Pos[gi]
+			chars[ri+k].width += float64(pos.XAdvance) / 64.0
+			if buf.Info[gi].Glyph > 0xFFFF {
+				bigGID = true
+			}
+			chars[ri+k].glyphs = append(chars[ri+k].glyphs, shapedGlyph{
+				gid:  uint16(buf.Info[gi].Glyph),
+				xAdv: float64(pos.XAdvance) / 64.0,
+				yAdv: float64(pos.YAdvance) / 64.0,
+				xOff: float64(pos.XOffset) / 64.0,
+				yOff: float64(pos.YOffset) / 64.0,
+			})
+		}
+		if bigGID {
+			for k := ri; k < rj; k++ {
+				chars[k].glyphs = nil
+			}
 		}
 		ri = rj
 	}
@@ -588,6 +622,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		itemColor := false // whether the current item is a color-emoji run
 		itemStyleKey := uint64(0)
 		itemFace := baseFont.face
+		itemPath := baseFont.path
 		// Logical byte span of the current item. Clusters are visited in
 		// visual order, so for an RTL run the first-visited cluster is the
 		// logical last; track min/max to keep StartIndex/Length logical.
@@ -618,6 +653,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				GlyphCount:             gc,
 				StartIndex:             itemMinByte,
 				Length:                 length,
+				FontPath:               itemPath,
 				Color:                  baseColor,
 				UseOriginalColor:       useOrig,
 				UnderlineOffset:        2.0,
@@ -669,6 +705,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			itemColor = ch.isColor
 			itemStyleKey = ch.styleKey
 			itemFace = face
+			itemPath = charFonts[ci].path
 			if itemFirst {
 				itemMinByte = ch.byteI
 				itemMaxByte = ch.byteI + ch.byteL
@@ -678,13 +715,48 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				itemMaxByte = max(itemMaxByte, ch.byteI+ch.byteL)
 			}
 
-			allGlyphs = append(allGlyphs, Glyph{
-				Index:     uint32(ch.byteI),
-				Codepoint: uint32(ch.byteL),
-				XOffset:   ch.xPad * pixelScale,
-				XAdvance:  ch.width * pixelScale,
-				YOffset:   ch.yShift * pixelScale,
-			})
+			// Emit the cluster's shaped-glyph stream when present, else a
+			// single text-keyed glyph (GlyphID 0) that the renderer rasterizes
+			// via re-shaping. The stream's advances must total ch.width so the
+			// pen, CharRects and item width stay consistent: the glyphs carry
+			// their HarfBuzz advances and the remainder (leading pad plus
+			// letter spacing) rides on the last glyph. A single unshifted glyph
+			// reproduces the old Glyph exactly, with GlyphID now populated.
+			if len(ch.glyphs) > 0 {
+				var hbSum float64
+				for _, sg := range ch.glyphs {
+					hbSum += sg.xAdv
+				}
+				extra := ch.width - hbSum
+				last := len(ch.glyphs) - 1
+				for j, sg := range ch.glyphs {
+					xOff := sg.xOff
+					if j == 0 {
+						xOff += ch.xPad
+					}
+					adv := sg.xAdv
+					if j == last {
+						adv += extra
+					}
+					allGlyphs = append(allGlyphs, Glyph{
+						Index:     uint32(ch.byteI),
+						Codepoint: uint32(ch.byteL),
+						GlyphID:   sg.gid,
+						XOffset:   xOff * pixelScale,
+						YOffset:   (sg.yOff + ch.yShift) * pixelScale,
+						XAdvance:  adv * pixelScale,
+						YAdvance:  sg.yAdv * pixelScale,
+					})
+				}
+			} else {
+				allGlyphs = append(allGlyphs, Glyph{
+					Index:     uint32(ch.byteI),
+					Codepoint: uint32(ch.byteL),
+					XOffset:   ch.xPad * pixelScale,
+					XAdvance:  ch.width * pixelScale,
+					YOffset:   ch.yShift * pixelScale,
+				})
+			}
 
 			crIdx := len(charRects)
 			charRects = append(charRects, CharRect{

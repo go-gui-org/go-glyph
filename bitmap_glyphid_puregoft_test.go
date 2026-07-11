@@ -88,3 +88,162 @@ func TestLoadGlyphByIDFT(t *testing.T) {
 			res.Cached.Width, res.Cached.Height)
 	}
 }
+
+// TestLayoutPopulatesGlyphStream verifies that plain Latin layout now emits a
+// shaped-glyph stream: one glyph per cluster carrying a resolved GlyphID, an
+// item FontPath, and advances that sum to the item width.
+func TestLayoutPopulatesGlyphStream(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	layout, err := ctx.LayoutText("Hello", TextConfig{})
+	if err != nil {
+		t.Fatalf("LayoutText: %v", err)
+	}
+	if len(layout.Items) == 0 || len(layout.Glyphs) == 0 {
+		t.Fatal("empty layout")
+	}
+	if layout.Items[0].FontPath == "" {
+		t.Skip("no font path resolved on this host; skipping")
+	}
+
+	// Plain Latin has no ligatures: one glyph per grapheme cluster.
+	if len(layout.Glyphs) != 5 {
+		t.Errorf("glyph count = %d, want 5 for \"Hello\"", len(layout.Glyphs))
+	}
+	nonzero := 0
+	for _, g := range layout.Glyphs {
+		if g.GlyphID != 0 {
+			nonzero++
+		}
+	}
+	if nonzero != len(layout.Glyphs) {
+		t.Errorf("%d/%d glyphs carry a GlyphID, want all",
+			nonzero, len(layout.Glyphs))
+	}
+
+	// Each item's glyph advances must sum to its width (the pen/CharRect
+	// invariant the stream must preserve).
+	for i, item := range layout.Items {
+		var sum float64
+		for j := item.GlyphStart; j < item.GlyphStart+item.GlyphCount; j++ {
+			sum += layout.Glyphs[j].XAdvance
+		}
+		if diff := sum - item.Width; diff < -1e-6 || diff > 1e-6 {
+			t.Errorf("item %d: glyph advance sum %.6f != width %.6f",
+				i, sum, item.Width)
+		}
+	}
+}
+
+// TestRenderStreamMatchesLegacy renders the same layout end-to-end two ways —
+// through the by-glyph-id stream, and with GlyphIDs zeroed to force the legacy
+// text-reshape path — and asserts the uploaded atlas pixels are identical. For
+// non-contextual Latin the two paths must produce the same glyphs in the same
+// order, so the packed atlas pages match byte for byte.
+func TestRenderStreamMatchesLegacy(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	layout, err := ctx.LayoutText("Hello", TextConfig{})
+	if err != nil {
+		t.Fatalf("LayoutText: %v", err)
+	}
+	if len(layout.Items) == 0 || layout.Items[0].FontPath == "" {
+		t.Skip("no font path resolved on this host; skipping")
+	}
+	streamed := false
+	for _, g := range layout.Glyphs {
+		if g.GlyphID != 0 {
+			streamed = true
+			break
+		}
+	}
+	if !streamed {
+		t.Skip("no glyph ids resolved; nothing to compare")
+	}
+
+	renderCapture := func(l Layout) map[TextureID][]byte {
+		b := newMockBackend()
+		r, err := NewRenderer(b, 1.0)
+		if err != nil {
+			t.Fatalf("NewRenderer: %v", err)
+		}
+		defer r.Free()
+		r.DrawLayout(l, 10, 20)
+		r.Commit()
+		return b.textures
+	}
+
+	// Zeroing GlyphID forces byID=false → the text-reshape path.
+	legacy := layout
+	legacy.Glyphs = append([]Glyph(nil), layout.Glyphs...)
+	for i := range legacy.Glyphs {
+		legacy.Glyphs[i].GlyphID = 0
+	}
+
+	newTex := renderCapture(layout)
+	oldTex := renderCapture(legacy)
+
+	if len(newTex) != len(oldTex) {
+		t.Fatalf("texture count differs: stream=%d legacy=%d",
+			len(newTex), len(oldTex))
+	}
+	for id, nd := range newTex {
+		od, ok := oldTex[id]
+		if !ok {
+			t.Fatalf("texture %d present in stream render, missing in legacy", id)
+		}
+		if !bytes.Equal(nd, od) {
+			t.Errorf("texture %d pixels differ between stream and legacy render", id)
+		}
+	}
+}
+
+// TestLayoutArabicStream verifies Arabic shapes through the stream path: with a
+// covering font the run yields resolved glyph ids, and ligature absorption can
+// make the glyph count differ from the cluster count.
+func TestLayoutArabicStream(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	const arabic = "سلام"
+	layout, err := ctx.LayoutText(arabic, TextConfig{})
+	if err != nil {
+		t.Fatalf("LayoutText: %v", err)
+	}
+	if len(layout.Glyphs) == 0 {
+		t.Fatal("no glyphs")
+	}
+	streamed := false
+	for _, g := range layout.Glyphs {
+		if g.GlyphID != 0 {
+			streamed = true
+			break
+		}
+	}
+	if !streamed {
+		t.Skip("no installed font covers Arabic; skipping")
+	}
+
+	// Advance invariant must hold for the joined/ligated run too.
+	for i, item := range layout.Items {
+		var sum float64
+		for j := item.GlyphStart; j < item.GlyphStart+item.GlyphCount; j++ {
+			sum += layout.Glyphs[j].XAdvance
+		}
+		if diff := sum - item.Width; diff < -1e-6 || diff > 1e-6 {
+			t.Errorf("item %d: glyph advance sum %.6f != width %.6f",
+				i, sum, item.Width)
+		}
+	}
+}
