@@ -67,6 +67,84 @@ func TestRenderGlyphByIDMatchesShaped(t *testing.T) {
 	}
 }
 
+// TestRenderGlyphByIDStrokedMatchesShaped extends the by-id equivalence check
+// to the stroked path: a stroked glyph rasterized by id must match the stroked
+// shaped rasterization byte for byte.
+func TestRenderGlyphByIDStrokedMatchesShaped(t *testing.T) {
+	path, size, gid := resolveTestGlyph(t, "H")
+	const sw = 1.5
+
+	byID := renderGlyphByID(path, size, sw, 0, gid)
+	if byID == nil {
+		t.Fatal("renderGlyphByID (stroked) produced no ink for H")
+	}
+	shaped, _ := renderStrokedRun(path, size, sw, 0, "H", "", 0, false)
+	if shaped == nil {
+		t.Fatal("renderStrokedRun produced no ink for H")
+	}
+	if byID.w != shaped.w || byID.h != shaped.h ||
+		byID.left != shaped.left || byID.top != shaped.top {
+		t.Fatalf("stroked cell geometry mismatch: byID=%dx%d@(%d,%d) shaped=%dx%d@(%d,%d)",
+			byID.w, byID.h, byID.left, byID.top,
+			shaped.w, shaped.h, shaped.left, shaped.top)
+	}
+	if !bytes.Equal(byID.data, shaped.data) {
+		t.Error("stroked pixel data mismatch between by-id and shaped")
+	}
+}
+
+// TestDrawLayoutPlacedStream drives the documented per-glyph placement pattern
+// (size placements to len(Glyphs), fill by GlyphInfo.Index) end-to-end through
+// the stream, confirming DrawLayoutPlaced accepts the shaped glyph count and
+// rasterizes ink.
+func TestDrawLayoutPlacedStream(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	layout, err := ctx.LayoutText("Wave", TextConfig{})
+	if err != nil {
+		t.Fatalf("LayoutText: %v", err)
+	}
+	if len(layout.Items) == 0 || layout.Items[0].FontPath == "" {
+		t.Skip("no font path resolved on this host; skipping")
+	}
+
+	positions := layout.GlyphPositions()
+	placements := make([]GlyphPlacement, len(layout.Glyphs))
+	for i := range placements {
+		placements[i] = GlyphPlacement{X: -9999, Y: -9999}
+	}
+	for _, p := range positions {
+		placements[p.Index] = GlyphPlacement{X: p.X + 50, Y: p.Y + 50}
+	}
+
+	b := newMockBackend()
+	r, err := NewRenderer(b, 1.0)
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+	defer r.Free()
+
+	r.DrawLayoutPlaced(layout, placements)
+	r.Commit()
+
+	inked := false
+	for _, tx := range b.textures {
+		for _, v := range tx {
+			if v != 0 {
+				inked = true
+				break
+			}
+		}
+	}
+	if !inked {
+		t.Error("DrawLayoutPlaced rasterized no ink (length guard rejected placements?)")
+	}
+}
+
 // TestLoadGlyphByIDFT verifies the by-id load path uploads a non-empty cell to
 // the atlas.
 func TestLoadGlyphByIDFT(t *testing.T) {
