@@ -7,7 +7,59 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/go-text/typesetting/font"
 )
+
+// TestRegisterFontPathWeightSelection verifies that when several weights
+// of one family collapse to the same style key, the weight closest to the
+// bucket's canonical value wins — regardless of discovery order — while
+// exact-weight ties keep the first (user-fonts-first) registration.
+func TestRegisterFontPathWeightSelection(t *testing.T) {
+	norm := func(w font.Weight) font.Aspect {
+		return font.Aspect{Style: font.StyleNormal, Weight: w}
+	}
+
+	paths := map[string]string{}
+	weights := map[string]font.Weight{}
+
+	// Medium walked before Regular must not keep the "-Regular"/bare slots.
+	registerFontPath(paths, weights, "Foo", norm(font.WeightMedium), "medium.ttf")
+	registerFontPath(paths, weights, "Foo", norm(font.WeightNormal), "regular.ttf")
+	// A later Book (380) is farther from 400 than Regular, so Regular stays.
+	registerFontPath(paths, weights, "Foo", norm(font.WeightNormal-20), "book.ttf")
+
+	if got := paths["Foo-Regular"]; got != "regular.ttf" {
+		t.Errorf("Foo-Regular = %q, want regular.ttf", got)
+	}
+	if got := paths["Foo"]; got != "regular.ttf" {
+		t.Errorf("Foo (bare) = %q, want regular.ttf", got)
+	}
+
+	// Bold bucket: Bold(700) is canonical; a heavier Black(900) must not win.
+	registerFontPath(paths, weights, "Foo", font.Aspect{
+		Style: font.StyleNormal, Weight: font.WeightBlack}, "black.ttf")
+	registerFontPath(paths, weights, "Foo", font.Aspect{
+		Style: font.StyleNormal, Weight: font.WeightBold}, "bold.ttf")
+	if got := paths["Foo-Bold"]; got != "bold.ttf" {
+		t.Errorf("Foo-Bold = %q, want bold.ttf", got)
+	}
+
+	// Exact-weight tie keeps the first registration (user-fonts-first order).
+	registerFontPath(paths, weights, "Bar", norm(font.WeightNormal), "user.ttf")
+	registerFontPath(paths, weights, "Bar", norm(font.WeightNormal), "system.ttf")
+	if got := paths["Bar-Regular"]; got != "user.ttf" {
+		t.Errorf("Bar-Regular = %q, want user.ttf (first wins on tie)", got)
+	}
+
+	// nil keyWeights disables tie resolution (first-wins), as in AddFontFile.
+	p2 := map[string]string{}
+	registerFontPath(p2, nil, "Baz", norm(font.WeightMedium), "medium.ttf")
+	registerFontPath(p2, nil, "Baz", norm(font.WeightNormal), "regular.ttf")
+	if got := p2["Baz-Regular"]; got != "medium.ttf" {
+		t.Errorf("Baz-Regular = %q, want medium.ttf (nil weights = first-wins)", got)
+	}
+}
 
 // fontFileInstalled reports whether any font under the standard Linux
 // font directories has a filename containing one of the substrings.

@@ -22,8 +22,9 @@ type Context struct {
 	scaleInv      float32
 	metrics       metricsCache
 	fontPaths     map[string]string
-	fallbackPaths []string // script fallback fonts (CJK, Arabic, etc.)
-	colorPaths    []string // color-emoji fonts (CBDT/CBLC), render side
+	fontWeights   map[string]font.Weight // weight backing each fontPaths key
+	fallbackPaths []string               // script fallback fonts (CJK, Arabic, etc.)
+	colorPaths    []string               // color-emoji fonts (CBDT/CBLC), render side
 }
 
 // NewContext creates a Linux text context backed by go-text/typesetting.
@@ -37,6 +38,7 @@ func NewContext(scaleFactor float32) (*Context, error) {
 		scaleInv:    1.0 / scaleFactor,
 		metrics:     newMetricsCache(256),
 		fontPaths:   make(map[string]string),
+		fontWeights: make(map[string]font.Weight),
 	}
 	setFTLib(ctx.ftLib)
 	ctx.discoverSystemFonts()
@@ -62,7 +64,8 @@ func (ctx *Context) AddFontFile(path string) error {
 	if !ok {
 		return fmt.Errorf("failed to parse font %q", path)
 	}
-	registerFontPath(ctx.fontPaths, desc.Family, desc.Aspect, path)
+	registerFontPath(ctx.fontPaths, ctx.fontWeights,
+		desc.Family, desc.Aspect, path)
 	return nil
 }
 
@@ -138,21 +141,70 @@ func aspectBoldItalic(a font.Aspect) (bold, italic bool) {
 }
 
 // registerFontPath stores a font path under its style-specific key
-// (e.g. "DejaVu Sans-Bold") and bare family key. Earlier registrations
-// win, matching the user-fonts-first discovery order.
-func registerFontPath(fontPaths map[string]string, family string,
+// (e.g. "DejaVu Sans-Bold") and bare family key.
+//
+// The bold/italic style scheme buckets several weights into one key
+// (e.g. Book, Regular, and Medium all map to "-Regular"). To keep a
+// family with multiple weights from resolving to the wrong one, the
+// entry whose weight is closest to the bucket's canonical weight wins;
+// ties keep the first (preserving the user-fonts-first discovery order).
+// keyWeights tracks the stored weight per key and may be nil (no tie
+// resolution — first-wins), as when registering a single AddFontFile.
+func registerFontPath(fontPaths map[string]string,
+	keyWeights map[string]font.Weight, family string,
 	aspect font.Aspect, path string) {
 	if family == "" {
 		return
 	}
 	bold, italic := aspectBoldItalic(aspect)
-	key := family + styleSuffix(bold, italic)
+	styleKey := family + styleSuffix(bold, italic)
+	considerFontKey(fontPaths, keyWeights, styleKey,
+		aspect.Weight, canonicalWeight(bold), path)
+	// The bare family key is the last-resort fallback in resolveFontPath,
+	// so it should hold the Regular-weight face when several weights exist.
+	considerFontKey(fontPaths, keyWeights, family,
+		aspect.Weight, font.WeightNormal, path)
+}
+
+// considerFontKey records path under key when the key is unset, or when
+// weight is strictly closer to target than the weight already stored.
+func considerFontKey(fontPaths map[string]string,
+	keyWeights map[string]font.Weight, key string,
+	weight, target font.Weight, path string) {
 	if _, exists := fontPaths[key]; !exists {
 		fontPaths[key] = path
+		if keyWeights != nil {
+			keyWeights[key] = weight
+		}
+		return
 	}
-	if _, exists := fontPaths[family]; !exists {
-		fontPaths[family] = path
+	if keyWeights == nil {
+		return // no tie resolution requested: keep first
 	}
+	prev, ok := keyWeights[key]
+	if !ok {
+		return
+	}
+	if weightDist(weight, target) < weightDist(prev, target) {
+		fontPaths[key] = path
+		keyWeights[key] = weight
+	}
+}
+
+// canonicalWeight is the reference weight for a style bucket: Bold for
+// bold buckets, Normal otherwise.
+func canonicalWeight(bold bool) font.Weight {
+	if bold {
+		return font.WeightBold
+	}
+	return font.WeightNormal
+}
+
+func weightDist(w, target font.Weight) font.Weight {
+	if w < target {
+		return target - w
+	}
+	return w - target
 }
 
 // styleSuffix returns the resolveFontPath key suffix for a style.
@@ -207,7 +259,8 @@ func (ctx *Context) discoverSystemFonts() {
 			}
 			family := desc.Family
 
-			registerFontPath(ctx.fontPaths, family, desc.Aspect, path)
+			registerFontPath(ctx.fontPaths, ctx.fontWeights,
+				family, desc.Aspect, path)
 
 			// Register generic aliases on first match.
 			lowerFam := strings.ToLower(family)
