@@ -48,6 +48,14 @@ jobs:
           CGO_ENABLED: "1"
         run: go vet ./...
 
+      - name: Assert Linux library builds and tests without cgo
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          go build .
+          go vet .
+          go test .
+
       - name: Build examples
         env:
           CGO_ENABLED: "1"

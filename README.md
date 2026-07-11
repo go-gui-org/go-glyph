@@ -9,7 +9,7 @@ editing with platform-appropriate backends per OS.
 
 | OS      | Shaper              | Rasterizer              |
 | ------- | ------------------- | ----------------------- |
-| Linux   | FreeType + HarfBuzz | FreeType                |
+| Linux   | HarfBuzz (go-text)  | x/image/vector          |
 | macOS   | CoreText            | CoreText / CoreGraphics |
 | Windows | GDI + DirectWrite   | GDI + DirectWrite       |
 | Android | FreeType            | FreeType                |
@@ -27,7 +27,9 @@ editing with platform-appropriate backends per OS.
 | Android  | NDK; run `./scripts/build_android_deps.sh`                                                                    |
 | WASM     | None                                                                                                          |
 
-Use system pkg-config instead of vendored static libs: `go build -tags glyph_system`.
+Linux links no C libraries: shaping, rasterization, and font discovery are
+pure Go (`go-text/typesetting` + `x/image/vector`). Builds with
+`CGO_ENABLED=0`.
 
 ## Install
 

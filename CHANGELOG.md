@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Pure-Go Linux text backend.** Linux replaces the cgo FreeType+HarfBuzz
+  stack with `go-text/typesetting` (shaping, font parsing, discovery) and
+  `golang.org/x/image/vector` (rasterization). Color emoji decode CBDT/sbix
+  bitmaps; stroked text uses a pure-Go path stroker. The library now builds
+  with `CGO_ENABLED=0` on Linux — no `libfreetype`/`libharfbuzz`, no vendored
+  static libs, no system packages. Android remains on cgo FreeType+HarfBuzz.
+  (#31)
+
+### Removed
+
+- Vendored Linux FreeType+HarfBuzz static libraries (`deps/lib/linux_*`) and
+  the `glyph_system` build tag — Linux no longer links any C library. (#31)
+
 ## [2.0.0] - 2026-07-08
 
 ### Added
