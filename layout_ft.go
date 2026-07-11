@@ -394,7 +394,11 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		runStart := chars[ri].byteI
 		runEnd := chars[rj-1].byteI + chars[rj-1].byteL
 		buf := f.shape(text[runStart:runEnd])
-		if buf == nil {
+		// A nil buffer (shaping failed) or an empty one (no output glyphs for
+		// non-empty text) both fall back to per-cluster measurement. Without
+		// the len==0 guard an empty buffer would leave every cluster with no
+		// glyph, marking the whole run absorbed and suppressing its caret stops.
+		if buf == nil || len(buf.Info) == 0 {
 			for k := ri; k < rj; k++ {
 				chars[k].width = f.measureString(chars[k].text) +
 					chars[k].xPad*scale

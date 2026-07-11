@@ -496,3 +496,27 @@ func TestLayoutArabicStream(t *testing.T) {
 		}
 	}
 }
+
+// TestLoadGlyphByIDNoInk verifies the by-id path degrades gracefully for a
+// glyph with no outline (a space): renderGlyphByID returns nil, so
+// loadGlyphByIDFT must yield an empty result without an error — the renderer
+// then caches a blank glyph rather than treating the run as a load failure.
+func TestLoadGlyphByIDNoInk(t *testing.T) {
+	path, _, gid := resolveTestGlyph(t, " ")
+
+	backend := newMockBackend()
+	atlas, err := NewGlyphAtlas(backend, 256, 256)
+	if err != nil {
+		t.Fatalf("NewGlyphAtlas: %v", err)
+	}
+	defer atlas.Free()
+
+	res, err := loadGlyphByIDFT(atlas, path, gid, Item{}, 0, 0, 1.0)
+	if err != nil {
+		t.Fatalf("loadGlyphByIDFT on a no-ink glyph errored: %v", err)
+	}
+	if res.Cached.Width != 0 || res.Cached.Height != 0 {
+		t.Errorf("expected an empty cached glyph for a space, got %dx%d",
+			res.Cached.Width, res.Cached.Height)
+	}
+}

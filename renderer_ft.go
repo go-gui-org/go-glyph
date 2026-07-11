@@ -43,6 +43,22 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 	}
 }
 
+// hashGlyphStyle folds the appearance inputs shared by both cache-key paths
+// (subpixel bin, target height, stroke width, and the Style triple that
+// resolveFTFontParams reads) into key. Typeface distinguishes synthetic
+// bold/italic.
+func hashGlyphStyle(key uint64, item Item, bin, targetH int,
+	strokeWidth float32) uint64 {
+
+	key = fnvHashU64(key, uint64(bin))
+	key = fnvHashU64(key, uint64(targetH))
+	key = fnvHashF32(key, strokeWidth)
+	key = fnvHashString(key, item.Style.FontName)
+	key = fnvHashF32(key, item.Style.Size)
+	key = fnvHashU64(key, uint64(item.Style.Typeface))
+	return key
+}
+
 // getOrLoadGlyph retrieves from cache or rasterizes via FreeType.
 // strokeWidth > 0 requests a stroked (outline) glyph.
 func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
@@ -65,27 +81,17 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 
 	key := fnvOffsetBasis
 	if byID {
-		key = fnvHashU64(key, uint64(g.GlyphID))
-		key = fnvHashString(key, item.FontPath)
-		key = fnvHashU64(key, uint64(bin))
-		key = fnvHashU64(key, uint64(targetH))
-		key = fnvHashF32(key, strokeWidth)
 		// The render size comes from resolveFTFontParams(item.Style), which
 		// reads FontName when Style.Size is 0 (size encoded as "Sans 16").
-		// FontName and Size share one .ttf FontPath, so both are needed to key
-		// distinct sizes apart; Typeface distinguishes synthetic bold/italic.
-		key = fnvHashString(key, item.Style.FontName)
-		key = fnvHashF32(key, item.Style.Size)
-		key = fnvHashU64(key, uint64(item.Style.Typeface))
+		// FontName and Size share one .ttf FontPath, so both are needed (via
+		// hashGlyphStyle) to key distinct sizes apart.
+		key = fnvHashU64(key, uint64(g.GlyphID))
+		key = fnvHashString(key, item.FontPath)
+		key = hashGlyphStyle(key, item, bin, targetH, strokeWidth)
 	} else {
 		runText, targetRuneIdx = computeRunText(text, item, g)
 		key = fnvHashString(key, ch)
-		key = fnvHashU64(key, uint64(bin))
-		key = fnvHashU64(key, uint64(targetH))
-		key = fnvHashF32(key, strokeWidth)
-		key = fnvHashString(key, item.Style.FontName)
-		key = fnvHashF32(key, item.Style.Size)
-		key = fnvHashU64(key, uint64(item.Style.Typeface))
+		key = hashGlyphStyle(key, item, bin, targetH, strokeWidth)
 		if runText != "" && runText != ch {
 			key = fnvHashString(key, runText)
 			key = fnvHashU64(key, uint64(targetRuneIdx))
