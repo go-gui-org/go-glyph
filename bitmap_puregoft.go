@@ -57,8 +57,11 @@ type rasterResult struct {
 }
 
 // loadGlyphFT rasterizes a grapheme cluster using the pure-Go pipeline.
-func loadGlyphFT(atlas *GlyphAtlas, ch string, item Item,
-	subpixelBin int, scaleFactor float32) (LoadGlyphResult, error) {
+// When runText differs from ch it provides the surrounding text context
+// for correct Arabic shaping (initial/medial/final forms).
+func loadGlyphFT(atlas *GlyphAtlas, ch string, runText string,
+	targetRuneIdx int, item Item, subpixelBin int,
+	scaleFactor float32) (LoadGlyphResult, error) {
 
 	family, fontSize, bold, italic := resolveFTFontParams(item.Style, scaleFactor)
 	paths := fontFallbackPaths(ftFontPathsSingleton, family, bold, italic)
@@ -66,21 +69,13 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, item Item,
 
 	var res *rasterResult
 
-	// Color-emoji items resolve against the color fonts first: the
-	// primary text font often carries a monochrome glyph for the same
-	// codepoint, which would otherwise win and render tinted/blank.
 	if item.UseOriginalColor {
 		for _, fp := range ftColorFallbacksSingleton {
-			// Embedded bitmap strikes (CBDT/sbix) come as a full-ascent
-			// cell, so the vertical placement is derived from the item.
 			if r, ok := renderColorGlyph(fp, fontSize, ch); ok {
 				r.top = max(0, int(float64(r.h)-float64(item.Descent)*float64(scaleFactor)/2))
 				res = r
 				break
 			}
-			// COLR v0 layered glyphs (e.g. Windows' Segoe UI Emoji) carry
-			// real outline metrics, so their ink bounds position them like
-			// any other glyph — no cell override.
 			if r, ok := renderCOLRGlyph(fp, fontSize, ch); ok {
 				res = r
 				break
@@ -88,26 +83,11 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, item Item,
 		}
 	}
 
-	// Primary font paths: the first font that covers the cluster wins,
-	// even when the glyph carries no ink (e.g. a space). Stopping on
-	// coverage — rather than on a non-nil bitmap — keeps a later fallback
-	// font's dirty whitespace glyph from contributing stray ink (a "dot").
 	covered := false
 	if res == nil {
 		for _, fontPath := range paths {
-			r, rejected := renderMonoRun(fontPath, fontSize, subpixelShift, ch, true)
-			if !rejected {
-				res = r // may be nil for a zero-ink (whitespace) cluster
-				covered = true
-				break
-			}
-		}
-	}
-
-	// Script fallback fonts only if no primary font covered the cluster.
-	if !covered && res == nil {
-		for _, fp := range ftScriptFallbacksSingleton {
-			r, rejected := renderMonoRun(fp, fontSize, subpixelShift, ch, true)
+			r, rejected := renderMonoRun(fontPath, fontSize,
+				subpixelShift, ch, runText, targetRuneIdx, true)
 			if !rejected {
 				res = r
 				covered = true
@@ -116,24 +96,34 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, item Item,
 		}
 	}
 
-	// Last resort: render with the primary font even if it is tofu.
+	if !covered && res == nil {
+		for _, fp := range ftScriptFallbacksSingleton {
+			r, rejected := renderMonoRun(fp, fontSize, subpixelShift,
+				ch, runText, targetRuneIdx, true)
+			if !rejected {
+				res = r
+				covered = true
+				break
+			}
+		}
+	}
+
 	if !covered && res == nil && len(paths) > 0 {
-		res, _ = renderMonoRun(paths[0], fontSize, subpixelShift, ch, false)
+		res, _ = renderMonoRun(paths[0], fontSize, subpixelShift,
+			ch, runText, targetRuneIdx, false)
 	}
 
 	return insertRaster(atlas, res)
 }
 
-// loadStrokedGlyphFT renders a stroked cluster using the pure-Go stroker
-// (see addStrokedOutline). It mirrors the cgo FT_Stroker path: the stroke
-// radius equals strokeWidth and joins/caps are round. Color-emoji items
-// are not stroked; they fall back to the plain color bitmap.
-func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, item Item,
-	strokeWidth float32, subpixelBin int,
+// loadStrokedGlyphFT renders a stroked cluster using the pure-Go stroker.
+func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, runText string,
+	targetRuneIdx int, item Item, strokeWidth float32, subpixelBin int,
 	scaleFactor float32) (LoadGlyphResult, error) {
 
 	if strokeWidth <= 0 {
-		return loadGlyphFT(atlas, ch, item, subpixelBin, scaleFactor)
+		return loadGlyphFT(atlas, ch, runText, targetRuneIdx, item,
+			subpixelBin, scaleFactor)
 	}
 
 	family, fontSize, bold, italic := resolveFTFontParams(item.Style, scaleFactor)
@@ -143,12 +133,10 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, item Item,
 
 	var res *rasterResult
 
-	// Primary font paths: stop at the first font that covers the cluster,
-	// even when blank, so a later fallback's dirty whitespace glyph cannot
-	// add stray ink (see loadGlyphFT).
 	covered := false
 	for _, fontPath := range paths {
-		r, rejected := renderStrokedRun(fontPath, fontSize, sw, subpixelShift, ch, true)
+		r, rejected := renderStrokedRun(fontPath, fontSize, sw,
+			subpixelShift, ch, runText, targetRuneIdx, true)
 		if !rejected {
 			res = r
 			covered = true
@@ -156,10 +144,10 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, item Item,
 		}
 	}
 
-	// Script fallback fonts only if no primary font covered the cluster.
 	if !covered && res == nil {
 		for _, fp := range ftScriptFallbacksSingleton {
-			r, rejected := renderStrokedRun(fp, fontSize, sw, subpixelShift, ch, true)
+			r, rejected := renderStrokedRun(fp, fontSize, sw,
+				subpixelShift, ch, runText, targetRuneIdx, true)
 			if !rejected {
 				res = r
 				covered = true
@@ -168,9 +156,9 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, item Item,
 		}
 	}
 
-	// Last resort: stroke with the primary font even if it is tofu.
 	if !covered && res == nil && len(paths) > 0 {
-		res, _ = renderStrokedRun(paths[0], fontSize, sw, subpixelShift, ch, false)
+		res, _ = renderStrokedRun(paths[0], fontSize, sw,
+			subpixelShift, ch, runText, targetRuneIdx, false)
 	}
 
 	return insertRaster(atlas, res)
@@ -211,35 +199,57 @@ type placedGlyph struct {
 
 // renderMonoRun rasterizes filled outline glyphs (no stroke).
 func renderMonoRun(path string, size, subpixelShift float64,
-	text string, rejectNotdef bool) (*rasterResult, bool) {
-	return renderRun(path, size, 0, subpixelShift, text, rejectNotdef)
+	text string, runText string, targetRuneIdx int,
+	rejectNotdef bool) (*rasterResult, bool) {
+	return renderRun(path, size, 0, subpixelShift, text, runText,
+		targetRuneIdx, rejectNotdef)
 }
 
 // renderStrokedRun rasterizes the stroke border of the outline glyphs at
 // the given stroke radius, using the pure-Go stroker.
 func renderStrokedRun(path string, size, strokeWidth, subpixelShift float64,
-	text string, rejectNotdef bool) (*rasterResult, bool) {
-	return renderRun(path, size, strokeWidth, subpixelShift, text, rejectNotdef)
+	text string, runText string, targetRuneIdx int,
+	rejectNotdef bool) (*rasterResult, bool) {
+	return renderRun(path, size, strokeWidth, subpixelShift, text, runText,
+		targetRuneIdx, rejectNotdef)
 }
 
 // renderRun shapes text with the given font and rasterizes the resulting
 // outline glyphs into a white+alpha RGBA bitmap. When strokeWidth > 0 the
 // glyph contours are stroked (round joins/caps, radius = strokeWidth)
-// instead of filled. Returns (nil, true) when rejectNotdef is set and any
-// glyph is missing.
+// instead of filled. Returns (nil, true) when rejectNotdef is set and a
+// glyph belonging to the target cluster is missing.
+//
+// When runText differs from text it provides surrounding context for
+// correct Arabic shaping. targetRuneIdx identifies which rune(s) in
+// runText to rasterize; glyphs from other clusters advance penX but are
+// not rasterized.
 func renderRun(path string, size, strokeWidth, subpixelShift float64,
-	text string, rejectNotdef bool) (*rasterResult, bool) {
+	text string, runText string, targetRuneIdx int,
+	rejectNotdef bool) (*rasterResult, bool) {
 
 	cf := loadCachedFace(path)
 	if cf == nil {
 		return nil, false
 	}
-	buf := shapeWith(cf, size, text)
+
+	shapeText := runText
+	if shapeText == "" || shapeText == text {
+		shapeText = text
+	}
+	buf := shapeWith(cf, size, shapeText)
 	if buf == nil || len(buf.Info) == 0 {
 		return nil, false
 	}
+	// collectAll is set when the whole shaped buffer belongs to the target
+	// (no surrounding context); otherwise only the target cluster's glyphs
+	// participate in notdef rejection and rasterization.
+	collectAll := shapeText == text
 	if rejectNotdef {
 		for i := range buf.Info {
+			if !collectAll && buf.Info[i].Cluster != targetRuneIdx {
+				continue
+			}
 			if buf.Info[i].Glyph == 0 {
 				return nil, true
 			}
@@ -253,6 +263,9 @@ func renderRun(path string, size, strokeWidth, subpixelShift float64,
 	penX := subpixelShift
 	for i := range buf.Info {
 		pos := buf.Pos[i]
+		if !collectAll && buf.Info[i].Cluster != targetRuneIdx {
+			continue
+		}
 		gd := cf.face.GlyphData(buf.Info[i].Glyph)
 		if out, ok := gd.(font.GlyphOutline); ok && len(out.Segments) > 0 {
 			glyphs = append(glyphs, placedGlyph{
@@ -265,7 +278,7 @@ func renderRun(path string, size, strokeWidth, subpixelShift float64,
 		penX += float64(pos.XAdvance) / 64.0
 	}
 	if len(glyphs) == 0 {
-		return nil, false // whitespace / no ink
+		return nil, false
 	}
 
 	// Map a font-unit point (Y up) to baseline-relative device px (Y down).

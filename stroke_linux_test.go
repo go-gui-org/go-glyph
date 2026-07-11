@@ -42,8 +42,8 @@ func TestStrokerProducesBand(t *testing.T) {
 		t.Skip("no system font found")
 	}
 	const size, sub = 48.0, 0.0
-	fill, _ := renderMonoRun(fp, size, sub, "H", false)
-	stroke, _ := renderStrokedRun(fp, size, 3.0, sub, "H", false)
+	fill, _ := renderMonoRun(fp, size, sub, "H", "", 0, false)
+	stroke, _ := renderStrokedRun(fp, size, 3.0, sub, "H", "", 0, false)
 	if fill == nil || stroke == nil {
 		t.Fatalf("nil raster: fill=%v stroke=%v", fill == nil, stroke == nil)
 	}

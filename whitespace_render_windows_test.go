@@ -24,7 +24,7 @@ func TestSpaceNoInk(t *testing.T) {
 	defer atlas.Free()
 
 	item := Item{Style: TextStyle{Size: 32}, Ascent: 32, Descent: 8}
-	res, err := loadGlyphFT(atlas, " ", item, 0, 1.0)
+	res, err := loadGlyphFT(atlas, " ", "", 0, item, 0, 1.0)
 	if err != nil {
 		t.Fatal(err)
 	}
