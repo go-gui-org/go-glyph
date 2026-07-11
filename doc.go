@@ -136,12 +136,19 @@
 //
 // # Glyph placements
 //
-// Position each glyph independently (e.g. text on a path):
+// Position each glyph independently (e.g. text on a path). DrawLayoutPlaced
+// needs one placement per entry in layout.Glyphs, so size the slice to
+// len(layout.Glyphs) and index it by GlyphInfo.Index — the glyph count is not
+// the grapheme count (ligatures collapse clusters, marks add glyphs), and
+// GlyphPositions omits unknown glyphs:
 //
-//	glyphPositions := layout.GlyphPositions()
-//	placements := make([]glyph.GlyphPlacement, len(glyphPositions))
-//	for i, g := range glyphPositions {
-//	    placements[i] = glyph.GlyphPlacement{
+//	positions := layout.GlyphPositions()
+//	placements := make([]glyph.GlyphPlacement, len(layout.Glyphs))
+//	for i := range placements {
+//	    placements[i] = glyph.GlyphPlacement{X: offX, Y: offY} // off-screen default
+//	}
+//	for _, g := range positions {
+//	    placements[g.Index] = glyph.GlyphPlacement{
 //	        X: pathX(g.X), Y: pathY(g.Y), Angle: pathAngle(g.X),
 //	    }
 //	}

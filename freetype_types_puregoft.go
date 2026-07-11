@@ -162,6 +162,7 @@ type ftFont struct {
 	hb   *harfbuzz.Font // shaping font, scaled to size in 26.6 px
 	upem uint16
 	size float64 // physical pixel size (already includes scaleFactor)
+	path string  // file path the face was loaded from (by-glyph-id render)
 	cf   *cachedFace
 }
 
@@ -202,6 +203,7 @@ func openFTFont(path string, size float64) ftFont {
 		hb:   hb,
 		upem: cf.upem,
 		size: size,
+		path: path,
 		cf:   cf,
 	}
 }

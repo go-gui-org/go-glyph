@@ -10,6 +10,16 @@ import (
 	"github.com/rivo/uniseg"
 )
 
+// shapedGlyph is one HarfBuzz output glyph in device pixels, retained from
+// the layout-time shaping pass so the renderer can rasterize it by id without
+// re-shaping. xOff/yOff are the glyph's positioning offsets (mark placement);
+// xAdv/yAdv are its advances.
+type shapedGlyph struct {
+	gid        uint32
+	xAdv, yAdv float64
+	xOff, yOff float64
+}
+
 // charFontOverride holds per-character font and position adjustments
 // for rich text runs.
 type charFontOverride struct {
@@ -288,7 +298,13 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		yShift   float64
 		xPad     float64
 		isColor  bool
+		absorbed bool   // consumed by a ligature; not a caret stop
 		styleKey uint64 // per-run appearance identity; splits items
+		// glyphs is the cluster's shaped-glyph stream (HarfBuzz output owned
+		// by this cluster), in visual order. Empty when the cluster was not
+		// shaped (newline, color emoji, or an unloaded font) — those fall back
+		// to text-based rasterization.
+		glyphs []shapedGlyph
 	}
 	clusters := segmentGraphemes(text)
 	chars := make([]charInfo, 0, len(clusters))
@@ -365,15 +381,24 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		}
 		f := charFonts[ri]
 		rj := ri + 1
+		// A run is one font at one size. Sub/superscripts reuse the base
+		// face at a reduced size (same .ttf, so same face pointer); the size
+		// check keeps them out of the base run, otherwise they would be shaped
+		// with the base font and take a base-size advance while rendering
+		// small, leaving a gap after the glyph.
 		for rj < len(chars) && !chars[rj].isColor &&
 			chars[rj].text != "\n" && chars[rj].text != "\r" &&
-			charFonts[rj].face == f.face {
+			charFonts[rj].face == f.face && charFonts[rj].size == f.size {
 			rj++
 		}
 		runStart := chars[ri].byteI
 		runEnd := chars[rj-1].byteI + chars[rj-1].byteL
 		buf := f.shape(text[runStart:runEnd])
-		if buf == nil {
+		// A nil buffer (shaping failed) or an empty one (no output glyphs for
+		// non-empty text) both fall back to per-cluster measurement. Without
+		// the len==0 guard an empty buffer would leave every cluster with no
+		// glyph, marking the whole run absorbed and suppressing its caret stops.
+		if buf == nil || len(buf.Info) == 0 {
 			for k := ri; k < rj; k++ {
 				chars[k].width = f.measureString(chars[k].text) +
 					chars[k].xPad*scale
@@ -389,17 +414,35 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			acc += utf8.RuneCountInString(chars[k].text)
 			chars[k].width = chars[k].xPad * scale
 		}
-		// Accumulate each shaped glyph's advance onto its owning cluster.
-		// HarfBuzz sets a merged glyph's cluster to the smallest rune index
-		// it covers, so the owning cluster is the last one starting at or
-		// before that rune.
+		// Accumulate each shaped glyph's advance onto its owning cluster and
+		// record the glyph in that cluster's stream. HarfBuzz sets a merged
+		// glyph's cluster to the smallest rune index it covers, so the owning
+		// cluster is the last one starting at or before that rune.
 		for gi := range buf.Info {
 			c := int(buf.Info[gi].Cluster)
 			k := 0
 			for k+1 < len(startRune) && startRune[k+1] <= c {
 				k++
 			}
-			chars[ri+k].width += float64(buf.Pos[gi].XAdvance) / 64.0
+			pos := buf.Pos[gi]
+			chars[ri+k].width += float64(pos.XAdvance) / 64.0
+			chars[ri+k].glyphs = append(chars[ri+k].glyphs, shapedGlyph{
+				gid:  uint32(buf.Info[gi].Glyph),
+				xAdv: float64(pos.XAdvance) / 64.0,
+				yAdv: float64(pos.YAdvance) / 64.0,
+				xOff: float64(pos.XOffset) / 64.0,
+				yOff: float64(pos.YOffset) / 64.0,
+			})
+		}
+		// A cluster that received no glyph from a run that shaped successfully
+		// was absorbed into a neighbouring ligature (e.g. the alef of a
+		// lam-alef, or the second half of an "fi"). Its advance is ~0 and the
+		// caret must not stop inside it — carets land only at ligature
+		// boundaries.
+		for k := ri; k < rj; k++ {
+			if len(chars[k].glyphs) == 0 {
+				chars[k].absorbed = true
+			}
 		}
 		ri = rj
 	}
@@ -588,6 +631,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		itemColor := false // whether the current item is a color-emoji run
 		itemStyleKey := uint64(0)
 		itemFace := baseFont.face
+		itemPath := baseFont.path
 		// Logical byte span of the current item. Clusters are visited in
 		// visual order, so for an RTL run the first-visited cluster is the
 		// logical last; track min/max to keep StartIndex/Length logical.
@@ -618,6 +662,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				GlyphCount:             gc,
 				StartIndex:             itemMinByte,
 				Length:                 length,
+				FontPath:               itemPath,
 				Color:                  baseColor,
 				UseOriginalColor:       useOrig,
 				UnderlineOffset:        2.0,
@@ -669,6 +714,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			itemColor = ch.isColor
 			itemStyleKey = ch.styleKey
 			itemFace = face
+			itemPath = charFonts[ci].path
 			if itemFirst {
 				itemMinByte = ch.byteI
 				itemMaxByte = ch.byteI + ch.byteL
@@ -678,13 +724,48 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				itemMaxByte = max(itemMaxByte, ch.byteI+ch.byteL)
 			}
 
-			allGlyphs = append(allGlyphs, Glyph{
-				Index:     uint32(ch.byteI),
-				Codepoint: uint32(ch.byteL),
-				XOffset:   ch.xPad * pixelScale,
-				XAdvance:  ch.width * pixelScale,
-				YOffset:   ch.yShift * pixelScale,
-			})
+			// Emit the cluster's shaped-glyph stream when present, else a
+			// single text-keyed glyph (GlyphID 0) that the renderer rasterizes
+			// via re-shaping. The stream's advances must total ch.width so the
+			// pen, CharRects and item width stay consistent: the glyphs carry
+			// their HarfBuzz advances and the remainder (leading pad plus
+			// letter spacing) rides on the last glyph. A single unshifted glyph
+			// reproduces the old Glyph exactly, with GlyphID now populated.
+			if len(ch.glyphs) > 0 {
+				var hbSum float64
+				for _, sg := range ch.glyphs {
+					hbSum += sg.xAdv
+				}
+				extra := ch.width - hbSum
+				last := len(ch.glyphs) - 1
+				for j, sg := range ch.glyphs {
+					xOff := sg.xOff
+					if j == 0 {
+						xOff += ch.xPad
+					}
+					adv := sg.xAdv
+					if j == last {
+						adv += extra
+					}
+					allGlyphs = append(allGlyphs, Glyph{
+						Index:     uint32(ch.byteI),
+						Codepoint: uint32(ch.byteL),
+						GlyphID:   sg.gid,
+						XOffset:   xOff * pixelScale,
+						YOffset:   (sg.yOff + ch.yShift) * pixelScale,
+						XAdvance:  adv * pixelScale,
+						YAdvance:  sg.yAdv * pixelScale,
+					})
+				}
+			} else {
+				allGlyphs = append(allGlyphs, Glyph{
+					Index:     uint32(ch.byteI),
+					Codepoint: uint32(ch.byteL),
+					XOffset:   ch.xPad * pixelScale,
+					XAdvance:  ch.width * pixelScale,
+					YOffset:   ch.yShift * pixelScale,
+				})
+			}
 
 			crIdx := len(charRects)
 			charRects = append(charRects, CharRect{
@@ -704,7 +785,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 				chars[ci-1].text == "\t" ||
 				chars[ci-1].text == "\n")
 			logAttrs = append(logAttrs, LogAttr{
-				IsCursorPosition: true,
+				IsCursorPosition: !ch.absorbed,
 				IsWordStart:      !isWS && prevWS,
 				IsWordEnd: isWS && ci > 0 &&
 					chars[ci-1].text != " " &&

@@ -164,6 +164,22 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 	return insertRaster(atlas, res)
 }
 
+// loadGlyphByIDFT rasterizes a single shaped glyph by its id using the exact
+// font (path) the layout shaped with. A glyph id is font-specific, so there
+// is no fallback iteration and no notdef rejection: the layout already picked
+// the covering font when it produced the id. strokeWidth > 0 strokes the
+// outline instead of filling it.
+func loadGlyphByIDFT(atlas *GlyphAtlas, path string, gid uint32, item Item,
+	strokeWidth float32, subpixelBin int,
+	scaleFactor float32) (LoadGlyphResult, error) {
+
+	_, fontSize, _, _ := resolveFTFontParams(item.Style, scaleFactor)
+	subpixelShift := float64(subpixelBin) / 4.0
+	res := renderGlyphByID(path, fontSize, float64(strokeWidth),
+		subpixelShift, gid)
+	return insertRaster(atlas, res)
+}
+
 // insertRaster uploads a rasterized bitmap to the atlas.
 func insertRaster(atlas *GlyphAtlas, res *rasterResult) (LoadGlyphResult, error) {
 	if res == nil || res.w == 0 || res.h == 0 {
@@ -256,9 +272,6 @@ func renderRun(path string, size, strokeWidth, subpixelShift float64,
 		}
 	}
 
-	scale := size / float64(nonZeroUpem(cf.upem))
-	strokeR := strokeWidth
-
 	var glyphs []placedGlyph
 	penX := subpixelShift
 	for i := range buf.Info {
@@ -277,9 +290,46 @@ func renderRun(path string, size, strokeWidth, subpixelShift float64,
 		}
 		penX += float64(pos.XAdvance) / 64.0
 	}
+	return rasterizeGlyphs(cf, size, strokeWidth, glyphs)
+}
+
+// renderGlyphByID rasterizes a single glyph by its font-specific glyph id,
+// with no shaping. gid must come from the same font (path) the layout shaped
+// with — a glyph id is meaningless in any other font, so this path does no
+// fallback iteration. HarfBuzz x/y offsets are NOT baked into the cell; the
+// draw loop applies them via Glyph.XOffset/YOffset. Returns (nil, false) when
+// the glyph has no outline (a space, or a bitmap/color glyph handled by the
+// color paths).
+func renderGlyphByID(path string, size, strokeWidth, subpixelShift float64,
+	gid uint32) *rasterResult {
+
+	cf := loadCachedFace(path)
+	if cf == nil {
+		return nil
+	}
+	gd := cf.face.GlyphData(font.GID(gid))
+	out, ok := gd.(font.GlyphOutline)
+	if !ok || len(out.Segments) == 0 {
+		return nil
+	}
+	glyphs := []placedGlyph{{segs: out.Segments, penX: subpixelShift}}
+	res, _ := rasterizeGlyphs(cf, size, strokeWidth, glyphs)
+	return res
+}
+
+// rasterizeGlyphs renders pre-positioned outline glyphs into a white+alpha
+// RGBA bitmap. When strokeWidth > 0 the contours are stroked (round
+// joins/caps, radius = strokeWidth) instead of filled. Each glyph's penX and
+// xOff/yOff place it; glyph coordinates are scaled by size/upem. Returns
+// (nil, false) when the glyphs carry no ink.
+func rasterizeGlyphs(cf *cachedFace, size, strokeWidth float64,
+	glyphs []placedGlyph) (*rasterResult, bool) {
+
 	if len(glyphs) == 0 {
 		return nil, false
 	}
+	scale := size / float64(nonZeroUpem(cf.upem))
+	strokeR := strokeWidth
 
 	// Map a font-unit point (Y up) to baseline-relative device px (Y down).
 	mapPt := func(g placedGlyph, fx, fy float32) (dx, dy float64) {
