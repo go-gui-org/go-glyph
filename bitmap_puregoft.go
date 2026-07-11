@@ -1,4 +1,4 @@
-//go:build linux && !android
+//go:build linux
 
 package glyph
 
@@ -15,7 +15,10 @@ import (
 	"golang.org/x/image/vector"
 )
 
-// This file is the pure-Go replacement for bitmap_ft.go on Linux.
+// This file is the pure-Go replacement for bitmap_ft.go on Linux and
+// Android (GOOS=android sets the `linux` build tag). Shaping/rasterization
+// are shared; only font discovery (see discover_linux.go / discover_android.go)
+// differs by platform.
 // Shaping comes from go-text/typesetting/harfbuzz; monochrome glyphs are
 // rasterized with golang.org/x/image/vector; color-emoji glyphs decode
 // their embedded bitmaps (CBDT/sbix PNG); stroked text uses the pure-Go
@@ -385,6 +388,7 @@ func renderColorGlyph(path string, size float64, text string) (*rasterResult, bo
 	if w == 0 || h == 0 {
 		return nil, false
 	}
+	w, h = clampBitmapDim(w), clampBitmapDim(h)
 	rgba := image.NewRGBA(image.Rect(0, 0, w, h))
 	draw.Draw(rgba, rgba.Bounds(), img, b.Min, draw.Src)
 	return &rasterResult{data: rgba.Pix, w: w, h: h, left: 0, top: h}, true

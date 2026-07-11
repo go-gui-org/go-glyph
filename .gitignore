@@ -41,19 +41,6 @@ go.work.sum
 # Dependency directory
 vendor/
 
-# Android NDK build artifacts
-deps/*
-!deps/include/
-!deps/lib/
-deps/lib/*
-!deps/lib/linux_amd64/
-!deps/lib/linux_arm64/
-!deps/lib/arm64-v8a/
-!deps/lib/linux_amd64/*.a
-!deps/lib/linux_arm64/*.a
-!deps/lib/arm64-v8a/*.a
-.build_android_deps/
-
 # tokensave code-graph tool state
 .tokensave/
 

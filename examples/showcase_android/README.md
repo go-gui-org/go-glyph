@@ -25,16 +25,9 @@ Set the NDK path:
 export ANDROID_NDK_HOME=/opt/homebrew/share/android-ndk  # adjust to your path
 ```
 
-## Build native dependencies
-
-Cross-compile FreeType and HarfBuzz static libraries for arm64-v8a (one-time):
-
-```sh
-ANDROID_NDK_HOME=/opt/homebrew/share/android-ndk ./scripts/build_android_deps.sh
-```
-
-This creates `deps/lib/arm64-v8a/{libfreetype.a,libharfbuzz.a}` and
-`deps/include/` at the repository root.
+The go-glyph library itself is pure Go and links no native text libraries —
+no FreeType/HarfBuzz cross-compilation step is needed. The NDK is required
+only for this example app's own JNI/GLES shell.
 
 ## Setup
 

@@ -9,7 +9,153 @@ import (
 	"testing"
 
 	"github.com/go-text/typesetting/font"
+	"golang.org/x/image/vector"
 )
+
+func TestLinuxGenericAlias(t *testing.T) {
+	tests := []struct {
+		family string
+		want   string
+	}{
+		{"dejavu sans", "sans-serif"},
+		{"dejavu sans mono", "monospace"},
+		{"dejavu serif", "serif"},
+		{"liberation sans", "sans-serif"},
+		{"liberation mono", "monospace"},
+		{"liberation serif", "serif"},
+		{"noto sans", "sans-serif"},
+		{"noto mono", "monospace"},
+		{"noto serif", "serif"},
+		{"some unknown font", ""},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got := linuxGenericAlias(tt.family)
+		if got != tt.want {
+			t.Errorf("linuxGenericAlias(%q) = %q, want %q",
+				tt.family, got, tt.want)
+		}
+	}
+}
+
+func TestResolveFontFamilyLinux(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"Sans 12", "DejaVu Sans"},
+		{"sans-serif Bold 14", "DejaVu Sans"},
+		{"Serif 11", "DejaVu Serif"},
+		{"Monospace 10", "DejaVu Sans Mono"},
+		{"mono Bold 12", "DejaVu Sans Mono"},
+		{"system 16", "DejaVu Sans"},
+		{"Fira Code 12", "Fira Code"},
+		{"", "DejaVu Sans"},
+	}
+	for _, tt := range tests {
+		got := resolveFontFamily(tt.name)
+		if got != tt.want {
+			t.Errorf("resolveFontFamily(%q) = %q, want %q",
+				tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestSignedArea(t *testing.T) {
+	ccw := []vec2{{0, 0}, {10, 0}, {0, 10}}
+	if got := signedArea(ccw); got <= 0 {
+		t.Errorf("signedArea(CCW) = %v, want >0", got)
+	}
+	cw := []vec2{{0, 0}, {0, 10}, {10, 0}}
+	if got := signedArea(cw); got >= 0 {
+		t.Errorf("signedArea(CW) = %v, want <0", got)
+	}
+	if got := signedArea([]vec2{{0, 0}, {0, 0}, {0, 0}}); got != 0 {
+		t.Errorf("signedArea(degenerate) = %v, want 0", got)
+	}
+	if got := signedArea([]vec2{}); got != 0 {
+		t.Errorf("signedArea(empty) = %v, want 0", got)
+	}
+}
+
+func TestMid(t *testing.T) {
+	got := mid(vec2{0, 0}, vec2{10, 10})
+	if got.x != 5 || got.y != 5 {
+		t.Errorf("mid({0,0},{10,10}) = %v, want {5,5}", got)
+	}
+}
+
+func TestDistToLine(t *testing.T) {
+	d := distToLine(vec2{1, 1}, vec2{0, 0}, vec2{2, 0})
+	if d != 1 {
+		t.Errorf("distToLine((1,1), (0,0)->(2,0)) = %v, want 1", d)
+	}
+	if got := distToLine(vec2{5, 0}, vec2{0, 0}, vec2{10, 0}); got != 0 {
+		t.Errorf("distToLine on-line = %v, want 0", got)
+	}
+	d = distToLine(vec2{0, 0}, vec2{0, 0}, vec2{0, 0})
+	if d != 0 {
+		t.Errorf("distToLine(degenerate segment) = %v, want 0", d)
+	}
+}
+
+func TestEmitDiscPoints(t *testing.T) {
+	rz := vector.NewRasterizer(100, 100)
+	emitDisc(rz, vec2{50, 50}, 10)
+}
+
+func TestEmitPolygonWinding(t *testing.T) {
+	cw := []vec2{{0, 0}, {0, 10}, {10, 0}}
+	cpy := make([]vec2, len(cw))
+	copy(cpy, cw)
+	rz := vector.NewRasterizer(50, 50)
+	emitPolygon(rz, cpy)
+	if got := signedArea(cpy); got <= 0 {
+		t.Errorf("signedArea after emitPolygon(CW) = %v, want >0", got)
+	}
+
+	ccw := []vec2{{0, 0}, {10, 0}, {0, 10}}
+	cpy2 := make([]vec2, len(ccw))
+	copy(cpy2, ccw)
+	emitPolygon(rz, cpy2)
+	if got := signedArea(cpy2); got <= 0 {
+		t.Errorf("signedArea after emitPolygon(CCW) = %v, want >0", got)
+	}
+}
+
+func TestEmitStroke(t *testing.T) {
+	rz := vector.NewRasterizer(50, 50)
+	emitStroke(rz, []vec2{{25, 25}}, 5)
+
+	rz2 := vector.NewRasterizer(50, 50)
+	emitStroke(rz2, []vec2{{5, 5}, {45, 45}}, 3)
+
+	rz3 := vector.NewRasterizer(50, 50)
+	emitStroke(rz3, []vec2{}, 3)
+	emitStroke(rz3, []vec2{{0, 0}, {0, 0}}, 3)
+}
+
+func TestEmitSeg(t *testing.T) {
+	rz := vector.NewRasterizer(50, 50)
+	emitSeg(rz, vec2{5, 5}, vec2{5, 5}, 3)
+	emitSeg(rz, vec2{5, 5}, vec2{45, 45}, 3)
+}
+
+func TestFlattenQuad(t *testing.T) {
+	var out []vec2
+	flattenQuad(vec2{0, 0}, vec2{5, 5}, vec2{10, 0}, 12, &out)
+	if len(out) == 0 {
+		t.Error("flattenQuad produced no points")
+	}
+}
+
+func TestFlattenCube(t *testing.T) {
+	var out []vec2
+	flattenCube(vec2{0, 0}, vec2{3, 5}, vec2{7, 5}, vec2{10, 0}, 12, &out)
+	if len(out) == 0 {
+		t.Error("flattenCube produced no points")
+	}
+}
 
 // TestRegisterFontPathWeightSelection verifies that when several weights
 // of one family collapse to the same style key, the weight closest to the

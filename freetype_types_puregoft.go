@@ -1,4 +1,4 @@
-//go:build linux && !android
+//go:build linux
 
 package glyph
 
@@ -291,7 +291,7 @@ func nonZeroUpem(upem uint16) uint16 {
 func resolveFTFontParams(style TextStyle, scaleFactor float32) (
 	family string, size float64, bold, italic bool,
 ) {
-	family = resolveFontFamilyLinux(style.FontName)
+	family = resolveFontFamily(style.FontName)
 
 	rawSize := style.Size
 	if rawSize <= 0 {
@@ -341,24 +341,8 @@ func fontFallbackPaths(fontPaths map[string]string,
 	return paths
 }
 
-// resolveFontFamilyLinux maps generic font names to Linux font
-// families (DejaVu / Liberation / Noto).
-func resolveFontFamilyLinux(fontName string) string {
-	family := parseFamilyFromFontName(fontName)
-	if family == "" {
-		return "DejaVu Sans"
-	}
-	switch strings.ToLower(family) {
-	case "sans", "sans-serif", "system":
-		return "DejaVu Sans"
-	case "serif":
-		return "DejaVu Serif"
-	case "monospace", "mono":
-		return "DejaVu Sans Mono"
-	default:
-		return family
-	}
-}
+// resolveFontFamily maps generic font names to concrete platform font
+// families; it is defined per-OS (see discover_linux.go / discover_android.go).
 
 // resolveFontPath finds the .ttf/.otf path for a family+style combo.
 func resolveFontPath(fontPaths map[string]string,
