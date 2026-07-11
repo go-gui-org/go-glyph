@@ -219,6 +219,18 @@ func (ctx *Context) LayoutRichText(rt RichText,
 		}
 	}
 
+	// Detect emoji clusters and mark them as color so the renderer uses
+	// the color-font path instead of monochrome glyphs.
+	clusters := segmentGraphemes(text)
+	for _, cl := range clusters {
+		if clusterIsEmoji(cl.text) {
+			if ov, ok := overrides[cl.byteI]; ok {
+				ov.isColor = true
+				overrides[cl.byteI] = ov
+			}
+		}
+	}
+
 	layout := ctx.buildLayout(text, baseFont, cfg, overrides)
 
 	// Apply per-run styles to items.

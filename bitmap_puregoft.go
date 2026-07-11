@@ -68,6 +68,7 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, item Item,
 	if item.UseOriginalColor {
 		for _, fp := range ftColorFallbacksSingleton {
 			if r, ok := renderColorGlyph(fp, fontSize, ch); ok {
+				r.top = max(0, int(float64(r.h)-float64(item.Descent)*float64(scaleFactor)/2))
 				res = r
 				break
 			}
