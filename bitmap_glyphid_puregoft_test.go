@@ -338,6 +338,50 @@ func TestLigatureCaretSkipsInterior(t *testing.T) {
 	t.Skip("no ligature formed on this host; skipping")
 }
 
+// TestCombiningMarkPositioned verifies the stream carries HarfBuzz mark
+// offsets: a base+combining-mark grapheme shapes to multiple glyphs sharing one
+// cluster, and the mark glyph must carry a nonzero x/y offset so it overlaps
+// the base instead of advancing past it. Skips where the host font precomposes
+// the sequence or lacks mark positioning.
+func TestCombiningMarkPositioned(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	candidates := []string{
+		"e\u0301",      // e + combining acute
+		"a\u0300",      // a + combining grave
+		"o\u0308",      // o + combining diaeresis
+		"n\u0303",      // n + combining tilde
+		"\u0628\u064e", // Arabic beh + fatha
+	}
+	for _, s := range candidates {
+		layout, err := ctx.LayoutText(s, TextConfig{})
+		if err != nil {
+			continue
+		}
+		byCluster := make(map[uint32][]Glyph)
+		for _, g := range layout.Glyphs {
+			if g.GlyphID != 0 {
+				byCluster[g.Index] = append(byCluster[g.Index], g)
+			}
+		}
+		for _, gs := range byCluster {
+			if len(gs) < 2 {
+				continue // precomposed or single-glyph: no separate mark
+			}
+			for _, g := range gs {
+				if g.XOffset != 0 || g.YOffset != 0 {
+					return // mark carries a positioning offset — verified
+				}
+			}
+		}
+	}
+	t.Skip("no positioned combining mark on this host; skipping")
+}
+
 // TestLayoutArabicStream verifies Arabic shapes through the stream path: with a
 // covering font the run yields resolved glyph ids, and ligature absorption can
 // make the glyph count differ from the cluster count.

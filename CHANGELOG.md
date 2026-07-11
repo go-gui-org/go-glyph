@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Shaped-glyph-stream rendering (pure-Go text backend).** Layout builds
+  `Layout.Glyphs` directly from HarfBuzz output — each glyph carries its
+  resolved glyph id, advances, and mark-positioning offsets — and the renderer
+  rasterizes by glyph id, dropping the second per-glyph shaping pass. This
+  positions combining marks across grapheme clusters, and makes the glyph count
+  independent of the grapheme count (ligatures collapse clusters, marks add
+  glyphs). Text that is unshaped, color emoji, or from a missing font falls
+  back to the previous text-based rasterization.
+- Carets now stop only at ligature boundaries, not inside a ligature (a
+  ligature-absorbed cluster is no longer a cursor position).
+- `Glyph.GlyphID` widened from `uint16` to `uint32` (fonts can exceed 65535
+  glyphs).
+
+### Fixed
+
+- Combining marks are now x/y-offset relative to their base instead of
+  advancing past it.
+
+### Notes
+
+- `DrawLayoutPlaced` callers must size the placement slice to
+  `len(layout.Glyphs)` and index it by `GlyphInfo.Index` — the glyph count is
+  no longer the grapheme count. The package doc example shows the pattern.
+
 ## [v1.15.0] - 2026-07-11
 
 ### Changed
