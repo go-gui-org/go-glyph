@@ -1,4 +1,4 @@
-//go:build android || linux || darwin
+//go:build android || linux || darwin || windows
 
 package glyph
 

@@ -1,4 +1,4 @@
-//go:build android || linux || darwin || (js && wasm)
+//go:build android || linux || darwin || windows || (js && wasm)
 
 package glyph
 

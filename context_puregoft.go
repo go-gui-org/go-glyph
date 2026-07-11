@@ -1,4 +1,4 @@
-//go:build linux || darwin
+//go:build linux || darwin || windows
 
 package glyph
 
@@ -11,11 +11,11 @@ import (
 	ot "github.com/go-text/typesetting/font/opentype"
 )
 
-// Context holds font state for text shaping on Linux, Android, and macOS,
-// backed by the pure-Go go-text/typesetting stack (no cgo, no system
-// font libraries). Only font discovery differs per platform
+// Context holds font state for text shaping on Linux, Android, macOS,
+// and Windows, backed by the pure-Go go-text/typesetting stack (no cgo,
+// no system font libraries). Only font discovery differs per platform
 // (discoverSystemFonts, defined in discover_linux.go / discover_android.go /
-// discover_darwin.go).
+// discover_darwin.go / discover_windows.go).
 //
 // Not safe for concurrent use.
 type Context struct {
@@ -240,6 +240,10 @@ func isCJKFamily(lowerFamily string) bool {
 		"droid sans fallback", "nanum", "ipa", "vl gothic", "takao",
 		"pingfang", "heiti", "hiragino",
 		"apple sd gothic neo", "applegothic",
+		"microsoft yahei", "microsoft jhenghei",
+		"malgun gothic", "meiryo", "yu gothic",
+		"batang", "simsun", "mingliu",
+		"ms gothic", "ms mincho",
 	}
 	for _, n := range needles {
 		if strings.Contains(lowerFamily, n) {
