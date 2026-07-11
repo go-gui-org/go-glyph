@@ -70,7 +70,13 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 		key = fnvHashU64(key, uint64(bin))
 		key = fnvHashU64(key, uint64(targetH))
 		key = fnvHashF32(key, strokeWidth)
+		// The render size comes from resolveFTFontParams(item.Style), which
+		// reads FontName when Style.Size is 0 (size encoded as "Sans 16").
+		// FontName and Size share one .ttf FontPath, so both are needed to key
+		// distinct sizes apart; Typeface distinguishes synthetic bold/italic.
+		key = fnvHashString(key, item.Style.FontName)
 		key = fnvHashF32(key, item.Style.Size)
+		key = fnvHashU64(key, uint64(item.Style.Typeface))
 	} else {
 		runText, targetRuneIdx = computeRunText(text, item, g)
 		key = fnvHashString(key, ch)

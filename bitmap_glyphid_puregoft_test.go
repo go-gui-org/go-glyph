@@ -145,6 +145,43 @@ func TestDrawLayoutPlacedStream(t *testing.T) {
 	}
 }
 
+// TestByIDCacheKeyDistinguishesSize guards a cache collision: when the font
+// size is encoded in FontName (Style.Size == 0), two items sharing a GlyphID,
+// FontPath and Ascent but differing in size must not share an atlas cell.
+// Ascent is held equal on purpose so targetH cannot mask the bug — FontName is
+// the only size discriminator.
+func TestByIDCacheKeyDistinguishesSize(t *testing.T) {
+	path, _, gid := resolveTestGlyph(t, "H")
+
+	b := newMockBackend()
+	r, err := NewRenderer(b, 1.0)
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+	defer r.Free()
+
+	item := func(fontName string) Item {
+		return Item{
+			Style:    TextStyle{FontName: fontName},
+			FontPath: path,
+			Ascent:   20,
+		}
+	}
+	g := Glyph{GlyphID: gid, Index: 0, Codepoint: 1}
+
+	big := r.getOrLoadGlyph("H", item("Sans 40"), g, 0, 0)
+	small := r.getOrLoadGlyph("H", item("Sans 10"), g, 0, 0)
+
+	if big.Width == small.Width && big.Height == small.Height {
+		t.Errorf("40px and 10px glyphs share a cell (%dx%d): by-id cache key ignores font size",
+			big.Width, big.Height)
+	}
+	if big.Height <= small.Height {
+		t.Errorf("40px cell (%dx%d) not larger than 10px cell (%dx%d)",
+			big.Width, big.Height, small.Width, small.Height)
+	}
+}
+
 // TestLoadGlyphByIDFT verifies the by-id load path uploads a non-empty cell to
 // the atlas.
 func TestLoadGlyphByIDFT(t *testing.T) {
