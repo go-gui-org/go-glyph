@@ -70,13 +70,13 @@ func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error) 
 					small := merged
 					small.Size = float32(baseSize * 0.58)
 					css = buildCSSFont(small)
-					yShift = -baseSize * 0.15
+					yShift = -baseSize * 0.4
 					xPad = baseSize * 0.08
 				case "sups":
 					small := merged
 					small.Size = float32(baseSize * 0.58)
 					css = buildCSSFont(small)
-					yShift = baseSize * 0.4
+					yShift = baseSize * 0.65
 					xPad = baseSize * 0.08
 				}
 			}

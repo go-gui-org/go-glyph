@@ -177,7 +177,7 @@ func (ctx *Context) LayoutRichText(rt RichText,
 					resolved = small
 					f.close()
 					f = ctx.createFTFont(small)
-					yShift = -baseSize * 0.15
+					yShift = -baseSize * 0.4
 					xPad = baseSize * 0.08
 				case "sups":
 					small := resolved
@@ -185,7 +185,7 @@ func (ctx *Context) LayoutRichText(rt RichText,
 					resolved = small
 					f.close()
 					f = ctx.createFTFont(small)
-					yShift = baseSize * 0.4
+					yShift = baseSize * 0.65
 					xPad = baseSize * 0.08
 				}
 			}
