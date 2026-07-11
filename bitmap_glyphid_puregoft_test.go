@@ -182,6 +182,42 @@ func TestByIDCacheKeyDistinguishesSize(t *testing.T) {
 	}
 }
 
+// TestSuperscriptAdvanceIsSmall guards the run-shaping size boundary: a
+// superscript reuses the base .ttf at a reduced size (same face pointer), so if
+// runs are grouped by face alone it is shaped with the base font and takes a
+// base-size advance while rendering small — leaving a gap after the glyph. The
+// superscript run's advance must be smaller than the same glyph at base size.
+func TestSuperscriptAdvanceIsSmall(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	sups := &FontFeatures{OpenTypeFeatures: []FontFeature{{Tag: "sups", Value: 1}}}
+	rt := RichText{Runs: []StyleRun{
+		{Text: "x", Style: TextStyle{FontName: "Sans 40"}},
+		{Text: "x", Style: TextStyle{FontName: "Sans 40", Features: sups}},
+	}}
+	layout, err := ctx.LayoutRichText(rt, TextConfig{})
+	if err != nil {
+		t.Fatalf("LayoutRichText: %v", err)
+	}
+	if len(layout.Items) < 2 {
+		t.Skipf("expected 2 items, got %d (no font on host?)", len(layout.Items))
+	}
+
+	base := layout.Items[0].Width
+	sup := layout.Items[1].Width
+	if base <= 0 {
+		t.Skip("base glyph has no advance; skipping")
+	}
+	if sup >= base {
+		t.Errorf("superscript advance %.2f not smaller than base %.2f: run grouped sub/sup at base size",
+			sup, base)
+	}
+}
+
 // TestLoadGlyphByIDFT verifies the by-id load path uploads a non-empty cell to
 // the atlas.
 func TestLoadGlyphByIDFT(t *testing.T) {

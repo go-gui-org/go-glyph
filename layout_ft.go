@@ -381,9 +381,14 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		}
 		f := charFonts[ri]
 		rj := ri + 1
+		// A run is one font at one size. Sub/superscripts reuse the base
+		// face at a reduced size (same .ttf, so same face pointer); the size
+		// check keeps them out of the base run, otherwise they would be shaped
+		// with the base font and take a base-size advance while rendering
+		// small, leaving a gap after the glyph.
 		for rj < len(chars) && !chars[rj].isColor &&
 			chars[rj].text != "\n" && chars[rj].text != "\r" &&
-			charFonts[rj].face == f.face {
+			charFonts[rj].face == f.face && charFonts[rj].size == f.size {
 			rj++
 		}
 		runStart := chars[ri].byteI
