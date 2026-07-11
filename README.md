@@ -5,31 +5,30 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mike-ward/go-glyph)
 
 High-performance text rendering for Go. Shaping, layout, rasterization, and
-editing with platform-appropriate backends per OS.
+editing. Text shaping and rasterization are pure Go on all platforms — no C
+libraries or system text APIs are required for the core library.
 
-| OS      | Shaper              | Rasterizer              |
-| ------- | ------------------- | ----------------------- |
-| Linux   | HarfBuzz (go-text)  | x/image/vector          |
-| macOS   | CoreText            | CoreText / CoreGraphics |
-| Windows | GDI + DirectWrite   | GDI + DirectWrite       |
-| Android | HarfBuzz (go-text)  | x/image/vector          |
-| WASM    | Canvas2D            | Canvas2D                |
+| OS      | Shaper             | Rasterizer     |
+| ------- | ------------------ | -------------- |
+| Linux   | HarfBuzz (go-text) | x/image/vector |
+| macOS   | HarfBuzz (go-text) | x/image/vector |
+| iOS     | HarfBuzz (go-text) | x/image/vector |
+| Windows | HarfBuzz (go-text) | x/image/vector |
+| Android | HarfBuzz (go-text) | x/image/vector |
+| WASM    | Canvas2D           | Canvas2D       |
+
+The `glyph` package builds with `CGO_ENABLED=0` on all platforms. CGo is only
+used by the optional GPU rendering backends (`backend/gpu`, `backend/ios`,
+`backend/android`) to reach native graphics APIs (Metal, OpenGL, GLES).
 
 ![screenshot](assets/a.png)
 
 ## Prerequisites
 
-| Platform | Requirements                                                                                                  |
-| -------- | ------------------------------------------------------------------------------------------------------------- |
-| macOS    | None                                                                                                          |
-| Windows  | None                                                                                                          |
-| Linux   | None                                                                                  |
-| Android  | NDK (only for the example app's JNI/GLES shell; the library itself needs none)                                |
-| WASM     | None                                                                                                          |
-
-Linux and Android link no C libraries: shaping, rasterization, and font
-discovery are pure Go (`go-text/typesetting` + `x/image/vector`). Both build
-with `CGO_ENABLED=0`.
+| Platform     | Requirements                                                                                                                               |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| All          | None — the `glyph` package is cgo-free and has zero system dependencies.                                                                   |
+| GPU backends | CGo + platform SDK (Xcode for Metal, GL/GLES dev libraries). Not needed unless you use `backend/gpu`, `backend/ios`, or `backend/android`. |
 
 ## Install
 
