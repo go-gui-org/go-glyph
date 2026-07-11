@@ -5,12 +5,14 @@ package glyph
 import (
 	"bytes"
 	"image"
+	"image/color"
 	"image/draw"
 	"image/png"
 	"math"
 
 	"github.com/go-text/typesetting/font"
 	ot "github.com/go-text/typesetting/font/opentype"
+	"github.com/go-text/typesetting/font/opentype/tables"
 	"github.com/go-text/typesetting/harfbuzz"
 	"golang.org/x/image/vector"
 )
@@ -19,9 +21,11 @@ import (
 // Android, macOS, and Windows. Shaping/rasterization are shared; only font
 // discovery (see discover_*.go) differs by platform.
 // Shaping comes from go-text/typesetting/harfbuzz; monochrome glyphs are
-// rasterized with golang.org/x/image/vector; color-emoji glyphs decode
-// their embedded bitmaps (CBDT/sbix PNG); stroked text uses the pure-Go
-// path stroker (see loadStrokedGlyphFT and addStrokedOutline).
+// rasterized with golang.org/x/image/vector; color-emoji glyphs either
+// decode their embedded bitmaps (CBDT/sbix PNG) or, for COLR v0 layered
+// fonts such as Windows' Segoe UI Emoji, composite palette-colored outline
+// layers (see renderCOLRGlyph); stroked text uses the pure-Go path stroker
+// (see loadStrokedGlyphFT and addStrokedOutline).
 
 // glyphBitmapPad matches the 2px border the cgo path reserved around the
 // ink bounds so anti-aliased edges are not clipped in the atlas.
@@ -67,38 +71,53 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, item Item,
 	// codepoint, which would otherwise win and render tinted/blank.
 	if item.UseOriginalColor {
 		for _, fp := range ftColorFallbacksSingleton {
+			// Embedded bitmap strikes (CBDT/sbix) come as a full-ascent
+			// cell, so the vertical placement is derived from the item.
 			if r, ok := renderColorGlyph(fp, fontSize, ch); ok {
 				r.top = max(0, int(float64(r.h)-float64(item.Descent)*float64(scaleFactor)/2))
 				res = r
 				break
 			}
-		}
-	}
-
-	// Primary font paths (reject .notdef so fallbacks get a turn).
-	if res == nil {
-		for _, fontPath := range paths {
-			r, _ := renderMonoRun(fontPath, fontSize, subpixelShift, ch, true)
-			if r != nil {
+			// COLR v0 layered glyphs (e.g. Windows' Segoe UI Emoji) carry
+			// real outline metrics, so their ink bounds position them like
+			// any other glyph — no cell override.
+			if r, ok := renderCOLRGlyph(fp, fontSize, ch); ok {
 				res = r
 				break
 			}
 		}
 	}
 
-	// Script fallback fonts if the primary font lacked the glyph.
+	// Primary font paths: the first font that covers the cluster wins,
+	// even when the glyph carries no ink (e.g. a space). Stopping on
+	// coverage — rather than on a non-nil bitmap — keeps a later fallback
+	// font's dirty whitespace glyph from contributing stray ink (a "dot").
+	covered := false
 	if res == nil {
+		for _, fontPath := range paths {
+			r, rejected := renderMonoRun(fontPath, fontSize, subpixelShift, ch, true)
+			if !rejected {
+				res = r // may be nil for a zero-ink (whitespace) cluster
+				covered = true
+				break
+			}
+		}
+	}
+
+	// Script fallback fonts only if no primary font covered the cluster.
+	if !covered && res == nil {
 		for _, fp := range ftScriptFallbacksSingleton {
-			r, _ := renderMonoRun(fp, fontSize, subpixelShift, ch, true)
-			if r != nil {
+			r, rejected := renderMonoRun(fp, fontSize, subpixelShift, ch, true)
+			if !rejected {
 				res = r
+				covered = true
 				break
 			}
 		}
 	}
 
 	// Last resort: render with the primary font even if it is tofu.
-	if res == nil && len(paths) > 0 {
+	if !covered && res == nil && len(paths) > 0 {
 		res, _ = renderMonoRun(paths[0], fontSize, subpixelShift, ch, false)
 	}
 
@@ -124,28 +143,33 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, item Item,
 
 	var res *rasterResult
 
-	// Primary font paths (reject .notdef so fallbacks get a turn).
+	// Primary font paths: stop at the first font that covers the cluster,
+	// even when blank, so a later fallback's dirty whitespace glyph cannot
+	// add stray ink (see loadGlyphFT).
+	covered := false
 	for _, fontPath := range paths {
-		r, _ := renderStrokedRun(fontPath, fontSize, sw, subpixelShift, ch, true)
-		if r != nil {
+		r, rejected := renderStrokedRun(fontPath, fontSize, sw, subpixelShift, ch, true)
+		if !rejected {
 			res = r
+			covered = true
 			break
 		}
 	}
 
-	// Script fallback fonts if the primary font lacked the glyph.
-	if res == nil {
+	// Script fallback fonts only if no primary font covered the cluster.
+	if !covered && res == nil {
 		for _, fp := range ftScriptFallbacksSingleton {
-			r, _ := renderStrokedRun(fp, fontSize, sw, subpixelShift, ch, true)
-			if r != nil {
+			r, rejected := renderStrokedRun(fp, fontSize, sw, subpixelShift, ch, true)
+			if !rejected {
 				res = r
+				covered = true
 				break
 			}
 		}
 	}
 
 	// Last resort: stroke with the primary font even if it is tofu.
-	if res == nil && len(paths) > 0 {
+	if !covered && res == nil && len(paths) > 0 {
 		res, _ = renderStrokedRun(paths[0], fontSize, sw, subpixelShift, ch, false)
 	}
 
@@ -392,6 +416,113 @@ func renderColorGlyph(path string, size float64, text string) (*rasterResult, bo
 	rgba := image.NewRGBA(image.Rect(0, 0, w, h))
 	draw.Draw(rgba, rgba.Bounds(), img, b.Min, draw.Src)
 	return &rasterResult{data: rgba.Pix, w: w, h: h, left: 0, top: h}, true
+}
+
+// renderCOLRGlyph rasterizes a COLR v0 (layered) color glyph — the format
+// Windows' Segoe UI Emoji uses — for the first shaped glyph of text. Each
+// layer is an outline glyph filled with a solid color drawn from palette 0
+// of the CPAL table; layers paint bottom-to-top with source-over
+// compositing, yielding a premultiplied-alpha RGBA cell. Returns false when
+// the font has no COLR v0 entry for the glyph (bitmap or COLR v1 emoji, or a
+// plain text font), so the caller can try the next fallback.
+func renderCOLRGlyph(path string, size float64, text string) (*rasterResult, bool) {
+	cf := loadCachedFace(path)
+	if cf == nil || cf.face.COLR == nil || len(cf.face.CPAL) == 0 {
+		return nil, false
+	}
+	buf := shapeWith(cf, size, text)
+	if buf == nil || len(buf.Info) == 0 {
+		return nil, false
+	}
+	gid := buf.Info[0].Glyph
+	if gid == 0 {
+		return nil, false
+	}
+	paint, ok := cf.face.COLR.Search(tables.GlyphID(gid))
+	if !ok {
+		return nil, false
+	}
+	// COLR v1 paint graphs (gradients/transforms) resolve to other paint
+	// types; only the v0 layered form is handled here.
+	layers, ok := paint.(tables.PaintColrLayersResolved)
+	if !ok || len(layers) == 0 {
+		return nil, false
+	}
+
+	palette := cf.face.CPAL[0]
+	scale := size / float64(nonZeroUpem(cf.upem))
+
+	type coloredLayer struct {
+		g   placedGlyph
+		col color.NRGBA
+	}
+	var cls []coloredLayer
+	for _, layer := range layers {
+		gd := cf.face.GlyphData(font.GID(layer.GlyphID))
+		out, ok := gd.(font.GlyphOutline)
+		if !ok || len(out.Segments) == 0 {
+			continue // empty/space layer contributes no ink
+		}
+		cls = append(cls, coloredLayer{
+			g:   placedGlyph{segs: out.Segments},
+			col: paletteColor(palette, layer.PaletteIndex),
+		})
+	}
+	if len(cls) == 0 {
+		return nil, false
+	}
+
+	// Map a font-unit point (Y up) to baseline-relative device px (Y down).
+	mapPt := func(g placedGlyph, fx, fy float32) (dx, dy float64) {
+		dx = g.penX + g.xOff + float64(fx)*scale
+		dy = -float64(fy)*scale - g.yOff
+		return dx, dy
+	}
+
+	minDx, minDy := math.Inf(1), math.Inf(1)
+	maxDx, maxDy := math.Inf(-1), math.Inf(-1)
+	for _, cl := range cls {
+		for si := range cl.g.segs {
+			for _, pt := range cl.g.segs[si].ArgsSlice() {
+				dx, dy := mapPt(cl.g, pt.X, pt.Y)
+				minDx, maxDx = math.Min(minDx, dx), math.Max(maxDx, dx)
+				minDy, maxDy = math.Min(minDy, dy), math.Max(maxDy, dy)
+			}
+		}
+	}
+	if minDx > maxDx || minDy > maxDy {
+		return nil, false
+	}
+
+	left := int(math.Floor(minDx)) - glyphBitmapPad
+	topEdge := int(math.Floor(minDy)) - glyphBitmapPad
+	w := int(math.Ceil(maxDx)) - left + glyphBitmapPad
+	h := int(math.Ceil(maxDy)) - topEdge + glyphBitmapPad
+	w, h = clampBitmapDim(w), clampBitmapDim(h)
+
+	acc := image.NewRGBA(image.Rect(0, 0, w, h))
+	offX, offY := float64(-left), float64(-topEdge)
+	for _, cl := range cls {
+		rz := vector.NewRasterizer(w, h)
+		rz.DrawOp = draw.Src
+		addOutline(rz, cl.g, mapPt, offX, offY)
+		mask := image.NewAlpha(image.Rect(0, 0, w, h))
+		rz.Draw(mask, mask.Bounds(), image.Opaque, image.Point{})
+		draw.DrawMask(acc, acc.Bounds(), image.NewUniform(cl.col),
+			image.Point{}, mask, image.Point{}, draw.Over)
+	}
+	return &rasterResult{data: acc.Pix, w: w, h: h, left: left, top: -topEdge}, true
+}
+
+// paletteColor resolves a CPAL entry to a straight-alpha color. The special
+// index 0xFFFF ("use text foreground") has no standalone color; color emoji
+// rarely use it, so it falls back to opaque black.
+func paletteColor(palette []tables.ColorRecord, idx uint16) color.NRGBA {
+	if idx == 0xFFFF || int(idx) >= len(palette) {
+		return color.NRGBA{A: 255}
+	}
+	rec := palette[idx]
+	return color.NRGBA{R: rec.Red, G: rec.Green, B: rec.Blue, A: rec.Alpha}
 }
 
 // shapeWith shapes text with a fresh harfbuzz font scaled so positions
