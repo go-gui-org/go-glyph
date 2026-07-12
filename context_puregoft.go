@@ -125,11 +125,13 @@ func (ctx *Context) FontMetrics(cfg TextConfig) (TextMetrics, error) {
 	sf := float64(ctx.scaleFactor)
 	asc := float32(ascent / sf)
 	dsc := float32(descent / sf)
+	lineHeight := recommendedLineHeight(ascent, descent, leading, font.size)
 	return TextMetrics{
-		Ascender:  asc,
-		Descender: dsc,
-		Height:    asc + dsc,
-		LineGap:   float32(leading / sf),
+		Ascender:   asc,
+		Descender:  dsc,
+		Height:     asc + dsc,
+		LineGap:    float32(leading / sf),
+		LineHeight: float32(lineHeight / sf),
 	}, nil
 }
 

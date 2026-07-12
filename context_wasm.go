@@ -84,10 +84,15 @@ func (ctx *Context) FontMetrics(cfg TextConfig) (TextMetrics, error) {
 	m := ctx.ctx2d.Call("measureText", "Hg")
 	ascent := float32(m.Get("fontBoundingBoxAscent").Float())
 	descent := float32(m.Get("fontBoundingBoxDescent").Float())
+	// Canvas exposes no line-gap; leading is 0 and the em floor guards
+	// against cramped stacking.
+	lineHeight := recommendedLineHeight(
+		float64(ascent), float64(descent), 0, cssFontSize(cfg.Style))
 	return TextMetrics{
-		Ascender:  ascent,
-		Descender: descent,
-		Height:    ascent + descent,
+		Ascender:   ascent,
+		Descender:  descent,
+		Height:     ascent + descent,
+		LineHeight: float32(lineHeight),
 	}, nil
 }
 
@@ -96,8 +101,9 @@ func (ctx *Context) ResolveFontName(name string) (string, error) {
 	return name, nil
 }
 
-// buildCSSFont constructs a CSS font string from TextStyle.
-func buildCSSFont(style TextStyle) string {
+// cssFontSize resolves the font size (logical px) for a style, falling back
+// to the size embedded in a Pango font name, then to 16.
+func cssFontSize(style TextStyle) float64 {
 	size := style.Size
 	if size <= 0 {
 		size = parseSizeFromFontName(style.FontName)
@@ -105,6 +111,12 @@ func buildCSSFont(style TextStyle) string {
 	if size <= 0 {
 		size = 16
 	}
+	return float64(size)
+}
+
+// buildCSSFont constructs a CSS font string from TextStyle.
+func buildCSSFont(style TextStyle) string {
+	size := cssFontSize(style)
 
 	family := cmp.Or(parseFamilyFromFontName(style.FontName), "sans-serif")
 

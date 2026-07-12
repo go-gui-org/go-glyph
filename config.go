@@ -108,4 +108,9 @@ type TextMetrics struct {
 	Descender float32
 	Height    float32
 	LineGap   float32
+	// LineHeight is the recommended baseline-to-baseline advance for stacking
+	// lines: Ascender+Descender+LineGap, floored to a minimum ratio of the em
+	// so fonts with no line-gap hint do not render cramped. Prefer this over
+	// Height when laying out multiple lines.
+	LineHeight float32
 }
