@@ -176,7 +176,19 @@ func clusterIsEmoji(cluster string) bool {
 			return true
 		case r >= 0x1F000 && r <= 0x1F0FF: // mahjong, dominoes, cards
 			return true
-		case r >= 0x2300 && r <= 0x23FF: // misc technical (⌚⌛⏰)
+		// Misc Technical (U+2300–U+23FF) is mostly non-emoji symbols; only a
+		// handful carry an emoji presentation. Matching the whole block forced
+		// a color-only fallback on text symbols such as the media triangles
+		// ⏴⏵⏶⏷ (U+23F4–U+23F7), which no color font covers — so they lost their
+		// text fallback (STIX) and rendered as the base font's .notdef box.
+		// Match only the codepoints Unicode marks Emoji (emoji-data.txt).
+		case r == 0x231A || r == 0x231B: // ⌚ ⌛ watch, hourglass
+			return true
+		case r == 0x2328 || r == 0x23CF: // ⌨ keyboard, ⏏ eject
+			return true
+		case r >= 0x23E9 && r <= 0x23F3: // ⏩–⏳ media/clock (skips 23F4–23F7)
+			return true
+		case r >= 0x23F8 && r <= 0x23FA: // ⏸ ⏹ ⏺ pause, stop, record
 			return true
 		case r == 0x2764 || r == 0x2763: // hearts
 			return true
