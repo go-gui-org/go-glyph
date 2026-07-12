@@ -325,7 +325,11 @@ jobs:
       - name: Test root module
         env:
           CGO_ENABLED: "1"
-        run: go test ./...
+        # -p 1 serializes the package test binaries. On the macos-latest
+        # (macOS 26) runner, running the CoreText root test and the
+        # Metal/ebiten test concurrently spikes memory and the OS SIGKILLs
+        # the root test ("signal: killed"). Serializing caps peak memory.
+        run: go test -p 1 ./...
 
       - name: Vet root module
         env:
