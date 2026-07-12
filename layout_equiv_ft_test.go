@@ -28,13 +28,23 @@ func TestLayoutRichTextEmojiUseOriginalColor(t *testing.T) {
 		t.Skip("no emoji fallback font installed; skipping")
 	}
 
+	// Filter with the cheap cmap coverage cache first (mirroring production
+	// probeFallback) and only full-parse a color candidate that maps the emoji;
+	// scanning the whole fallback set with newFTFontFromPath parsed every system
+	// font and spiked peak RSS enough to OOM-kill the macOS CI runner.
 	hasEmoji := false
 	for _, p := range ctx.fallbackPaths {
-		f := newFTFontFromPath(ctx.ftLib, p, 16)
-		if f.isColorFont() && f.hasGlyphs("\U0001F600") {
-			hasEmoji = true
+		cov := loadCoverage(p)
+		if cov == nil || !cov.color || !cov.covers("\U0001F600") {
+			continue
 		}
+		f := newFTFontFromPath(ctx.ftLib, p, 16)
+		ok := f.isColorFont() && f.hasGlyphs("\U0001F600")
 		f.close()
+		if ok {
+			hasEmoji = true
+			break
+		}
 	}
 	if !hasEmoji {
 		t.Skip("no color-emoji font covers \U0001F600; skipping")

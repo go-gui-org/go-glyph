@@ -325,10 +325,14 @@ jobs:
       - name: Test root module
         env:
           CGO_ENABLED: "1"
-        # -p 1 serializes the package test binaries. On the macos-latest
-        # (macOS 26) runner, running the CoreText root test and the
-        # Metal/ebiten test concurrently spikes memory and the OS SIGKILLs
-        # the root test ("signal: killed"). Serializing caps peak memory.
+          # Safety net: the root test's peak heap is ~1 GB after the
+          # fallback-coverage tests were switched to the cheap cmap cache
+          # (see context_puregoft_test.go / layout_equiv_ft_test.go). Before
+          # that, those tests full-parsed every system fallback font, spiking
+          # peak RSS to ~3.5 GB and OOM-killing the macos-26 runner
+          # ("signal: killed"). GOMEMLIMIT caps regrowth if the runner's font
+          # set expands again; -p 1 keeps concurrent package binaries bounded.
+          GOMEMLIMIT: "2GiB"
         run: go test -p 1 ./...
 
       - name: Vet root module
