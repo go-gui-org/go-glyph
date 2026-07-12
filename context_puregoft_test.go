@@ -251,15 +251,14 @@ func TestLinuxScriptFallbacks(t *testing.T) {
 	}
 	defer ctx.Free()
 
+	// Coverage uses the resident cmap cache (loadCoverage), matching how
+	// production probeFallback decides coverage — a cheap cmap lookup, not a
+	// full face parse per candidate. Scanning the whole fallback set with
+	// newFTFontFromPath parsed every system font (100s of large .ttc files),
+	// spiking peak RSS into multi-GB and OOM-killing the macOS CI runner.
 	covers := func(runes string) bool {
 		for _, p := range ctx.fallbackPaths {
-			f := newFTFontFromPath(ctx.ftLib, p, 16)
-			if f.face == nil {
-				continue
-			}
-			ok := f.hasGlyphs(runes)
-			f.close()
-			if ok {
+			if cov := loadCoverage(p); cov != nil && cov.covers(runes) {
 				return true
 			}
 		}
@@ -304,14 +303,23 @@ func TestEmojiItemUseOriginalColor(t *testing.T) {
 		t.Skip("no emoji fallback font installed; skipping")
 	}
 
-	// Confirm an emoji font is actually present before asserting.
+	// Confirm an emoji font is actually present before asserting. Filter with
+	// the cheap cmap coverage cache first (mirroring production probeFallback)
+	// and only full-parse a color candidate that maps the emoji — otherwise this
+	// guard parsed every system fallback font, spiking RSS and OOM-killing CI.
 	hasEmoji := false
 	for _, p := range ctx.fallbackPaths {
-		f := newFTFontFromPath(ctx.ftLib, p, 16)
-		if f.isColorFont() && f.hasGlyphs("\U0001F600") {
-			hasEmoji = true
+		cov := loadCoverage(p)
+		if cov == nil || !cov.color || !cov.covers("\U0001F600") {
+			continue
 		}
+		f := newFTFontFromPath(ctx.ftLib, p, 16)
+		ok := f.isColorFont() && f.hasGlyphs("\U0001F600")
 		f.close()
+		if ok {
+			hasEmoji = true
+			break
+		}
 	}
 	if !hasEmoji {
 		t.Skip("no color-emoji font covers 😀; skipping")
