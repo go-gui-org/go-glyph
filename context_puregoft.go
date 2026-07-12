@@ -314,12 +314,14 @@ func isScriptFamily(lowerFamily string) bool {
 // mapping differ per platform. Color emoji is collected ahead of CJK so
 // colored glyphs win over monochrome coverage in the fallback order.
 // Script fonts (Arabic, Hebrew, Thai, Indic, etc.) are collected as the
-// lowest-priority fallback tier.
+// next tier. General fonts (all remaining, including symbol/icon/Nerd Fonts
+// with PUA coverage) trail as the lowest-priority fallback.
 type fontScan struct {
 	ctx          *Context
 	emojiPaths   []string
 	cjkPaths     []string
 	scriptPaths  []string
+	generalPaths []string
 	colorPaths   []string
 	seenFallback map[string]bool
 	seenColor    map[string]bool
@@ -381,6 +383,10 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 		default:
 			if isScriptFamily(lowerFam) {
 				s.scriptPaths = append(s.scriptPaths, path)
+				s.seenFallback[family] = true
+			} else {
+				s.generalPaths = append(s.generalPaths, path)
+				s.seenFallback[family] = true
 			}
 		}
 	}
@@ -389,11 +395,13 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 // finish assembles the fallback lists in priority order and stores them on
 // the Context. Color emoji leads so colored glyphs win over monochrome
 // coverage; colorPaths also drives the render-side color path. Script fonts
-// (Arabic, Hebrew, etc.) trail CJK as the lowest tier.
+// (Arabic, Hebrew, etc.) trail CJK. General fonts (symbol/icon/Nerd Fonts,
+// etc.) are the last-resort fallback tier.
 func (s *fontScan) finish() {
 	s.ctx.colorPaths = s.colorPaths
 	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.colorPaths...)
 	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.emojiPaths...)
 	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.cjkPaths...)
 	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.scriptPaths...)
+	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.generalPaths...)
 }

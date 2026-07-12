@@ -140,7 +140,7 @@ func (c *faceLRU) add(path string, cf *cachedFace) {
 	}
 }
 
-func parseFace(path string) *cachedFace {
+func parseFace(path string) (cf *cachedFace) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -152,6 +152,13 @@ func parseFace(path string) *cachedFace {
 		return nil
 	}
 	ld := loaders[0]
+
+	defer func() {
+		if r := recover(); r != nil {
+			cf = nil // font parser panicked (e.g. malformed CFF2)
+		}
+	}()
+
 	ft, err := font.NewFont(ld)
 	if err != nil {
 		return nil
