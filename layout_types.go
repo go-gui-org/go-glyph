@@ -114,7 +114,13 @@ type Glyph struct {
 	XAdvance  float64
 	YAdvance  float64
 	Codepoint uint32 // Cluster byte length (use with Index as byte offset).
-	GlyphID   uint32 // Resolved CGGlyph/HB glyph ID (0 = unknown, use text).
+	GlyphID   uint32 // Resolved CGGlyph/HB glyph ID (0 = .notdef or unknown).
+	// Shaped marks a glyph whose GlyphID came from shaping this item's
+	// FontPath, so GlyphID is authoritative — including 0, which then means
+	// .notdef (render the box by id) rather than "unresolved, re-shape from
+	// text". Distinguishes shaped tofu from color-emoji/unloaded-font glyphs,
+	// which leave Shaped false and rasterize via the text path.
+	Shaped bool
 }
 
 // GlyphPlacement specifies absolute screen position and rotation

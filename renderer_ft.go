@@ -73,8 +73,11 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 	// When layout resolved a concrete glyph id and its font, rasterize by id
 	// directly (no re-shaping). Otherwise fall back to text-based shaping,
 	// which handles color emoji, unloaded fonts, and ligature-absorbed
-	// clusters (GlyphID 0).
-	byID := g.GlyphID != 0 && item.FontPath != ""
+	// clusters. A shaped .notdef (GlyphID 0, Shaped set) also renders by id —
+	// the font's box glyph — so unsupported scripts (tofu) share one atlas
+	// entry per font instead of re-shaping the whole run per distinct
+	// codepoint on every scroll re-render.
+	byID := item.FontPath != "" && (g.GlyphID != 0 || g.Shaped)
 
 	var runText string
 	var targetRuneIdx int
