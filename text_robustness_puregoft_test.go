@@ -160,3 +160,79 @@ func TestPooledFontRescales(t *testing.T) {
 			big.Pos[0].XAdvance, small.Pos[0].XAdvance)
 	}
 }
+
+// TestCoverageCovers exercises the cmap-only coverage predicate used by
+// probeFallback: a covered letter is true, an ignorable-only cluster and the
+// empty string count as covered, an empty path yields no coverage, and an
+// unreadable path is negative-cached rather than re-read on every probe.
+func TestCoverageCovers(t *testing.T) {
+	path, _, _ := resolveTestGlyph(t, "H") // installed font path
+	cov := loadCoverage(path)
+	if cov == nil {
+		t.Fatalf("loadCoverage(%q) = nil, want coverage", path)
+	}
+	if !cov.covers("H") {
+		t.Error("covers(\"H\") = false, want true for the default font")
+	}
+	if !cov.covers("\u200d") { // ZWJ only
+		t.Error("covers(ZWJ-only) = false, want true (ignorable)")
+	}
+	if !cov.covers("") {
+		t.Error("covers(empty) = false, want true")
+	}
+	if loadCoverage("") != nil {
+		t.Error("loadCoverage(\"\") = non-nil, want nil")
+	}
+	const bad = "/nonexistent/does-not-exist.ttf"
+	if loadCoverage(bad) != nil {
+		t.Error("loadCoverage(bad path) = non-nil, want nil")
+	}
+	// The nil must be cached so a bad path is not re-read on every probe.
+	coverageCache.mu.Lock()
+	cachedNil, ok := coverageCache.items[bad]
+	coverageCache.mu.Unlock()
+	if !ok || cachedNil != nil {
+		t.Errorf("bad path not negative-cached: ok=%v val=%v", ok, cachedNil)
+	}
+}
+
+// TestCoverageMatchesFace pins the invariant that the cheap cmap-only probe
+// agrees with the parsed-face coverage the render path uses. Probing and
+// rendering must resolve the same font, so coverage.covers must equal
+// faceCovers and the color flag must match, for the same font — a divergence
+// would let a font pass the probe yet render tofu (or vice versa).
+func TestCoverageMatchesFace(t *testing.T) {
+	path, _, _ := resolveTestGlyph(t, "H")
+	cov := loadCoverage(path)
+	cf := loadCachedFace(path)
+	if cov == nil || cf == nil || cf.face == nil {
+		t.Skipf("could not load coverage/face for %q", path)
+	}
+	if cov.color != cf.color {
+		t.Errorf("color mismatch: coverage=%v face=%v", cov.color, cf.color)
+	}
+	samples := []string{
+		"H", "z", "0", "é", // Latin (likely covered)
+		"中", "\U0001F600", "क", // CJK, emoji, Devanagari (likely not)
+		"\u200d", "a\ufe0f", "", // ignorable-only, base+VS16, empty
+	}
+	for _, s := range samples {
+		if got, want := cov.covers(s), faceCovers(cf.face, s); got != want {
+			t.Errorf("covers(%q): coverage=%v faceCovers=%v (must agree)",
+				s, got, want)
+		}
+	}
+}
+
+// TestLoadCoverageCaches verifies loadCoverage builds coverage once and returns
+// the cached instance on subsequent calls, so a probe never re-reads the font.
+func TestLoadCoverageCaches(t *testing.T) {
+	path, _, _ := resolveTestGlyph(t, "H")
+	a := loadCoverage(path)
+	if a == nil {
+		t.Fatalf("loadCoverage(%q) = nil", path)
+	}
+	if b := loadCoverage(path); a != b {
+		t.Error("loadCoverage returned a different instance on second call; not cached")
+	}
+}
