@@ -27,6 +27,36 @@ type Context struct {
 	fontWeights   map[string]font.Weight // weight backing each fontPaths key
 	fallbackPaths []string               // script fallback fonts (CJK, Arabic, etc.)
 	colorPaths    []string               // color-emoji fonts (CBDT/CBLC), render side
+
+	// fallbackResolve memoizes script-fallback selection per grapheme cluster.
+	// The result (winning font path, or "" when no fallback covers the cluster)
+	// depends only on the fixed fallback set, so it is stable across the base
+	// font, size, and re-layouts. Caching the negative ("no font, render tofu")
+	// case is what removes the per-scroll rescan of every fallback font for
+	// unsupported scripts (Chakma, Javanese, …).
+	fallbackResolve map[string]fbResolution
+}
+
+// fbResolution is a cached script-fallback decision for one cluster.
+type fbResolution struct {
+	path    string // "" means no fallback covers the cluster (renders tofu)
+	isColor bool
+}
+
+// fallbackResolveCap bounds the resolution cache; clearing on overflow keeps
+// memory bounded for pathological streams of distinct clusters while costing
+// only an occasional rescan.
+const fallbackResolveCap = 1 << 16
+
+// cacheFallback stores a resolution, lazily allocating and bounding the map.
+func (ctx *Context) cacheFallback(text string, res fbResolution) {
+	if ctx.fallbackResolve == nil {
+		ctx.fallbackResolve = make(map[string]fbResolution)
+	}
+	if len(ctx.fallbackResolve) >= fallbackResolveCap {
+		clear(ctx.fallbackResolve)
+	}
+	ctx.fallbackResolve[text] = res
 }
 
 // NewContext creates a text context backed by go-text/typesetting.

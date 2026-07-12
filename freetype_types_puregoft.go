@@ -36,7 +36,31 @@ type cachedFace struct {
 	face  *font.Face
 	upem  uint16
 	color bool
+	// hbPool recycles HarfBuzz shaping fonts. NewFont builds the face's
+	// shaping accelerators and is the single largest source of layout
+	// allocations, so rebuilding one per shape (per line) is wasteful. A Font
+	// carries lazy mutable state that Shape writes, so it cannot be shared
+	// concurrently; the pool hands each shape an exclusively-owned font that
+	// it returns when done, amortizing NewFont across shapes without a lock.
+	hbPool sync.Pool
 }
+
+// getHB borrows a HarfBuzz font scaled to scale (26.6 px) from the pool,
+// building one on a miss. The caller owns it until putHB and may Shape with
+// it freely. scale is (re)applied on every borrow since a pooled font may
+// have last been used at another size.
+func (cf *cachedFace) getHB(scale int32) *harfbuzz.Font {
+	f, _ := cf.hbPool.Get().(*harfbuzz.Font)
+	if f == nil {
+		f = harfbuzz.NewFont(cf.face)
+	}
+	f.XScale, f.YScale = scale, scale
+	return f
+}
+
+// putHB returns a font borrowed from getHB. Safe to call after Shape: the
+// results live on the Buffer, not the font.
+func (cf *cachedFace) putHB(f *harfbuzz.Font) { cf.hbPool.Put(f) }
 
 // faceCacheCap bounds the number of parsed faces kept resident. Real
 // workloads touch far fewer fonts than this; the cap only guards against
@@ -158,12 +182,12 @@ func hasColorTable(ld *ot.Loader) bool {
 // pixel size. It mirrors the method set of the cgo ftFont so the shared
 // layout code (layout_ft.go) is platform-agnostic.
 type ftFont struct {
-	face *font.Face     // parsed face; nil means "failed to open"
-	hb   *harfbuzz.Font // shaping font, scaled to size in 26.6 px
-	upem uint16
-	size float64 // physical pixel size (already includes scaleFactor)
-	path string  // file path the face was loaded from (by-glyph-id render)
-	cf   *cachedFace
+	face  *font.Face // parsed face; nil means "failed to open"
+	upem  uint16
+	size  float64 // physical pixel size (already includes scaleFactor)
+	scale int32   // 26.6 shaping scale = round(size*64)
+	path  string  // file path the face was loaded from (by-glyph-id render)
+	cf    *cachedFace
 }
 
 // newFTFont creates a shaping font from a TextStyle, trying the
@@ -192,41 +216,60 @@ func openFTFont(path string, size float64) ftFont {
 	if cf == nil {
 		return ftFont{}
 	}
-	hb := harfbuzz.NewFont(cf.face)
 	// Scale so shaped positions come out in 26.6 fixed-point pixels
 	// (output = fontUnit * scale / upem); dividing by 64 yields pixels,
 	// matching the old hb_ft advance convention.
-	s := int32(math.Round(size * 64))
-	hb.XScale, hb.YScale = s, s
 	return ftFont{
-		face: cf.face,
-		hb:   hb,
-		upem: cf.upem,
-		size: size,
-		path: path,
-		cf:   cf,
+		face:  cf.face,
+		upem:  cf.upem,
+		size:  size,
+		scale: int32(math.Round(size * 64)),
+		path:  path,
+		cf:    cf,
 	}
 }
 
-// close releases the shaping font. The parsed face stays cached.
+// close drops the face references. The parsed face and its shaping-font pool
+// stay cached.
 func (f *ftFont) close() {
 	f.face = nil
-	f.hb = nil
 	f.cf = nil
 }
 
 // shapeRunes shapes text and returns the harfbuzz buffer. Caller reads
-// buf.Info / buf.Pos. Returns nil if the font is not loaded.
+// buf.Info / buf.Pos. Returns nil if the font is not loaded. The shaping
+// font is borrowed from the face pool for the duration of the shape only.
 func (f ftFont) shape(text string) *harfbuzz.Buffer {
-	if f.hb == nil || len(text) == 0 {
+	if f.cf == nil || len(text) == 0 {
 		return nil
 	}
 	buf := harfbuzz.NewBuffer()
 	runes := []rune(text)
 	buf.AddRunes(runes, 0, len(runes))
 	buf.GuessSegmentProperties()
-	buf.Shape(f.hb, nil)
+	hb := f.cf.getHB(f.scale)
+	if !safeShape(buf, hb) {
+		return nil // discard hb: a recovered panic may have left it corrupt
+	}
+	f.cf.putHB(hb)
 	return buf
+}
+
+// safeShape runs HarfBuzz shaping, recovering from panics inside go-text's
+// shaper. typesetting v0.3.4 indexes out of range in its AAT morx
+// glyph-deletion path for some macOS system fonts (e.g. GeezaPro with an
+// Arabic combining mark, Raanana/NewPeninimMT with a Hebrew presentation
+// form). A panicking font is reported as unable to shape the text so callers
+// fall through to the next fallback font or to text-based rendering, rather
+// than crashing the host process. Returns false on panic.
+func safeShape(buf *harfbuzz.Buffer, hb *harfbuzz.Font) (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	buf.Shape(hb, nil)
+	return true
 }
 
 // hasGlyphs reports whether the font can shape all of text with no
@@ -242,6 +285,53 @@ func (f ftFont) hasGlyphs(text string) bool {
 		}
 	}
 	return true
+}
+
+// covers reports whether the face has a glyph for every rune in text, using
+// a cmap lookup rather than shaping. Script-fallback selection asks this
+// question for every cluster against many fonts; a full HarfBuzz shape per
+// probe is the dominant cost when laying out text the base font lacks (mixed
+// scripts, symbols, box-drawing). cmap coverage is the standard signal for
+// "does this font support this codepoint" and is orders of magnitude cheaper.
+func (f ftFont) covers(text string) bool {
+	if f.face == nil {
+		return false
+	}
+	return faceCovers(f.face, text)
+}
+
+// faceCovers reports whether face's cmap maps every non-ignorable rune in
+// text. Default-ignorable codepoints (variation selectors, joiners, bidi
+// marks) are treated as covered: shapers drop them, so they must not force a
+// fallback. A cluster of only ignorables counts as covered.
+func faceCovers(face *font.Face, text string) bool {
+	for _, r := range text {
+		if isDefaultIgnorable(r) {
+			continue
+		}
+		if _, ok := face.NominalGlyph(r); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// isDefaultIgnorable reports whether r is a Unicode default-ignorable code
+// point (the common ranges), which shapers omit from output.
+func isDefaultIgnorable(r rune) bool {
+	switch {
+	case r == 0x00AD, r == 0xFEFF: // soft hyphen, ZWNBSP/BOM
+		return true
+	case r >= 0x200B && r <= 0x200F: // ZW space, ZWNJ/ZWJ, LRM/RLM
+		return true
+	case r >= 0x2060 && r <= 0x206F: // word joiner, invisible ops, bidi
+		return true
+	case r >= 0xFE00 && r <= 0xFE0F: // variation selectors
+		return true
+	case r >= 0xE0000 && r <= 0xE0FFF: // tags + variation-selector supplement
+		return true
+	}
+	return false
 }
 
 // isColorFont reports whether the face carries color bitmap glyphs
@@ -335,7 +425,7 @@ func fontFallbackPaths(fontPaths map[string]string,
 		}
 	}
 
-	if fallback, ok := fontPaths["sans-serif"]; ok {
+	if fallback := genericFallback(fontPaths, family); fallback != "" {
 		if paths[len(paths)-1] != fallback {
 			paths = append(paths, fallback)
 		}
@@ -373,11 +463,39 @@ func resolveFontPath(fontPaths map[string]string,
 	if p, ok := fontPaths[family]; ok {
 		return p
 	}
-	// Last resort: whatever sans-serif resolved to.
+	// Last resort: the matching generic alias. A monospace request must not
+	// degrade to a proportional font, so prefer "monospace" over "sans-serif"
+	// when the family name denotes a fixed-width face (e.g. a Nerd Font whose
+	// go-text family name differs from the requested spelling).
+	return genericFallback(fontPaths, family)
+}
+
+// genericFallback returns the generic-alias path to use when no concrete
+// family match was found: "monospace" for monospace-looking names, otherwise
+// "sans-serif". Empty if neither alias is registered.
+func genericFallback(fontPaths map[string]string, family string) string {
+	if looksMonospace(family) {
+		if p, ok := fontPaths["monospace"]; ok {
+			return p
+		}
+	}
 	if p, ok := fontPaths["sans-serif"]; ok {
 		return p
 	}
 	return ""
+}
+
+// looksMonospace reports whether a requested family name denotes a
+// fixed-width font, so an unresolved lookup falls back to the "monospace"
+// generic alias rather than proportional "sans-serif".
+func looksMonospace(family string) bool {
+	l := strings.ToLower(family)
+	for _, s := range []string{"mono", "consol", "courier", "menlo", "fixed"} {
+		if strings.Contains(l, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseSizeFromFontName extracts trailing numeric size from Pango

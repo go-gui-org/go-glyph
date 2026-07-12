@@ -73,6 +73,21 @@ func (ctx *Context) buildScriptFallbacks(text string,
 	fontByPath := make(map[string]ftFont)
 	var fontsToClose []ftFont
 
+	// ensureFont builds (once) the shaping ftFont for a chosen fallback path.
+	// Only fonts actually selected for a cluster get a HarfBuzz font; probing
+	// uses the cached face's cmap and never allocates a shaper.
+	ensureFont := func(path string) ftFont {
+		fb, opened := fontByPath[path]
+		if !opened {
+			fb = newFTFontFromPath(ctx.ftLib, path, fontSize)
+			fontByPath[path] = fb
+			if fb.face != nil {
+				fontsToClose = append(fontsToClose, fb)
+			}
+		}
+		return fb
+	}
+
 	for _, cl := range clusters {
 		if cl.text == "\n" || cl.text == "\r" {
 			continue
@@ -81,39 +96,69 @@ func (ctx *Context) buildScriptFallbacks(text string,
 		// carries a monochrome glyph for the codepoint (DejaVu covers
 		// many emoji as text), so they still render in color.
 		wantColor := clusterIsEmoji(cl.text)
-		if !wantColor && baseFont.hasGlyphs(cl.text) {
+		// Coverage is decided by a cheap cmap lookup, not by shaping. The base
+		// font covers the vast majority of clusters, and shaping each cluster
+		// against dozens of fallback fonts was the dominant re-layout cost on
+		// scroll/resize for text the base font lacks.
+		if !wantColor && baseFont.covers(cl.text) {
 			continue
 		}
-		for _, path := range ctx.fallbackPaths {
-			fb, opened := fontByPath[path]
-			if !opened {
-				fb = newFTFontFromPath(ctx.ftLib, path, fontSize)
-				fontByPath[path] = fb
-				if fb.face != nil {
-					fontsToClose = append(fontsToClose, fb)
-				}
-			}
-			if fb.face == nil {
-				continue
-			}
-			// For emoji hold out for a color font; fallbackPaths lists
-			// color-emoji fonts ahead of CJK, so this succeeds when one
-			// is installed and otherwise leaves the base text glyph.
-			if wantColor && !fb.isColorFont() {
-				continue
-			}
-			if fb.hasGlyphs(cl.text) {
-				if overrides == nil {
-					overrides = make(map[int]charFontOverride)
-				}
-				overrides[cl.byteI] = charFontOverride{
-					font: fb, isColor: fb.isColorFont(),
-				}
-				break
-			}
+		// The fallback decision for this cluster is base-independent, so reuse
+		// the memoized result. The negative case (no fallback covers it, e.g.
+		// Chakma/Javanese with no installed font) is cached too, which is what
+		// stops every scroll re-layout from rescanning all fallback fonts.
+		res, ok := ctx.fallbackResolve[cl.text]
+		if !ok {
+			path, isColor := ctx.probeFallback(cl.text, wantColor, ensureFont)
+			res = fbResolution{path: path, isColor: isColor}
+			ctx.cacheFallback(cl.text, res)
 		}
+		if res.path == "" {
+			continue // no fallback: base font renders (tofu)
+		}
+		fb := ensureFont(res.path)
+		if fb.face == nil {
+			continue
+		}
+		if overrides == nil {
+			overrides = make(map[int]charFontOverride)
+		}
+		overrides[cl.byteI] = charFontOverride{font: fb, isColor: res.isColor}
 	}
 	return overrides, fontsToClose
+}
+
+// probeFallback scans the fallback fonts for one that covers text, returning
+// the winning path and whether it is a color font. An empty path means no
+// fallback covers the cluster. Coverage uses each cached face's cmap (no
+// shaping); only color/emoji candidates are shaped, via ensureFont, to
+// confirm a real glyph for multi-codepoint sequences.
+func (ctx *Context) probeFallback(text string, wantColor bool,
+	ensureFont func(string) ftFont) (string, bool) {
+
+	for _, path := range ctx.fallbackPaths {
+		cf := loadCachedFace(path)
+		if cf == nil || cf.face == nil {
+			continue
+		}
+		// For emoji hold out for a color font; fallbackPaths lists color-emoji
+		// fonts ahead of CJK, so this succeeds when one is installed and
+		// otherwise leaves the base text glyph.
+		if wantColor && !cf.color {
+			continue
+		}
+		if !wantColor && !faceCovers(cf.face, text) {
+			continue
+		}
+		if wantColor {
+			fb := ensureFont(path)
+			if fb.face == nil || !fb.hasGlyphs(text) {
+				continue
+			}
+		}
+		return path, cf.color
+	}
+	return "", false
 }
 
 // clusterIsEmoji reports whether a grapheme cluster should render with
@@ -751,6 +796,7 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 						Index:     uint32(ch.byteI),
 						Codepoint: uint32(ch.byteL),
 						GlyphID:   sg.gid,
+						Shaped:    true,
 						XOffset:   xOff * pixelScale,
 						YOffset:   (sg.yOff + ch.yShift) * pixelScale,
 						XAdvance:  adv * pixelScale,
