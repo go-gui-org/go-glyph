@@ -240,18 +240,26 @@ func (f *ftFont) close() {
 // buf.Info / buf.Pos. Returns nil if the font is not loaded. The shaping
 // font is borrowed from the face pool for the duration of the shape only.
 func (f ftFont) shape(text string) *harfbuzz.Buffer {
-	if f.cf == nil || len(text) == 0 {
+	return shapeBuffer(f.cf, f.scale, text)
+}
+
+// shapeBuffer shapes text with a HarfBuzz font borrowed from cf's pool at the
+// given 26.6 scale, returning the buffer (nil when cf is unset or text empty).
+// The font is returned to the pool after a clean shape and discarded after a
+// recovered panic.
+func shapeBuffer(cf *cachedFace, scale int32, text string) *harfbuzz.Buffer {
+	if cf == nil || len(text) == 0 {
 		return nil
 	}
 	buf := harfbuzz.NewBuffer()
 	runes := []rune(text)
 	buf.AddRunes(runes, 0, len(runes))
 	buf.GuessSegmentProperties()
-	hb := f.cf.getHB(f.scale)
+	hb := cf.getHB(scale)
 	if !safeShape(buf, hb) {
 		return nil // discard hb: a recovered panic may have left it corrupt
 	}
-	f.cf.putHB(hb)
+	cf.putHB(hb)
 	return buf
 }
 

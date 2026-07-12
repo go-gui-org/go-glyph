@@ -591,19 +591,7 @@ func paletteColor(palette []tables.ColorRecord, idx uint16) color.NRGBA {
 // shapeWith shapes text with a harfbuzz font borrowed from the face pool,
 // scaled so positions are in 26.6 fixed-point pixels.
 func shapeWith(cf *cachedFace, size float64, text string) *harfbuzz.Buffer {
-	if len(text) == 0 {
-		return nil
-	}
-	hb := cf.getHB(int32(math.Round(size * 64)))
-	buf := harfbuzz.NewBuffer()
-	runes := []rune(text)
-	buf.AddRunes(runes, 0, len(runes))
-	buf.GuessSegmentProperties()
-	if !safeShape(buf, hb) {
-		return nil // discard hb: a recovered panic may have left it corrupt
-	}
-	cf.putHB(hb)
-	return buf
+	return shapeBuffer(cf, int32(math.Round(size*64)), text)
 }
 
 // clampBitmapDim keeps a bitmap dimension within the same 1..256 range
