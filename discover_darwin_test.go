@@ -2,7 +2,32 @@
 
 package glyph
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+)
+
+// TestLastResortExcludedFromFallback guards against Apple's ".LastResort"
+// font re-entering the fallback tiers. LastResort maps every codepoint to a
+// placeholder "tofu" glyph, so as a fallback it shadows real glyphs (STIX
+// math symbols such as U+23F5 ⏵) that sort after it — every missing codepoint
+// resolves to LastResort's box instead of the font that actually draws it.
+func TestLastResortExcludedFromFallback(t *testing.T) {
+	const lastResort = "/System/Library/Fonts/LastResort.otf"
+	if _, err := os.Stat(lastResort); err != nil {
+		t.Skipf("LastResort.otf not installed: %v", err)
+	}
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	for _, p := range ctx.fallbackPaths {
+		if strings.Contains(strings.ToLower(p), "lastresort") {
+			t.Fatalf("LastResort must not be a fallback font, found: %s", p)
+		}
+	}
+}
 
 func TestIsScriptFamily(t *testing.T) {
 	tests := []struct {

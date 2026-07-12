@@ -358,6 +358,20 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 
 	// Register the generic alias on first match.
 	lowerFam := strings.ToLower(family)
+
+	// Apple's ".LastResort" font maps every codepoint to a placeholder
+	// "tofu" glyph. Left in any fallback tier it shadows real glyphs that
+	// sort after it (STIX math symbols such as U+23F5 ⏵, etc.): every
+	// codepoint missing from the base font resolves to LastResort's box
+	// instead of the font that actually draws it. It is never a useful
+	// fallback — go-glyph already renders the base font's own tofu when
+	// nothing covers a cluster — so keep it out of the fallback lists.
+	// It stays in fontPaths (registered above), which is harmless since
+	// no caller requests the dot-prefixed private family by name.
+	if lowerFam == ".lastresort" {
+		return
+	}
+
 	if alias := aliasFn(lowerFam); alias != "" {
 		if _, exists := s.ctx.fontPaths[alias]; !exists {
 			s.ctx.fontPaths[alias] = path
