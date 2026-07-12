@@ -7,8 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.16.0] - 2026-07-12
+
+### Added
+
+- **Recommended line height.** `TextMetrics.LineHeight` reports the
+  baseline-to-baseline advance a caller should use when stacking lines:
+  ascent+descent+leading (the font's own line-gap hint), floored to 1.15×em so
+  fonts with a zero line-gap hint — or synthesized fallback metrics — do not
+  render cramped. Prefer it over `Height` for line stacking.
+
 ### Changed
 
+- Multi-line layout now uses the recommended line height instead of
+  ascent+descent, so the font's line-gap leading is no longer discarded and
+  wrapped text stacks with correct spacing.
 - **Shaped-glyph-stream rendering (pure-Go text backend).** Layout builds
   `Layout.Glyphs` directly from HarfBuzz output — each glyph carries its
   resolved glyph id, advances, and mark-positioning offsets — and the renderer
