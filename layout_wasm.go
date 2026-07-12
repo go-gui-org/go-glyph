@@ -150,7 +150,8 @@ func (ctx *Context) buildLayout(text, cssFont string,
 	mRef := ctx.ctx2d.Call("measureText", "Hg")
 	fontAscent := mRef.Get("fontBoundingBoxAscent").Float()
 	fontDescent := mRef.Get("fontBoundingBoxDescent").Float()
-	lineHeight := fontAscent + fontDescent
+	lineHeight := recommendedLineHeight(
+		fontAscent, fontDescent, 0, cssFontSize(cfg.Style))
 
 	pixelScale := 1.0 / float64(ctx.scaleFactor)
 

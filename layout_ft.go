@@ -327,8 +327,8 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 	cfg TextConfig,
 	overrides map[int]charFontOverride) Layout {
 
-	ascent, descent, _ := baseFont.metrics()
-	lineHeight := ascent + descent
+	ascent, descent, leading := baseFont.metrics()
+	lineHeight := recommendedLineHeight(ascent, descent, leading, baseFont.size)
 	pixelScale := 1.0 / float64(ctx.scaleFactor)
 
 	if cfg.Orientation == OrientationVertical {
