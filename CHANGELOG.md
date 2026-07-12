@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.16.1] - 2026-07-12
+
+### Fixed
+
+- **Text symbols no longer render as tofu.** Codepoints such as U+23F5 ⏵
+  (the media triangles ⏴⏵⏶⏷) fell through to the base font's `.notdef`
+  box instead of a real glyph. Two causes: `clusterIsEmoji` matched the
+  whole Misc Technical block (U+2300–U+23FF), forcing a color-only
+  fallback the triangles have no glyph for; and Apple's `.LastResort`
+  font — which maps every codepoint to a placeholder box — shadowed real
+  fonts (STIX) in the general fallback tier. Narrowed the emoji
+  classification to the codepoints Unicode marks Emoji and excluded
+  `.LastResort` from the fallback set, so such symbols now resolve to a
+  real fallback glyph, matching Core Text.
+
 ## [v1.16.0] - 2026-07-12
 
 ### Added
