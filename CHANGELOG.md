@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Text symbols across many blocks no longer render as tofu, and
+  default-text emoji render as text.** v1.16.1 fixed the Misc Technical
+  block one codepoint set at a time; the same over-broad classification
+  remained elsewhere. `clusterIsEmoji` matched whole Unicode blocks
+  (U+2600–U+27BF, U+1F000–U+1F0FF, U+1F300–U+1FAFF) as emoji. Two failures
+  resulted: (1) the ~760 plain text symbols interleaved in those blocks —
+  heavy asterisk U+2731 ✱, mahjong tiles, playing cards, alchemical and
+  chess symbols, Supplemental Arrows-C — took the color-only path, found no
+  color glyph, and rendered as the base font's `.notdef` box; (2)
+  default-text emoji such as U+2733 ✳ (eight-spoked asterisk), ❄ ❤ ☀ ✂ —
+  which carry the Emoji property but NOT Emoji_Presentation — were forced to
+  their color form instead of the monochrome text glyph Unicode specifies.
+  Replaced the block heuristics with a generated `emojiBaseRanges` table
+  built from the Unicode **Emoji_Presentation** property, consulted by
+  binary search. Now only default-emoji codepoints take the color path;
+  text symbols keep their monochrome text-font fallback, and a default-text
+  emoji goes color only when an explicit VS16 (U+FE0F) requests it —
+  matching Core Text and Ghostty. The text-presentation fallback also now
+  prefers a monochrome font over a color-emoji font that merely happens to
+  cover the codepoint (and sorts earlier in the fallback list), falling back
+  to color only when nothing monochrome covers it — so a reclassified glyph
+  such as ✳ actually resolves to Menlo rather than Apple Color Emoji.
+
+### Changed
+
+- Added `internal/genemoji` (wired into `go generate`) that regenerates
+  `emoji_table.go` from a pinned Unicode `emoji-data.txt` release
+  (currently 17.0.0). Bump the version constant and re-generate to adopt
+  newer emoji.
+
 ## [v1.16.1] - 2026-07-12
 
 ### Fixed

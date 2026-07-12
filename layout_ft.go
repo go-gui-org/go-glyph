@@ -4,6 +4,7 @@ package glyph
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -138,69 +139,97 @@ func (ctx *Context) buildScriptFallbacks(text string,
 func (ctx *Context) probeFallback(text string, wantColor bool,
 	ensureFont func(string) ftFont) (string, bool) {
 
-	for _, path := range ctx.fallbackPaths {
-		cov := loadCoverage(path)
-		if cov == nil {
-			continue
-		}
-		// For emoji hold out for a color font; fallbackPaths lists color-emoji
-		// fonts ahead of CJK, so this succeeds when one is installed and
-		// otherwise leaves the base text glyph.
-		if wantColor && !cov.color {
-			continue
-		}
-		if !wantColor && !cov.covers(text) {
-			continue
-		}
-		if wantColor {
+	if wantColor {
+		// Hold out for a color font; fallbackPaths lists color-emoji fonts
+		// ahead of CJK, so this succeeds when one is installed and otherwise
+		// leaves the base text glyph.
+		for _, path := range ctx.fallbackPaths {
+			cov := loadCoverage(path)
+			if cov == nil || !cov.color {
+				continue
+			}
 			fb := ensureFont(path)
 			if fb.face == nil || !fb.hasGlyphs(text) {
 				continue
 			}
+			return path, true
 		}
-		return path, cov.color
+		return "", false
 	}
-	return "", false
+
+	// Text presentation: prefer a monochrome font so default-text symbols and
+	// default-text emoji (e.g. U+2733 ✳, ❄ ❤ ☀ — Emoji but not
+	// Emoji_Presentation) render as their text glyph rather than a color-emoji
+	// font that merely happens to cover the codepoint and sorts earlier. Fall
+	// back to a color font only if nothing monochrome covers it, so a codepoint
+	// that lives solely in a color font still renders instead of going tofu.
+	var colorPath string
+	for _, path := range ctx.fallbackPaths {
+		cov := loadCoverage(path)
+		if cov == nil || !cov.covers(text) {
+			continue
+		}
+		if cov.color {
+			if colorPath == "" {
+				colorPath = path
+			}
+			continue
+		}
+		return path, false
+	}
+	return colorPath, colorPath != ""
 }
 
-// clusterIsEmoji reports whether a grapheme cluster should render with
-// a color-emoji font. It matches the common emoji code blocks plus the
-// variation selectors, ZWJ, and keycap combiner used in emoji
-// sequences.
+// clusterIsEmoji reports whether a grapheme cluster should render with a
+// color-emoji font. A cluster qualifies if it carries an emoji combiner
+// (variation selector, ZWJ, keycap) or a regional-indicator flag, or if any
+// base codepoint defaults to emoji presentation (isEmojiBase).
+//
+// Base classification is driven by the generated emojiBaseRanges table (the
+// Unicode Emoji_Presentation property) rather than coarse Unicode-block ranges.
+// Two distinct hazards make block ranges wrong:
+//
+//   - Plain non-emoji symbols — alchemical, chess, playing cards, box-drawing,
+//     the media triangles ⏴⏵⏶⏷, the heavy asterisk U+2731 ✱ — share blocks with
+//     emoji. Forcing them down the color-only path made fallback give up and the
+//     base font's .notdef box ("tofu") render.
+//   - Default-text emoji — U+2733 ✳, ❄ ❤ ☀ ✂ ➡ — carry the Emoji property but
+//     NOT Emoji_Presentation. Bare, Unicode renders them as the monochrome text
+//     glyph (as Core Text / Ghostty do); only an explicit VS16 (U+FE0F) selects
+//     the color form, caught here by the variation-selector case.
+//
+// So isEmojiBase matches only default-emoji codepoints; everything else keeps
+// its monochrome text-font fallback. See internal/genemoji for the table's rule.
 func clusterIsEmoji(cluster string) bool {
 	for _, r := range cluster {
 		switch {
-		case r >= 0x1F300 && r <= 0x1FAFF: // pictographs, emoticons, symbols
-			return true
-		case r >= 0x2600 && r <= 0x27BF: // misc symbols + dingbats
-			return true
-		case r >= 0x1F000 && r <= 0x1F0FF: // mahjong, dominoes, cards
-			return true
-		// Misc Technical (U+2300–U+23FF) is mostly non-emoji symbols; only a
-		// handful carry an emoji presentation. Matching the whole block forced
-		// a color-only fallback on text symbols such as the media triangles
-		// ⏴⏵⏶⏷ (U+23F4–U+23F7), which no color font covers — so they lost their
-		// text fallback (STIX) and rendered as the base font's .notdef box.
-		// Match only the codepoints Unicode marks Emoji (emoji-data.txt).
-		case r == 0x231A || r == 0x231B: // ⌚ ⌛ watch, hourglass
-			return true
-		case r == 0x2328 || r == 0x23CF: // ⌨ keyboard, ⏏ eject
-			return true
-		case r >= 0x23E9 && r <= 0x23F3: // ⏩–⏳ media/clock (skips 23F4–23F7)
-			return true
-		case r >= 0x23F8 && r <= 0x23FA: // ⏸ ⏹ ⏺ pause, stop, record
-			return true
-		case r == 0x2764 || r == 0x2763: // hearts
-			return true
 		case r >= 0xFE00 && r <= 0xFE0F: // variation selectors
 			return true
 		case r == 0x200D || r == 0x20E3: // ZWJ, keycap combiner
 			return true
 		case r >= 0x1F1E6 && r <= 0x1F1FF: // regional indicators (flags)
 			return true
+		default:
+			if isEmojiBase(r) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// isEmojiBase reports whether r is a base codepoint that defaults to emoji
+// (color) presentation, via binary search over the generated emojiBaseRanges
+// table. The table's lowest member is U+231A, so the sub-range fast-path also
+// skips the search for the overwhelmingly common ASCII / Latin text case.
+func isEmojiBase(r rune) bool {
+	if r < 0x2300 {
+		return false
+	}
+	i := sort.Search(len(emojiBaseRanges), func(i int) bool {
+		return emojiBaseRanges[i][1] >= r
+	})
+	return i < len(emojiBaseRanges) && r >= emojiBaseRanges[i][0]
 }
 
 // LayoutRichText shapes multi-styled text.
