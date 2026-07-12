@@ -130,24 +130,26 @@ func (ctx *Context) buildScriptFallbacks(text string,
 
 // probeFallback scans the fallback fonts for one that covers text, returning
 // the winning path and whether it is a color font. An empty path means no
-// fallback covers the cluster. Coverage uses each cached face's cmap (no
-// shaping); only color/emoji candidates are shaped, via ensureFont, to
-// confirm a real glyph for multi-codepoint sequences.
+// fallback covers the cluster. Coverage uses each font's cmap via the resident
+// coverage cache (no parsed face, no shaping) so scanning the full fallback set
+// stays cheap and allocation-light; only color/emoji candidates are shaped, via
+// ensureFont, to confirm a real glyph for multi-codepoint sequences. The
+// heavyweight face is loaded (and LRU-cached) only for the winning font.
 func (ctx *Context) probeFallback(text string, wantColor bool,
 	ensureFont func(string) ftFont) (string, bool) {
 
 	for _, path := range ctx.fallbackPaths {
-		cf := loadCachedFace(path)
-		if cf == nil || cf.face == nil {
+		cov := loadCoverage(path)
+		if cov == nil {
 			continue
 		}
 		// For emoji hold out for a color font; fallbackPaths lists color-emoji
 		// fonts ahead of CJK, so this succeeds when one is installed and
 		// otherwise leaves the base text glyph.
-		if wantColor && !cf.color {
+		if wantColor && !cov.color {
 			continue
 		}
-		if !wantColor && !faceCovers(cf.face, text) {
+		if !wantColor && !cov.covers(text) {
 			continue
 		}
 		if wantColor {
@@ -156,7 +158,7 @@ func (ctx *Context) probeFallback(text string, wantColor bool,
 				continue
 			}
 		}
-		return path, cf.color
+		return path, cov.color
 	}
 	return "", false
 }

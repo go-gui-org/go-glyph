@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-text/typesetting/font"
 	ot "github.com/go-text/typesetting/font/opentype"
+	"github.com/go-text/typesetting/font/opentype/tables"
 	"github.com/go-text/typesetting/harfbuzz"
 )
 
@@ -329,6 +330,103 @@ func faceCovers(face *font.Face, text string) bool {
 		}
 	}
 	return true
+}
+
+// coverage holds the cheap-to-build subset of a font that script-fallback
+// probing needs: its cmap (rune→glyph mapping) and whether it is a color
+// font. Building it skips font.NewFont's shaping accelerators (GSUB/GPOS/morx)
+// and, because ProcessCmap copies, retains none of the font-file bytes — so
+// the entire fallback set stays resident for a few tens of KB each. The
+// heavyweight cachedFace is loaded only for fonts actually selected to shape.
+type coverage struct {
+	cmap  font.Cmap
+	color bool
+}
+
+// covers reports whether the cmap maps every non-ignorable rune in text,
+// mirroring faceCovers against a bare cmap (no parsed face).
+func (c *coverage) covers(text string) bool {
+	for _, r := range text {
+		if isDefaultIgnorable(r) {
+			continue
+		}
+		if _, ok := c.cmap.Lookup(r); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// coverageMap is a resident path→coverage cache. Unlike faceCache it does not
+// evict: the fallback set is fixed at font discovery and a single probe scans
+// all of it, so a bounded cache would thrash — re-reading fonts from disk on
+// every uncovered cluster, which is what stalled ucs-detect once the general
+// fallback tier pushed the set past the face-cache cap. Each entry is a bare
+// cmap, so holding the whole set is cheap. nil is cached for unparseable fonts.
+type coverageMap struct {
+	mu    sync.Mutex
+	items map[string]*coverage
+}
+
+var coverageCache = &coverageMap{items: make(map[string]*coverage)}
+
+// loadCoverage builds (once) the cmap coverage for the font at path. Returns
+// nil if the file cannot be read or parsed; the nil is cached too so a bad
+// path is not re-read on every probe. The file read + parse happens outside
+// the lock so concurrent probes of distinct fonts do not serialize.
+func loadCoverage(path string) *coverage {
+	if path == "" {
+		return nil
+	}
+	coverageCache.mu.Lock()
+	cov, ok := coverageCache.items[path]
+	coverageCache.mu.Unlock()
+	if ok {
+		return cov // may be nil: negative cache
+	}
+	cov = parseCoverage(path)
+	coverageCache.mu.Lock()
+	coverageCache.items[path] = cov
+	coverageCache.mu.Unlock()
+	return cov
+}
+
+// parseCoverage reads the font at path and extracts its cmap and color flag
+// without building the full shaping face. It mirrors the cmap handling in
+// font.NewFont (OS/2 FontPage steers legacy-Arabic subtable selection) and
+// recovers from parser panics like parseFace, so a defective font is skipped.
+func parseCoverage(path string) (cov *coverage) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	loaders, err := ot.NewLoaders(bytes.NewReader(data))
+	if err != nil || len(loaders) == 0 {
+		return nil
+	}
+	ld := loaders[0]
+
+	defer func() {
+		if r := recover(); r != nil {
+			cov = nil // font parser panicked (e.g. malformed cmap/CFF2)
+		}
+	}()
+
+	raw, err := ld.RawTable(ot.MustNewTag("cmap"))
+	if err != nil {
+		return nil
+	}
+	tb, _, err := tables.ParseCmap(raw)
+	if err != nil {
+		return nil
+	}
+	os2raw, _ := ld.RawTable(ot.MustNewTag("OS/2"))
+	os2, _, _ := tables.ParseOs2(os2raw)
+	cm, _, err := font.ProcessCmap(tb, os2.FontPage())
+	if err != nil {
+		return nil
+	}
+	return &coverage{cmap: cm, color: hasColorTable(ld)}
 }
 
 // isDefaultIgnorable reports whether r is a Unicode default-ignorable code
