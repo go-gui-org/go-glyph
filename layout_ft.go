@@ -181,9 +181,12 @@ func (ctx *Context) probeFallback(text string, wantColor bool,
 }
 
 // clusterIsEmoji reports whether a grapheme cluster should render with a
-// color-emoji font. A cluster qualifies if it carries an emoji combiner
-// (variation selector, ZWJ, keycap) or a regional-indicator flag, or if any
-// base codepoint defaults to emoji presentation (isEmojiBase).
+// color-emoji font. A cluster qualifies if it carries VS16 (U+FE0F), a ZWJ /
+// keycap combiner, or a regional-indicator flag, or if any base codepoint
+// defaults to emoji presentation (isEmojiBase). VS15 (U+FE0E) is the opposite
+// request — it forces the monochrome text glyph even for an emoji base — so it
+// disqualifies the cluster. Only VS15/VS16 carry presentation meaning; the
+// other variation selectors (VS1–VS14) are not emoji signals and are ignored.
 //
 // Base classification is driven by the generated emojiBaseRanges table (the
 // Unicode Emoji_Presentation property) rather than coarse Unicode-block ranges.
@@ -196,15 +199,27 @@ func (ctx *Context) probeFallback(text string, wantColor bool,
 //   - Default-text emoji — U+2733 ✳, ❄ ❤ ☀ ✂ ➡ — carry the Emoji property but
 //     NOT Emoji_Presentation. Bare, Unicode renders them as the monochrome text
 //     glyph (as Core Text / Ghostty do); only an explicit VS16 (U+FE0F) selects
-//     the color form, caught here by the variation-selector case.
+//     the color form, caught here by the presentation-selector pre-pass.
 //
 // So isEmojiBase matches only default-emoji codepoints; everything else keeps
 // its monochrome text-font fallback. See internal/genemoji for the table's rule.
 func clusterIsEmoji(cluster string) bool {
+	// Presentation selectors override the base default and take precedence
+	// over it regardless of position in the cluster: VS16 (U+FE0F) forces
+	// emoji (color), VS15 (U+FE0E) forces text (monochrome). VS15 must win
+	// even over an emojiBase codepoint, and the base is iterated first, so
+	// this override is a separate pre-pass. (Starship emits U+23FA+VS15 for
+	// an SGR-colored record dot — it must stay text so the fg color applies.)
+	for _, r := range cluster {
+		switch r {
+		case 0xFE0F: // VS16: emoji presentation
+			return true
+		case 0xFE0E: // VS15: text presentation
+			return false
+		}
+	}
 	for _, r := range cluster {
 		switch {
-		case r >= 0xFE00 && r <= 0xFE0F: // variation selectors
-			return true
 		case r == 0x200D || r == 0x20E3: // ZWJ, keycap combiner
 			return true
 		case r >= 0x1F1E6 && r <= 0x1F1FF: // regional indicators (flags)

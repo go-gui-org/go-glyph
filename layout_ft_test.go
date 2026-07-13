@@ -192,6 +192,47 @@ func TestClusterIsEmoji_TextAndCombiners(t *testing.T) {
 	}
 }
 
+// TestClusterIsEmoji_PresentationSelectors pins VS15 / VS16 precedence. VS16
+// (U+FE0F) forces the color path; VS15 (U+FE0E) forces the monochrome text
+// path and must win even over an emoji-base codepoint (the base is iterated
+// first, so the override is a separate pre-pass). The reported case is
+// starship's record dot U+23FA+VS15, colored via SGR — it must stay text so
+// the foreground color applies instead of a color-font glyph.
+func TestClusterIsEmoji_PresentationSelectors(t *testing.T) {
+	text := []struct {
+		name string
+		s    string
+	}{
+		{"record + VS15 (starship dot)", "⏺︎"}, // U+23FA U+FE0E
+		{"default-text emoji ✳ + VS15", "✳︎"},  // U+2733 U+FE0E
+		{"emoji-base hourglass + VS15", "⏳︎"},  // U+23F3 U+FE0E, base is emoji
+		{"emoji-base watch + VS15", "⌚︎"},      // U+231A U+FE0E, base is emoji
+	}
+	for _, c := range text {
+		if clusterIsEmoji(c.s) {
+			t.Errorf("clusterIsEmoji(%s)=true, want false (VS15 forces text)", c.name)
+		}
+	}
+
+	color := []struct {
+		name string
+		s    string
+	}{
+		{"record + VS16", "⏺️"},               // U+23FA U+FE0F
+		{"default-text emoji ✳ + VS16", "✳️"}, // U+2733 U+FE0F
+	}
+	for _, c := range color {
+		if !clusterIsEmoji(c.s) {
+			t.Errorf("clusterIsEmoji(%s)=false, want true (VS16 forces emoji)", c.name)
+		}
+	}
+
+	// VS1–VS14 carry no presentation meaning: a bare text symbol stays text.
+	if clusterIsEmoji("A︀") {
+		t.Error("clusterIsEmoji(A U+FE00)=true, want false (VS1 is not an emoji signal)")
+	}
+}
+
 // TestEmojiBaseRangesInvariant guards the generated table: strictly ascending,
 // non-overlapping, non-adjacent (adjacent ranges should have been coalesced),
 // and entirely at or above the U+2300 floor isEmojiBase relies on.
