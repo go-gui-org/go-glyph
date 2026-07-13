@@ -63,11 +63,17 @@ func (cf *cachedFace) getHB(scale int32) *harfbuzz.Font {
 // results live on the Buffer, not the font.
 func (cf *cachedFace) putHB(f *harfbuzz.Font) { cf.hbPool.Put(f) }
 
-// faceCacheCap bounds the number of parsed faces kept resident. Real
-// workloads touch far fewer fonts than this; the cap only guards against
-// unbounded growth (e.g. many AddFontFile paths), evicting least-recently
-// used entries. A shared global cache mirrors the render-side singletons.
-const faceCacheCap = 128
+// faceCacheCap bounds the number of parsed faces kept resident. It must
+// exceed the number of distinct fonts a session actually touches, or the LRU
+// thrashes: evicting a still-needed face forces a full re-parse on its next
+// glyph, and a Unicode-wide workload (e.g. ucs-detect, which pulls in ~180
+// distinct system fallback fonts across every script) then re-parses fonts
+// dozens of times, stalling the render thread for seconds. Sized well above
+// that working set so every touched font is parsed once and retained. Resident
+// memory is bounded by the fonts a session references, not by this cap —
+// normal use touches a handful; the pathological Unicode sweep tops out around
+// ~1.5GB (each parsed face holds its font's tables; see parseFace).
+const faceCacheCap = 512
 
 var faceCache = newFaceLRU(faceCacheCap)
 
