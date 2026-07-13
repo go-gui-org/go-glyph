@@ -497,6 +497,106 @@ func TestLayoutArabicStream(t *testing.T) {
 	}
 }
 
+// TestRichTextScriptFallback verifies LayoutRichText applies script fallback:
+// a symbol the run's authored (proportional body) font lacks — ✓ U+2713,
+// ✗ U+2717 — must resolve to a covering fallback font's real glyph id rather
+// than shaping to .notdef (GlyphID 0) and rendering as tofu. This mirrors the
+// fallback LayoutText already performs; the rich-text path previously locked
+// each cluster to its run font with no fallback probe.
+func TestRichTextScriptFallback(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	rt := RichText{Runs: []StyleRun{
+		{Text: "a\u2713b\u2717c", Style: TextStyle{}},
+	}}
+	layout, err := ctx.LayoutRichText(rt, TextConfig{})
+	if err != nil {
+		t.Fatalf("LayoutRichText: %v", err)
+	}
+	if len(layout.Items) == 0 || layout.Items[0].FontPath == "" {
+		t.Skip("no font path resolved on this host; skipping")
+	}
+	if len(ctx.fallbackPaths) == 0 {
+		t.Skip("no fallback fonts installed; skipping")
+	}
+
+	// Locate the checkmark clusters by byte index and confirm each shaped to
+	// a real (nonzero) glyph id. Skip a codepoint no installed font covers.
+	want := map[int]rune{1: '\u2713', 4: '\u2717'}
+	for _, g := range layout.Glyphs {
+		r, ok := want[int(g.Index)]
+		if !ok {
+			continue
+		}
+		delete(want, int(g.Index))
+		covered := false
+		for _, p := range ctx.fallbackPaths {
+			if cov := loadCoverage(p); cov != nil && cov.covers(string(r)) {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			continue // no fallback covers this symbol on this host
+		}
+		if g.GlyphID == 0 {
+			t.Errorf("U+%04X shaped to .notdef (tofu); script fallback not applied", r)
+		}
+	}
+}
+
+// TestRichTextScriptFallbackMixedSize guards the per-size fallback font cache:
+// two runs of different sizes whose symbol needs the same fallback path must
+// each shape at their own size, so the fallback glyph's advance scales with the
+// run. Caching the fallback font by path alone would reuse the first run's size
+// for the second, baking a wrong-sized advance. The big run's ✓ advance must
+// exceed the small run's.
+func TestRichTextScriptFallbackMixedSize(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	// Big run first, then small: exercises the cache-reuse ordering.
+	rt := RichText{Runs: []StyleRun{
+		{Text: "\u2713", Style: TextStyle{FontName: "Sans 40"}},
+		{Text: "\u2713", Style: TextStyle{FontName: "Sans 10"}},
+	}}
+	layout, err := ctx.LayoutRichText(rt, TextConfig{})
+	if err != nil {
+		t.Fatalf("LayoutRichText: %v", err)
+	}
+	if len(layout.Items) == 0 || layout.Items[0].FontPath == "" ||
+		len(ctx.fallbackPaths) == 0 {
+		t.Skip("no font path / fallback resolved on this host; skipping")
+	}
+
+	// Collect the resolved glyph advance for each of the two ✓ clusters, in
+	// text order (byte index 0 = big run, byte 3 = small run — ✓ is 3 bytes).
+	var bigAdv, smallAdv float64
+	var bigGID, smallGID uint32
+	for _, g := range layout.Glyphs {
+		switch g.Index {
+		case 0:
+			bigAdv, bigGID = g.XAdvance, g.GlyphID
+		case 3:
+			smallAdv, smallGID = g.XAdvance, g.GlyphID
+		}
+	}
+	if bigGID == 0 || smallGID == 0 {
+		t.Skip("✓ not covered by a fallback on this host; skipping")
+	}
+	if bigAdv <= smallAdv {
+		t.Errorf("40px ✓ advance %.2f not larger than 10px %.2f: fallback font cached by path ignores size",
+			bigAdv, smallAdv)
+	}
+}
+
 // TestLoadGlyphByIDNoInk verifies the by-id path degrades gracefully for a
 // glyph with no outline (a space): renderGlyphByID returns nil, so
 // loadGlyphByIDFT must yield an empty result without an error — the renderer
