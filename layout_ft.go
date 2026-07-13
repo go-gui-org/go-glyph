@@ -344,6 +344,14 @@ func (ctx *Context) LayoutRichText(rt RichText,
 		}
 	}
 
+	// Script fallback: a run carries an authored font, but that font may
+	// lack glyphs for a cluster (e.g. ✓ U+2713 in Helvetica). Without this
+	// pass the run font shapes the cluster to .notdef and the renderer draws
+	// tofu. LayoutText solves this in buildScriptFallbacks; the rich-text
+	// path needs the same probe, swapping the run's font for a covering
+	// fallback while keeping the run's size and authored style.
+	fbFonts := ctx.applyRichScriptFallbacks(clusters, overrides, baseFont)
+
 	layout := ctx.buildLayout(text, baseFont, cfg, overrides)
 
 	// Apply per-run styles to items.
@@ -374,8 +382,88 @@ func (ctx *Context) LayoutRichText(rt RichText,
 	for _, r := range runs {
 		r.font.close()
 	}
+	for i := range fbFonts {
+		fbFonts[i].close()
+	}
 
 	return layout, nil
+}
+
+// applyRichScriptFallbacks swaps a rich-text run's authored font for a
+// covering fallback on any cluster the run font (or, for the base run, the
+// base font) cannot render, mirroring buildScriptFallbacks for the plain-text
+// path. Without it a cluster the authored font lacks — e.g. ✓ (U+2713) in a
+// proportional body font — shapes to .notdef and renders as tofu. The run's
+// size and authored style (color, weight, decorations) are preserved; only
+// the shaping face changes, at the run font's pixel size so the fallback glyph
+// matches the surrounding text. Returns the opened fallback fonts to close
+// after layout. Emoji clusters (isColor) are left alone: the renderer's color
+// path resolves those by text, not by a shaped glyph id.
+func (ctx *Context) applyRichScriptFallbacks(clusters []graphemeCluster,
+	overrides map[int]charFontOverride, baseFont ftFont) []ftFont {
+
+	if len(ctx.fallbackPaths) == 0 {
+		return nil
+	}
+
+	// Keyed by path AND size: rich text mixes sizes (headings, sub/
+	// superscript at 0.58×), and a fallback font's advances are shaped at its
+	// pixel size, so the same path at two sizes must be two distinct fonts.
+	type fontKey struct {
+		path string
+		size float64
+	}
+	fontByKey := make(map[fontKey]ftFont)
+	var fontsToClose []ftFont
+	ensureFont := func(path string, size float64) ftFont {
+		k := fontKey{path, size}
+		fb, opened := fontByKey[k]
+		if !opened {
+			fb = newFTFontFromPath(ctx.ftLib, path, size)
+			fontByKey[k] = fb
+			if fb.face != nil {
+				fontsToClose = append(fontsToClose, fb)
+			}
+		}
+		return fb
+	}
+
+	for _, cl := range clusters {
+		if cl.text == "\n" || cl.text == "\r" {
+			continue
+		}
+		ov, ok := overrides[cl.byteI]
+		if ok && ov.isColor {
+			continue // color emoji resolves by text, not glyph id
+		}
+		runFont := baseFont
+		if ok && ov.font.face != nil {
+			runFont = ov.font
+		}
+		if runFont.covers(cl.text) {
+			continue
+		}
+		res, cached := ctx.fallbackResolve[cl.text]
+		if !cached {
+			fontSize := runFont.size
+			path, isColor := ctx.probeFallback(cl.text, false,
+				func(p string) ftFont { return ensureFont(p, fontSize) })
+			res = fbResolution{path: path, isColor: isColor}
+			ctx.cacheFallback(cl.text, res)
+		}
+		if res.path == "" {
+			continue // no fallback: run font renders (tofu)
+		}
+		fb := ensureFont(res.path, runFont.size)
+		if fb.face == nil {
+			continue
+		}
+		ov.font = fb
+		ov.isColor = res.isColor
+		ov.isRichRun = true
+		overrides[cl.byteI] = ov
+	}
+	return fontsToClose
 }
 
 // buildLayout creates a Layout from measured text with word wrapping.
