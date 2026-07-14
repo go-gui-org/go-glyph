@@ -460,16 +460,41 @@ func orderTextFallbacks(fallbackPaths []string, text string) (mono, color []stri
 }
 
 // isDefaultIgnorable reports whether r is a Unicode default-ignorable code
-// point (the common ranges), which shapers omit from output.
+// point, which shapers omit from output. Derived from Default_Ignorable_
+// Code_Point in Unicode 17.0 DerivedCoreProperties.txt. A codepoint missing
+// here is treated as needing real cmap coverage, which can force a spurious
+// fallback (or tofu) for text that would shape fine — so keep this complete.
 func isDefaultIgnorable(r rune) bool {
 	switch {
-	case r == 0x00AD, r == 0xFEFF: // soft hyphen, ZWNBSP/BOM
+	case r == 0x00AD, r == 0x034F: // soft hyphen, combining grapheme joiner
+		return true
+	case r == 0x061C: // Arabic letter mark
+		return true
+	case r == 0x115F || r == 0x1160: // Hangul choseong/jungseong fillers
+		return true
+	case r == 0x17B4 || r == 0x17B5: // Khmer vowel inherent AQ/AA
+		return true
+	case r >= 0x180B && r <= 0x180F: // Mongolian FVS1-3, MVS, FVS4
 		return true
 	case r >= 0x200B && r <= 0x200F: // ZW space, ZWNJ/ZWJ, LRM/RLM
 		return true
+	case r >= 0x202A && r <= 0x202E: // bidi embeddings/overrides (LRE..RLO)
+		return true
 	case r >= 0x2060 && r <= 0x206F: // word joiner, invisible ops, bidi
 		return true
+	case r == 0x3164: // Hangul filler
+		return true
 	case r >= 0xFE00 && r <= 0xFE0F: // variation selectors
+		return true
+	case r == 0xFEFF: // ZWNBSP/BOM
+		return true
+	case r == 0xFFA0: // halfwidth Hangul filler
+		return true
+	case r >= 0xFFF0 && r <= 0xFFF8: // reserved format characters
+		return true
+	case r >= 0x1BCA0 && r <= 0x1BCA3: // shorthand format controls
+		return true
+	case r >= 0x1D173 && r <= 0x1D17A: // musical beam/tie controls
 		return true
 	case r >= 0xE0000 && r <= 0xE0FFF: // tags + variation-selector supplement
 		return true
