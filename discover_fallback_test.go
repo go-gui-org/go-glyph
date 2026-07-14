@@ -155,6 +155,103 @@ func TestRecordReplacesInPlace(t *testing.T) {
 	}
 }
 
+func TestNormalizeCJKLang(t *testing.T) {
+	cases := map[string]string{
+		"":                "",
+		"en_US.UTF-8":     "",
+		"C":               "",
+		"ja_JP.UTF-8":     "ja",
+		"ja":              "ja",
+		"ko_KR":           "ko",
+		"ko":              "ko",
+		"zh":              "zh-hans",
+		"zh_CN.UTF-8":     "zh-hans",
+		"zh_SG":           "zh-hans",
+		"zh-Hans":         "zh-hans",
+		"zh_TW.UTF-8":     "zh-hant",
+		"zh_HK":           "zh-hant",
+		"zh-Hant":         "zh-hant",
+		"zh-Hant-TW":      "zh-hant",
+		"ZH_tw":           "zh-hant",
+		"ja_JP.eucJP@cjk": "ja",
+	}
+	for in, want := range cases {
+		if got := normalizeCJKLang(in); got != want {
+			t.Errorf("normalizeCJKLang(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestOrderCJKForLang floats the locale-matching family to the front in
+// preference order, keeps non-matching fonts in discovery order after, and
+// no-ops on empty/non-CJK locales.
+func TestOrderCJKForLang(t *testing.T) {
+	paths := []string{"/yahei.ttc", "/hiragino.ttc", "/pingfangsc.ttc", "/dejavu.ttf"}
+	fams := []string{"Microsoft YaHei", "Hiragino Sans", "PingFang SC", "DejaVu Sans"}
+
+	t.Run("ja floats Hiragino first", func(t *testing.T) {
+		got := orderCJKForLang(paths, fams, "ja_JP.UTF-8")
+		want := []string{"/hiragino.ttc", "/yahei.ttc", "/pingfangsc.ttc", "/dejavu.ttf"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+
+	t.Run("zh-Hans floats PingFang SC then YaHei", func(t *testing.T) {
+		got := orderCJKForLang(paths, fams, "zh_CN.UTF-8")
+		want := []string{"/pingfangsc.ttc", "/yahei.ttc", "/hiragino.ttc", "/dejavu.ttf"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+
+	t.Run("empty locale is a no-op", func(t *testing.T) {
+		got := orderCJKForLang(paths, fams, "")
+		if !reflect.DeepEqual(got, paths) {
+			t.Errorf("got %v, want unchanged %v", got, paths)
+		}
+	})
+
+	t.Run("non-CJK locale is a no-op", func(t *testing.T) {
+		got := orderCJKForLang(paths, fams, "en_US.UTF-8")
+		if !reflect.DeepEqual(got, paths) {
+			t.Errorf("got %v, want unchanged %v", got, paths)
+		}
+	})
+
+	t.Run("misaligned fams is a no-op", func(t *testing.T) {
+		got := orderCJKForLang(paths, fams[:2], "ja")
+		if !reflect.DeepEqual(got, paths) {
+			t.Errorf("got %v, want unchanged %v", got, paths)
+		}
+	})
+}
+
+// TestOrderCJKForLangStable: two families matching different preferences sort
+// by preference; discovery order breaks ties.
+func TestOrderCJKForLangStable(t *testing.T) {
+	paths := []string{"/a-noto.otf", "/b-noto.otf", "/yahei.ttc"}
+	fams := []string{"Noto Sans SC", "Noto Serif SC", "Microsoft YaHei"}
+	got := orderCJKForLang(paths, fams, "zh_CN")
+	want := []string{"/a-noto.otf", "/b-noto.otf", "/yahei.ttc"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestDetectLangPrecedence(t *testing.T) {
+	t.Setenv("LC_ALL", "")
+	t.Setenv("LC_CTYPE", "ja_JP.UTF-8")
+	t.Setenv("LANG", "en_US.UTF-8")
+	if got := detectLang(); got != "ja_JP.UTF-8" {
+		t.Errorf("LC_CTYPE should win over LANG: got %q", got)
+	}
+	t.Setenv("LC_ALL", "ko_KR.UTF-8")
+	if got := detectLang(); got != "ko_KR.UTF-8" {
+		t.Errorf("LC_ALL should win: got %q", got)
+	}
+}
+
 func TestBetterRegular(t *testing.T) {
 	cases := []struct {
 		name      string

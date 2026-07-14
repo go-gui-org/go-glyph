@@ -5,6 +5,7 @@ package glyph
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/go-text/typesetting/font"
@@ -27,6 +28,16 @@ type Context struct {
 	fontWeights   map[string]font.Weight // weight backing each fontPaths key
 	fallbackPaths []string               // script fallback fonts (CJK, Arabic, etc.)
 	colorPaths    []string               // color-emoji fonts (CBDT/CBLC), render side
+
+	// lang is the session locale (from LC_ALL/LC_CTYPE/LANG), used only to
+	// order the CJK fallback tier so Han-unified ideographs render in the
+	// reader's expected regional shapes (zh-Hans/zh-Hant/ja/ko). Empty means
+	// no preference — discovery order is kept. It is a whole-session hint, not
+	// per-run: a terminal cell carries no language, so this mirrors what native
+	// terminals do. Note the render-side fallback singletons are process-global,
+	// so multiple Contexts with different langs share one ordering (last writer
+	// wins); acceptable for the single-Context terminal case.
+	lang string
 
 	// fallbackResolve memoizes script-fallback selection per grapheme cluster.
 	// The result (winning font path, or "" when no fallback covers the cluster)
@@ -71,6 +82,7 @@ func NewContext(scaleFactor float32) (*Context, error) {
 		metrics:     newMetricsCache(256),
 		fontPaths:   make(map[string]string),
 		fontWeights: make(map[string]font.Weight),
+		lang:        detectLang(),
 	}
 	setFTLib(ctx.ftLib)
 	ctx.discoverSystemFonts()
@@ -322,6 +334,7 @@ type fontScan struct {
 	ctx          *Context
 	emojiPaths   []string
 	cjkPaths     []string
+	cjkFams      []string // family per cjkPaths entry, index-aligned; drives locale reorder
 	scriptPaths  []string
 	generalPaths []string
 	colorPaths   []string
@@ -442,6 +455,12 @@ func (s *fontScan) record(family string, aspect font.Aspect,
 		tier = &s.generalPaths
 	}
 	*tier = append(*tier, path)
+	if tier == &s.cjkPaths {
+		// Track the family index-aligned with cjkPaths so the locale reorder
+		// can match on family name. A later same-family weight swap keeps the
+		// index (family unchanged), so this stays aligned.
+		s.cjkFams = append(s.cjkFams, family)
+	}
 	s.seenFallback[family] = true
 	s.slots[family] = &fallbackSlot{
 		tier:   tier,
@@ -489,8 +508,9 @@ func betterRegular(w font.Weight, italic bool,
 // etc.) are the last-resort fallback tier.
 func (s *fontScan) finish() {
 	s.ctx.colorPaths = s.colorPaths
+	cjk := orderCJKForLang(s.cjkPaths, s.cjkFams, s.ctx.lang)
 	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths,
-		assembleFallbacks(s.colorPaths, s.emojiPaths, s.cjkPaths,
+		assembleFallbacks(s.colorPaths, s.emojiPaths, cjk,
 			s.scriptPaths, s.generalPaths)...)
 }
 
@@ -505,5 +525,118 @@ func assembleFallbacks(color, emoji, cjk, script, general []string) []string {
 	out = append(out, cjk...)
 	out = append(out, script...)
 	out = append(out, general...)
+	return out
+}
+
+// detectLang reads the session locale from the environment, matching the
+// POSIX precedence LC_ALL > LC_CTYPE > LANG. Returns "" when none is set.
+func detectLang() string {
+	for _, k := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// cjkLangPrefs maps a normalized CJK locale to the lower-cased family-name
+// substrings whose fonts should lead the CJK fallback tier, so Han-unified
+// ideographs render in that locale's regional shapes. List order is
+// preference order (most-preferred first). Substrings are matched against the
+// discovered family name; the vocabulary mirrors isCJKFamily.
+var cjkLangPrefs = map[string][]string{
+	"zh-hans": {
+		"pingfang sc", "noto sans sc", "noto serif sc",
+		"source han sans sc", "source han serif sc",
+		"microsoft yahei", "heiti sc", "songti sc", "simhei", "simsun",
+	},
+	"zh-hant": {
+		"pingfang tc", "pingfang hk", "noto sans tc", "noto serif tc",
+		"noto sans hk", "source han sans tc", "source han serif tc",
+		"microsoft jhenghei", "heiti tc", "pmingliu", "mingliu",
+	},
+	"ja": {
+		"hiragino", "yu gothic", "yugothic", "yu mincho", "meiryo",
+		"noto sans jp", "noto serif jp", "source han sans jp",
+		"source han serif jp", "ms gothic", "ms mincho", "ms pgothic",
+		"ipagothic", "ipaexgothic", "takao", "vl gothic",
+	},
+	"ko": {
+		"apple sd gothic neo", "applegothic", "malgun gothic",
+		"noto sans kr", "noto serif kr", "source han sans kr",
+		"source han serif kr", "nanum", "batang", "gulim", "dotum",
+	},
+}
+
+// normalizeCJKLang reduces a POSIX/BCP-47 locale string to one of the keys in
+// cjkLangPrefs ("zh-hans", "zh-hant", "ja", "ko"), or "" when the locale is
+// not a CJK language needing regional Han shaping. It strips the encoding
+// (".UTF-8") and modifier ("@euro") suffixes, lower-cases, and resolves the
+// Chinese script from an explicit Hans/Hant subtag or the region (CN/SG/MY →
+// Hans; TW/HK/MO → Hant; bare zh defaults to Hans).
+func normalizeCJKLang(lang string) string {
+	l := strings.ToLower(strings.TrimSpace(lang))
+	if l == "" {
+		return ""
+	}
+	if i := strings.IndexAny(l, ".@"); i >= 0 {
+		l = l[:i]
+	}
+	l = strings.ReplaceAll(l, "_", "-")
+	parts := strings.Split(l, "-")
+	switch parts[0] {
+	case "ja":
+		return "ja"
+	case "ko":
+		return "ko"
+	case "zh":
+		for _, p := range parts[1:] {
+			switch p {
+			case "hans":
+				return "zh-hans"
+			case "hant":
+				return "zh-hant"
+			case "cn", "sg", "my":
+				return "zh-hans"
+			case "tw", "hk", "mo":
+				return "zh-hant"
+			}
+		}
+		return "zh-hans" // bare "zh": default to Simplified
+	}
+	return ""
+}
+
+// orderCJKForLang stable-sorts the CJK fallback paths so families matching the
+// session locale lead, in preference order, with all other fonts keeping their
+// discovery order after. fams is index-aligned with paths. A no-op when the
+// locale needs no CJK reorder, the tier has fewer than two entries, or the
+// family list is not aligned.
+func orderCJKForLang(paths, fams []string, lang string) []string {
+	key := normalizeCJKLang(lang)
+	if key == "" || len(paths) < 2 || len(fams) != len(paths) {
+		return paths
+	}
+	prefs := cjkLangPrefs[key]
+	rank := func(i int) int {
+		fam := strings.ToLower(fams[i])
+		for r, sub := range prefs {
+			if strings.Contains(fam, sub) {
+				return r
+			}
+		}
+		return len(prefs) // unmatched: sort after all matches, order preserved
+	}
+	idx := make([]int, len(paths))
+	for i := range idx {
+		idx[i] = i
+	}
+	sort.SliceStable(idx, func(a, b int) bool {
+		return rank(idx[a]) < rank(idx[b])
+	})
+	out := make([]string, len(paths))
+	for i, j := range idx {
+		out[i] = paths[j]
+	}
 	return out
 }
