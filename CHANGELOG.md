@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.16.2] - 2026-07-14
+
 ### Fixed
 
 - **Text symbols across many blocks no longer render as tofu, and
@@ -31,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cover the codepoint (and sorts earlier in the fallback list), falling back
   to color only when nothing monochrome covers it — so a reclassified glyph
   such as ✳ actually resolves to Menlo rather than Apple Color Emoji.
+- **Rich text items propagate InlineObject metadata.** `IsObject` and
+  `ObjectID` now survive layout so callers can identify object runs post-shape.
+- **Script fallback prevents symbol tofu in rich text.** `LayoutRichText`
+  falls back through script-specific shapers when the primary font lacks a glyph.
+- **VS15 (U+FE0E) honored as a text-presentation request.** The variation
+  selector now forces text presentation, matching VS16's color override.
 
 ### Changed
 
@@ -38,6 +46,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `emoji_table.go` from a pinned Unicode `emoji-data.txt` release
   (currently 17.0.0). Bump the version constant and re-generate to adopt
   newer emoji.
+- **Face cache capacity raised** from 128 to 512 to prevent parse thrash
+  under many-font workloads.
+- **CI: macOS tests** probe fallback fonts via cmap cache to avoid OOM.
+
+### Notes
+
+- This release replaces the upstream `go-text/typesetting` dependency with
+  `go-gui-org/typesetting` (PR #267, branch
+  `fix/cff2-index-offsize-oob-alloc`) via a `replace` directive pending
+  upstream merge. Consumers should not be affected.
 
 ## [v1.16.1] - 2026-07-12
 

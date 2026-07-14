@@ -70,3 +70,5 @@ require (
 	mvdan.cc/xurls/v2 v2.6.0 // indirect
 	rsc.io/markdown v0.0.0-20241212154241-6bf72452917f // indirect
 )
+
+replace github.com/go-text/typesetting v0.3.4 => github.com/go-gui-org/typesetting v0.0.0-20260713112306-9e0086ed8036
