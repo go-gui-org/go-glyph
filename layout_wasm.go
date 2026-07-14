@@ -10,9 +10,10 @@ import (
 // charFontOverride holds per-character font and position adjustments
 // for rich text runs (e.g. subscript/superscript simulation).
 type charFontOverride struct {
-	cssFont string
-	yShift  float64 // Positive = up (superscript), negative = down.
-	xPad    float64 // Leading horizontal padding (pixels).
+	cssFont  string
+	yShift   float64 // Positive = up (superscript), negative = down.
+	xPad     float64 // Leading horizontal padding (pixels).
+	objWidth float64 // >0 when this char is an InlineObject placeholder.
 }
 
 // LayoutText shapes and wraps text using Canvas2D measureText.
@@ -107,6 +108,15 @@ func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error) 
 				i += sz
 			}
 		}
+		if r.style.Object != nil {
+			for i := r.start; i < r.end; {
+				ov := overrides[i]
+				ov.objWidth = float64(r.style.Object.Width)
+				overrides[i] = ov
+				_, sz := utf8.DecodeRuneInString(text[i:])
+				i += sz
+			}
+		}
 	}
 
 	layout := ctx.buildLayout(text, baseCSS, cfg, overrides)
@@ -128,6 +138,10 @@ func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error) 
 				}
 				if r.style.Strikethrough {
 					item.HasStrikethrough = true
+				}
+				if r.style.Object != nil {
+					item.IsObject = true
+					item.ObjectID = r.style.Object.ID
 				}
 				item.CSSFont = r.cssFont
 				break
@@ -163,12 +177,14 @@ func (ctx *Context) buildLayout(text, cssFont string,
 
 	// Measure each grapheme cluster with per-char font overrides.
 	type charInfo struct {
-		text   string
-		width  float64
-		byteI  int
-		byteL  int
-		yShift float64
-		xPad   float64
+		text     string
+		width    float64
+		byteI    int
+		byteL    int
+		yShift   float64
+		xPad     float64
+		isObject bool
+		objWidth float64
 	}
 	clusters := segmentGraphemes(text)
 	chars := make([]charInfo, 0, len(clusters))
@@ -190,7 +206,17 @@ func (ctx *Context) buildLayout(text, cssFont string,
 		}
 
 		var w float64
-		if cl.text == "\n" || cl.text == "\r" {
+		var isObject bool
+		var objWidth float64
+		if overrides != nil {
+			if ov, ok := overrides[cl.byteI]; ok && ov.objWidth > 0 {
+				isObject = true
+				objWidth = ov.objWidth * pixelScale
+			}
+		}
+		if isObject {
+			w = objWidth
+		} else if cl.text == "\n" || cl.text == "\r" {
 			w = 0
 		} else {
 			m := ctx.ctx2d.Call("measureText", cl.text)
@@ -199,6 +225,7 @@ func (ctx *Context) buildLayout(text, cssFont string,
 		chars = append(chars, charInfo{
 			text: cl.text, width: w + xPad, byteI: cl.byteI,
 			byteL: cl.byteL, yShift: yShift, xPad: xPad,
+			isObject: isObject, objWidth: objWidth,
 		})
 	}
 
