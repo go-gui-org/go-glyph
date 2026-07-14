@@ -124,10 +124,9 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 // shadow a monochrome one here.
 func orderedTextFallbackPaths(ch string) []string {
 	mono, color := orderTextFallbacks(ftScriptFallbacksSingleton, ch)
-	out := make([]string, 0, len(mono)+len(color))
-	out = append(out, mono...)
-	out = append(out, color...)
-	return out
+	// mono is freshly allocated by orderTextFallbacks (not shared), so
+	// appending color onto it in place saves a third slice allocation.
+	return append(mono, color...)
 }
 
 // loadStrokedGlyphFT renders a stroked cluster using the pure-Go stroker.

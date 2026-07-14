@@ -438,8 +438,12 @@ func (s *fontScan) record(family string, aspect font.Aspect,
 
 	if s.seenFallback[family] {
 		// Already placed. If it sits in a weight-preferring tier, swap in a
-		// face closer to Regular. Color families carry no slot: no-op.
-		s.preferRegular(family, aspect, path)
+		// face closer to Regular — but never a color face: the mono tiers
+		// must stay monochrome (the color face is already in colorPaths),
+		// and color families with no slot are a no-op anyway.
+		if !color {
+			s.preferRegular(family, aspect, path)
+		}
 		return
 	}
 
@@ -618,21 +622,26 @@ func orderCJKForLang(paths, fams []string, lang string) []string {
 		return paths
 	}
 	prefs := cjkLangPrefs[key]
-	rank := func(i int) int {
+	// Precompute each path's preference rank once (substring scans are the
+	// costly part), so the sort comparator is a plain int compare instead of
+	// re-running strings.Contains O(n log n) times.
+	ranks := make([]int, len(paths))
+	for i := range ranks {
 		fam := strings.ToLower(fams[i])
+		ranks[i] = len(prefs) // unmatched: after all matches, order preserved
 		for r, sub := range prefs {
 			if strings.Contains(fam, sub) {
-				return r
+				ranks[i] = r
+				break
 			}
 		}
-		return len(prefs) // unmatched: sort after all matches, order preserved
 	}
 	idx := make([]int, len(paths))
 	for i := range idx {
 		idx[i] = i
 	}
 	sort.SliceStable(idx, func(a, b int) bool {
-		return rank(idx[a]) < rank(idx[b])
+		return ranks[idx[a]] < ranks[idx[b]]
 	})
 	out := make([]string, len(paths))
 	for i, j := range idx {

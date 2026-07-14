@@ -142,6 +142,23 @@ func TestRecordPrefersUprightOverItalic(t *testing.T) {
 	}
 }
 
+// TestRecordColorFaceNeverSwapsIntoMonoTier: when a family already sits in a
+// monochrome tier, a later color face of the same family must join colorPaths
+// but never replace the mono-tier entry — even when it looks "plainer" (the
+// stored face is italic, the color face upright at equal weight).
+func TestRecordColorFaceNeverSwapsIntoMonoTier(t *testing.T) {
+	s := newTestScan()
+	s.record("Symbols Font", aspect(font.WeightNormal, true), false, "/mono-italic.ttf")
+	s.record("Symbols Font", aspect(font.WeightNormal, false), true, "/color.ttf")
+	if want := []string{"/mono-italic.ttf"}; !reflect.DeepEqual(s.generalPaths, want) {
+		t.Errorf("generalPaths = %v, want %v (color face must not enter a mono tier)",
+			s.generalPaths, want)
+	}
+	if want := []string{"/color.ttf"}; !reflect.DeepEqual(s.colorPaths, want) {
+		t.Errorf("colorPaths = %v, want %v", s.colorPaths, want)
+	}
+}
+
 // TestRecordReplacesInPlace: a replacement must hit the family's own slot and
 // leave other families in the same tier untouched.
 func TestRecordReplacesInPlace(t *testing.T) {
@@ -152,6 +169,29 @@ func TestRecordReplacesInPlace(t *testing.T) {
 	want := []string{"/alpha-reg.ttf", "/beta.ttf"}
 	if !reflect.DeepEqual(s.generalPaths, want) {
 		t.Errorf("generalPaths = %v, want %v", s.generalPaths, want)
+	}
+}
+
+// TestRecordCJKFamsStayAlignedAfterWeightSwap: a same-family weight swap in
+// the CJK tier replaces the path in place, so cjkFams must stay index-aligned
+// with cjkPaths and the locale reorder must still match the right family.
+func TestRecordCJKFamsStayAlignedAfterWeightSwap(t *testing.T) {
+	s := newTestScan()
+	s.record("Hiragino Sans", aspect(font.WeightBold, false), false, "/hiragino-bold.ttc")
+	s.record("PingFang SC", aspect(font.WeightNormal, false), false, "/pingfang.ttc")
+	s.record("Hiragino Sans", aspect(font.WeightNormal, false), false, "/hiragino-reg.ttc")
+
+	if want := []string{"/hiragino-reg.ttc", "/pingfang.ttc"}; !reflect.DeepEqual(s.cjkPaths, want) {
+		t.Fatalf("cjkPaths = %v, want %v", s.cjkPaths, want)
+	}
+	if want := []string{"Hiragino Sans", "PingFang SC"}; !reflect.DeepEqual(s.cjkFams, want) {
+		t.Fatalf("cjkFams = %v, want %v (misalignment breaks locale reorder)",
+			s.cjkFams, want)
+	}
+	got := orderCJKForLang(s.cjkPaths, s.cjkFams, "ja_JP.UTF-8")
+	want := []string{"/hiragino-reg.ttc", "/pingfang.ttc"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ja reorder after swap = %v, want %v", got, want)
 	}
 }
 
@@ -225,6 +265,13 @@ func TestOrderCJKForLang(t *testing.T) {
 			t.Errorf("got %v, want unchanged %v", got, paths)
 		}
 	})
+
+	t.Run("single entry is a no-op", func(t *testing.T) {
+		got := orderCJKForLang(paths[:1], fams[:1], "ja")
+		if !reflect.DeepEqual(got, paths[:1]) {
+			t.Errorf("got %v, want unchanged %v", got, paths[:1])
+		}
+	})
 }
 
 // TestOrderCJKForLangStable: two families matching different preferences sort
@@ -249,6 +296,12 @@ func TestDetectLangPrecedence(t *testing.T) {
 	t.Setenv("LC_ALL", "ko_KR.UTF-8")
 	if got := detectLang(); got != "ko_KR.UTF-8" {
 		t.Errorf("LC_ALL should win: got %q", got)
+	}
+	t.Setenv("LC_ALL", "")
+	t.Setenv("LC_CTYPE", "")
+	t.Setenv("LANG", "")
+	if got := detectLang(); got != "" {
+		t.Errorf("all unset should yield empty: got %q", got)
 	}
 }
 
