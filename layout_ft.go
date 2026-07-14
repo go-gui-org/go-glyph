@@ -373,6 +373,10 @@ func (ctx *Context) LayoutRichText(rt RichText,
 				if r.style.Strikethrough {
 					item.HasStrikethrough = true
 				}
+				if r.style.Object != nil {
+					item.IsObject = true
+					item.ObjectID = r.style.Object.ID
+				}
 				break
 			}
 		}
@@ -489,8 +493,10 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		yShift   float64
 		xPad     float64
 		isColor  bool
-		absorbed bool   // consumed by a ligature; not a caret stop
-		styleKey uint64 // per-run appearance identity; splits items
+		isObject bool
+		objWidth float64 // InlineObject width at scale factor, 0 if none
+		absorbed bool    // consumed by a ligature; not a caret stop
+		styleKey uint64  // per-run appearance identity; splits items
 		// The cluster's shaped-glyph stream (HarfBuzz output owned by this
 		// cluster), in visual order. nGlyphs == 0 means the cluster was not
 		// shaped (newline, color emoji, unloaded font) and falls back to
@@ -546,12 +552,29 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 					if ov.style.Strikethrough {
 						styleKey = fnvHashU64(styleKey, 2)
 					}
+					if ov.style.Object != nil {
+						styleKey = fnvHashString(
+							styleKey, ov.style.Object.ID)
+						styleKey = fnvHashF32(
+							styleKey, ov.style.Object.Width)
+						styleKey = fnvHashF32(
+							styleKey, ov.style.Object.Height)
+					}
 				}
+			}
+		}
+		var isObject bool
+		var objWidth float64
+		if overrides != nil {
+			if ov, ok := overrides[cl.byteI]; ok && ov.style.Object != nil {
+				isObject = true
+				objWidth = float64(ov.style.Object.Width) * float64(ctx.scaleFactor)
 			}
 		}
 		chars = append(chars, charInfo{
 			text: cl.text, byteI: cl.byteI, byteL: cl.byteL,
 			yShift: yShift, xPad: xPad, isColor: isColor,
+			isObject: isObject, objWidth: objWidth,
 			styleKey: styleKey,
 		})
 		charFonts = append(charFonts, measureFont)
@@ -570,6 +593,11 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		ch := chars[ri]
 		if ch.text == "\n" || ch.text == "\r" {
 			chars[ri].width = ch.xPad * scale
+			ri++
+			continue
+		}
+		if ch.isObject {
+			chars[ri].width = ch.objWidth + ch.xPad*scale
 			ri++
 			continue
 		}
