@@ -97,7 +97,7 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 	}
 
 	if !covered && res == nil {
-		for _, fp := range ftScriptFallbacksSingleton {
+		for _, fp := range orderedTextFallbackPaths(ch) {
 			r, rejected := renderMonoRun(fp, fontSize, subpixelShift,
 				ch, runText, targetRuneIdx, true)
 			if !rejected {
@@ -114,6 +114,20 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 	}
 
 	return insertRaster(atlas, res)
+}
+
+// orderedTextFallbackPaths returns the fallback fonts covering ch in the
+// order the layout-time selector (probeFallback) would try them: monochrome
+// fonts first, color fonts last. Sharing orderTextFallbacks keeps the
+// render-side text path and layout selection picking the same font for the
+// same cluster, instead of the raw tier order that let a color/emoji font
+// shadow a monochrome one here.
+func orderedTextFallbackPaths(ch string) []string {
+	mono, color := orderTextFallbacks(ftScriptFallbacksSingleton, ch)
+	out := make([]string, 0, len(mono)+len(color))
+	out = append(out, mono...)
+	out = append(out, color...)
+	return out
 }
 
 // loadStrokedGlyphFT renders a stroked cluster using the pure-Go stroker.
@@ -145,7 +159,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 	}
 
 	if !covered && res == nil {
-		for _, fp := range ftScriptFallbacksSingleton {
+		for _, fp := range orderedTextFallbackPaths(ch) {
 			r, rejected := renderStrokedRun(fp, fontSize, sw,
 				subpixelShift, ch, runText, targetRuneIdx, true)
 			if !rejected {

@@ -435,6 +435,30 @@ func parseCoverage(path string) (cov *coverage) {
 	return &coverage{cmap: cm, color: hasColorTable(ld)}
 }
 
+// orderTextFallbacks partitions fallbackPaths into the fonts that cover text,
+// split into monochrome and color fonts, each kept in fallback order. It is the
+// shared text-presentation selection policy used by both layout-time selection
+// (probeFallback) and the render-side text path (loadGlyphFT/loadStrokedGlyphFT):
+// prefer a monochrome glyph and fall back to a color font only when nothing
+// monochrome covers the text — so a default-text symbol does not resolve to a
+// color-emoji font that merely sorts earlier. Coverage is a cmap lookup via the
+// resident coverage cache (no shaping, no face parse), matching how the base
+// coverage check decides.
+func orderTextFallbacks(fallbackPaths []string, text string) (mono, color []string) {
+	for _, path := range fallbackPaths {
+		cov := loadCoverage(path)
+		if cov == nil || !cov.covers(text) {
+			continue
+		}
+		if cov.color {
+			color = append(color, path)
+		} else {
+			mono = append(mono, path)
+		}
+	}
+	return mono, color
+}
+
 // isDefaultIgnorable reports whether r is a Unicode default-ignorable code
 // point (the common ranges), which shapers omit from output.
 func isDefaultIgnorable(r rune) bool {
