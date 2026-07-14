@@ -9,13 +9,26 @@ import (
 
 // TestIsDefaultIgnorable checks the boundary of every default-ignorable
 // range faceCovers relies on: ignorables must be reported so a cluster of
-// (base + joiner/variation-selector) is not forced to a fallback.
+// (base + joiner/variation-selector) is not forced to a fallback, and
+// adjacent non-members must not be, or real characters would silently skip
+// coverage checks. Set from Unicode 17.0 Default_Ignorable_Code_Point.
 func TestIsDefaultIgnorable(t *testing.T) {
 	ignorable := []rune{
 		0x00AD, 0xFEFF, // soft hyphen, ZWNBSP/BOM
+		0x034F,         // combining grapheme joiner
+		0x061C,         // Arabic letter mark
+		0x115F, 0x1160, // Hangul choseong/jungseong fillers
+		0x17B4, 0x17B5, // Khmer vowel inherent AQ/AA
+		0x180B, 0x180E, 0x180F, // Mongolian FVS1..3, MVS, FVS4 (range ends)
 		0x200B, 0x200D, 0x200F, // ZW space, ZWJ, RLM
+		0x202A, 0x202E, // bidi embeddings/overrides (range ends)
 		0x2060, 0x206F, // word joiner .. bidi ops (range ends)
+		0x3164,         // Hangul filler
 		0xFE00, 0xFE0F, // variation selectors (range ends)
+		0xFFA0,         // halfwidth Hangul filler
+		0xFFF0, 0xFFF8, // reserved format characters (range ends)
+		0x1BCA0, 0x1BCA3, // shorthand format controls (range ends)
+		0x1D173, 0x1D17A, // musical beam/tie controls (range ends)
 		0xE0000, 0xE0FFF, // tags + VS supplement (range ends)
 	}
 	for _, r := range ignorable {
@@ -25,7 +38,12 @@ func TestIsDefaultIgnorable(t *testing.T) {
 	}
 	// Just-outside-range and ordinary code points must not be ignorable.
 	notIgnorable := []rune{
-		'a', '0', 0x00AC, 0x200A, 0x2010, 0x2070, 0xFDFF, 0xFE10, 0xE1000,
+		'a', '0', 0x00AC, 0x0350, 0x061B,
+		0x115E, 0x1161, 0x17B3, 0x17B6, 0x180A, 0x1810,
+		0x200A, 0x2010, 0x2029, 0x202F, 0x2070,
+		0x3163, 0x3165, 0xFDFF, 0xFE10, 0xFF9F, 0xFFA1,
+		0xFFEF, 0xFFF9, // interlinear annotation anchor is excluded
+		0x1BC9F, 0x1BCA4, 0x1D172, 0x1D17B, 0xE1000,
 	}
 	for _, r := range notIgnorable {
 		if isDefaultIgnorable(r) {

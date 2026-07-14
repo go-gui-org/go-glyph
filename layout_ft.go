@@ -163,21 +163,16 @@ func (ctx *Context) probeFallback(text string, wantColor bool,
 	// font that merely happens to cover the codepoint and sorts earlier. Fall
 	// back to a color font only if nothing monochrome covers it, so a codepoint
 	// that lives solely in a color font still renders instead of going tofu.
-	var colorPath string
-	for _, path := range ctx.fallbackPaths {
-		cov := loadCoverage(path)
-		if cov == nil || !cov.covers(text) {
-			continue
-		}
-		if cov.color {
-			if colorPath == "" {
-				colorPath = path
-			}
-			continue
-		}
-		return path, false
+	// The same ordering drives the render-side text path (loadGlyphFT), so a
+	// cluster resolved here and one rasterized there pick the same font.
+	mono, color := orderTextFallbacks(ctx.fallbackPaths, text)
+	if len(mono) > 0 {
+		return mono[0], false
 	}
-	return colorPath, colorPath != ""
+	if len(color) > 0 {
+		return color[0], true
+	}
+	return "", false
 }
 
 // clusterIsEmoji reports whether a grapheme cluster should render with a

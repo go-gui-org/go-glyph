@@ -435,17 +435,66 @@ func parseCoverage(path string) (cov *coverage) {
 	return &coverage{cmap: cm, color: hasColorTable(ld)}
 }
 
+// orderTextFallbacks partitions fallbackPaths into the fonts that cover text,
+// split into monochrome and color fonts, each kept in fallback order. It is the
+// shared text-presentation selection policy used by both layout-time selection
+// (probeFallback) and the render-side text path (loadGlyphFT/loadStrokedGlyphFT):
+// prefer a monochrome glyph and fall back to a color font only when nothing
+// monochrome covers the text — so a default-text symbol does not resolve to a
+// color-emoji font that merely sorts earlier. Coverage is a cmap lookup via the
+// resident coverage cache (no shaping, no face parse), matching how the base
+// coverage check decides.
+func orderTextFallbacks(fallbackPaths []string, text string) (mono, color []string) {
+	for _, path := range fallbackPaths {
+		cov := loadCoverage(path)
+		if cov == nil || !cov.covers(text) {
+			continue
+		}
+		if cov.color {
+			color = append(color, path)
+		} else {
+			mono = append(mono, path)
+		}
+	}
+	return mono, color
+}
+
 // isDefaultIgnorable reports whether r is a Unicode default-ignorable code
-// point (the common ranges), which shapers omit from output.
+// point, which shapers omit from output. Derived from Default_Ignorable_
+// Code_Point in Unicode 17.0 DerivedCoreProperties.txt. A codepoint missing
+// here is treated as needing real cmap coverage, which can force a spurious
+// fallback (or tofu) for text that would shape fine — so keep this complete.
 func isDefaultIgnorable(r rune) bool {
 	switch {
-	case r == 0x00AD, r == 0xFEFF: // soft hyphen, ZWNBSP/BOM
+	case r == 0x00AD, r == 0x034F: // soft hyphen, combining grapheme joiner
+		return true
+	case r == 0x061C: // Arabic letter mark
+		return true
+	case r == 0x115F || r == 0x1160: // Hangul choseong/jungseong fillers
+		return true
+	case r == 0x17B4 || r == 0x17B5: // Khmer vowel inherent AQ/AA
+		return true
+	case r >= 0x180B && r <= 0x180F: // Mongolian FVS1-3, MVS, FVS4
 		return true
 	case r >= 0x200B && r <= 0x200F: // ZW space, ZWNJ/ZWJ, LRM/RLM
 		return true
+	case r >= 0x202A && r <= 0x202E: // bidi embeddings/overrides (LRE..RLO)
+		return true
 	case r >= 0x2060 && r <= 0x206F: // word joiner, invisible ops, bidi
 		return true
+	case r == 0x3164: // Hangul filler
+		return true
 	case r >= 0xFE00 && r <= 0xFE0F: // variation selectors
+		return true
+	case r == 0xFEFF: // ZWNBSP/BOM
+		return true
+	case r == 0xFFA0: // halfwidth Hangul filler
+		return true
+	case r >= 0xFFF0 && r <= 0xFFF8: // reserved format characters
+		return true
+	case r >= 0x1BCA0 && r <= 0x1BCA3: // shorthand format controls
+		return true
+	case r >= 0x1D173 && r <= 0x1D17A: // musical beam/tie controls
 		return true
 	case r >= 0xE0000 && r <= 0xE0FFF: // tags + variation-selector supplement
 		return true

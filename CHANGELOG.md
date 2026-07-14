@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **CJK fallback follows the session locale.** The CJK fallback tier is
+  reordered so the family matching the session locale (`LC_ALL` >
+  `LC_CTYPE` > `LANG`) leads — zh-Hans/zh-Hant/ja/ko resolve to PingFang
+  SC/TC, Hiragino/Yu Gothic, Apple SD Gothic/Malgun, etc. — so Han-unified
+  ideographs render in the reader's regional shapes, matching how native
+  terminals route CJK. Non-CJK or unset locales keep discovery order.
+
+### Fixed
+
+- **Fallback text no longer renders bold or italic.** Fallback tiers kept
+  the first-walked face per family, and lexical walk order puts `-Bold`
+  ahead of `-Regular`, so CJK/script fallback text could render in the
+  wrong weight. The face closest to Regular weight (upright preferred on
+  ties) now wins regardless of filename order.
+- **Render-side text fallback matches layout selection.** The text
+  rasterization path re-derived fallback from the raw tier list (color and
+  emoji fonts first, no coverage filter), so a cluster rasterized by text
+  could pick a different font than layout chose. Both now share one
+  selection policy: monochrome fonts in fallback order, color fonts only
+  as a last resort.
+- **Default-ignorable coverage completed.** `isDefaultIgnorable` now covers
+  the full Unicode 17.0 `Default_Ignorable_Code_Point` set (CGJ, Arabic
+  letter mark, Hangul fillers, Mongolian variation selectors, bidi
+  embeddings, shorthand/musical format controls, …), so clusters carrying
+  these code points are not forced to a spurious fallback or tofu.
+
 ## [v1.16.2] - 2026-07-14
 
 ### Fixed

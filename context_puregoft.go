@@ -5,6 +5,7 @@ package glyph
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/go-text/typesetting/font"
@@ -27,6 +28,16 @@ type Context struct {
 	fontWeights   map[string]font.Weight // weight backing each fontPaths key
 	fallbackPaths []string               // script fallback fonts (CJK, Arabic, etc.)
 	colorPaths    []string               // color-emoji fonts (CBDT/CBLC), render side
+
+	// lang is the session locale (from LC_ALL/LC_CTYPE/LANG), used only to
+	// order the CJK fallback tier so Han-unified ideographs render in the
+	// reader's expected regional shapes (zh-Hans/zh-Hant/ja/ko). Empty means
+	// no preference — discovery order is kept. It is a whole-session hint, not
+	// per-run: a terminal cell carries no language, so this mirrors what native
+	// terminals do. Note the render-side fallback singletons are process-global,
+	// so multiple Contexts with different langs share one ordering (last writer
+	// wins); acceptable for the single-Context terminal case.
+	lang string
 
 	// fallbackResolve memoizes script-fallback selection per grapheme cluster.
 	// The result (winning font path, or "" when no fallback covers the cluster)
@@ -71,6 +82,7 @@ func NewContext(scaleFactor float32) (*Context, error) {
 		metrics:     newMetricsCache(256),
 		fontPaths:   make(map[string]string),
 		fontWeights: make(map[string]font.Weight),
+		lang:        detectLang(),
 	}
 	setFTLib(ctx.ftLib)
 	ctx.discoverSystemFonts()
@@ -322,11 +334,25 @@ type fontScan struct {
 	ctx          *Context
 	emojiPaths   []string
 	cjkPaths     []string
+	cjkFams      []string // family per cjkPaths entry, index-aligned; drives locale reorder
 	scriptPaths  []string
 	generalPaths []string
 	colorPaths   []string
 	seenFallback map[string]bool
 	seenColor    map[string]bool
+	// slots records where each family landed in a weight-preferring tier so a
+	// later, closer-to-Regular face of the same family can replace it in place.
+	slots map[string]*fallbackSlot
+}
+
+// fallbackSlot points at a family's entry in one fallback tier and remembers
+// the aspect of the face currently stored there, so preferRegular can swap in
+// a plainer face without disturbing tier order.
+type fallbackSlot struct {
+	tier   *[]string // the tier slice this family sits in
+	index  int       // its index within that tier
+	weight font.Weight
+	italic bool
 }
 
 func newFontScan(ctx *Context) *fontScan {
@@ -334,6 +360,7 @@ func newFontScan(ctx *Context) *fontScan {
 		ctx:          ctx,
 		seenFallback: map[string]bool{},
 		seenColor:    map[string]bool{},
+		slots:        map[string]*fallbackSlot{},
 	}
 }
 
@@ -378,34 +405,104 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 		}
 	}
 
+	s.record(family, desc.Aspect, isColorFace, path)
+}
+
+// record files one already-parsed font into the fallback tiers. It is the
+// disk-free, ctx-free core of consider — tier bucketing and per-family
+// dedupe only — so the bucketing policy is unit-testable without font
+// fixtures. Callers pass the family name, its aspect (weight/style), whether
+// it carries color-glyph tables, and its path. When a family recurs, a face
+// closer to Regular replaces the stored one (see preferRegular) so a bold or
+// italic file sorting ahead of Regular in the walk does not become the
+// fallback face.
+func (s *fontScan) record(family string, aspect font.Aspect,
+	color bool, path string) {
+
+	lowerFam := strings.ToLower(family)
+	// LastResort never belongs in a fallback tier (see consider); guard here
+	// too so record is correct when called directly.
+	if lowerFam == ".lastresort" {
+		return
+	}
+
 	// Color-emoji fonts (CBDT/CBLC/sbix) are tracked separately so the
 	// renderer can pick a true color font over a monochrome emoji font
 	// (e.g. Noto Emoji) that also covers the glyph.
-	if isColorFace && !s.seenColor[family] {
+	if color && !s.seenColor[family] {
 		s.colorPaths = append(s.colorPaths, path)
 		s.seenColor[family] = true
 		// Already leads the general fallback list; don't re-add below.
 		s.seenFallback[family] = true
 	}
 
-	if !s.seenFallback[family] {
-		switch {
-		case isEmojiFamily(lowerFam):
-			s.emojiPaths = append(s.emojiPaths, path)
-			s.seenFallback[family] = true
-		case isCJKFamily(lowerFam):
-			s.cjkPaths = append(s.cjkPaths, path)
-			s.seenFallback[family] = true
-		default:
-			if isScriptFamily(lowerFam) {
-				s.scriptPaths = append(s.scriptPaths, path)
-				s.seenFallback[family] = true
-			} else {
-				s.generalPaths = append(s.generalPaths, path)
-				s.seenFallback[family] = true
-			}
+	if s.seenFallback[family] {
+		// Already placed. If it sits in a weight-preferring tier, swap in a
+		// face closer to Regular — but never a color face: the mono tiers
+		// must stay monochrome (the color face is already in colorPaths),
+		// and color families with no slot are a no-op anyway.
+		if !color {
+			s.preferRegular(family, aspect, path)
 		}
+		return
 	}
+
+	var tier *[]string
+	switch {
+	case isEmojiFamily(lowerFam):
+		tier = &s.emojiPaths
+	case isCJKFamily(lowerFam):
+		tier = &s.cjkPaths
+	case isScriptFamily(lowerFam):
+		tier = &s.scriptPaths
+	default:
+		tier = &s.generalPaths
+	}
+	*tier = append(*tier, path)
+	if tier == &s.cjkPaths {
+		// Track the family index-aligned with cjkPaths so the locale reorder
+		// can match on family name. A later same-family weight swap keeps the
+		// index (family unchanged), so this stays aligned.
+		s.cjkFams = append(s.cjkFams, family)
+	}
+	s.seenFallback[family] = true
+	s.slots[family] = &fallbackSlot{
+		tier:   tier,
+		index:  len(*tier) - 1,
+		weight: aspect.Weight,
+		italic: aspect.Style == font.StyleItalic,
+	}
+}
+
+// preferRegular replaces a family's stored fallback face with path when the
+// new face is a plainer choice — closer to Regular weight, or equally close
+// but upright where the stored face is italic. A no-op for families with no
+// tier slot (color-emoji fonts, which lead by first-seen).
+func (s *fontScan) preferRegular(family string, aspect font.Aspect, path string) {
+	slot, ok := s.slots[family]
+	if !ok {
+		return
+	}
+	newItalic := aspect.Style == font.StyleItalic
+	if betterRegular(aspect.Weight, newItalic, slot.weight, slot.italic) {
+		(*slot.tier)[slot.index] = path
+		slot.weight = aspect.Weight
+		slot.italic = newItalic
+	}
+}
+
+// betterRegular reports whether a candidate face (weight w, italic) is a
+// better plain fallback than the stored one: strictly closer to Regular
+// weight, or equally close but upright where the stored face is italic.
+func betterRegular(w font.Weight, italic bool,
+	curW font.Weight, curItalic bool) bool {
+
+	nd := weightDist(w, font.WeightNormal)
+	cd := weightDist(curW, font.WeightNormal)
+	if nd != cd {
+		return nd < cd
+	}
+	return curItalic && !italic
 }
 
 // finish assembles the fallback lists in priority order and stores them on
@@ -415,9 +512,140 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 // etc.) are the last-resort fallback tier.
 func (s *fontScan) finish() {
 	s.ctx.colorPaths = s.colorPaths
-	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.colorPaths...)
-	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.emojiPaths...)
-	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.cjkPaths...)
-	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.scriptPaths...)
-	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.generalPaths...)
+	cjk := orderCJKForLang(s.cjkPaths, s.cjkFams, s.ctx.lang)
+	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths,
+		assembleFallbacks(s.colorPaths, s.emojiPaths, cjk,
+			s.scriptPaths, s.generalPaths)...)
+}
+
+// assembleFallbacks concatenates the tier slices into the final fallback
+// priority order: color emoji, monochrome emoji, CJK, other scripts, then
+// general. Pure — no ctx or disk — so the ordering is unit-testable.
+func assembleFallbacks(color, emoji, cjk, script, general []string) []string {
+	out := make([]string, 0,
+		len(color)+len(emoji)+len(cjk)+len(script)+len(general))
+	out = append(out, color...)
+	out = append(out, emoji...)
+	out = append(out, cjk...)
+	out = append(out, script...)
+	out = append(out, general...)
+	return out
+}
+
+// detectLang reads the session locale from the environment, matching the
+// POSIX precedence LC_ALL > LC_CTYPE > LANG. Returns "" when none is set.
+func detectLang() string {
+	for _, k := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// cjkLangPrefs maps a normalized CJK locale to the lower-cased family-name
+// substrings whose fonts should lead the CJK fallback tier, so Han-unified
+// ideographs render in that locale's regional shapes. List order is
+// preference order (most-preferred first). Substrings are matched against the
+// discovered family name; the vocabulary mirrors isCJKFamily.
+var cjkLangPrefs = map[string][]string{
+	"zh-hans": {
+		"pingfang sc", "noto sans sc", "noto serif sc",
+		"source han sans sc", "source han serif sc",
+		"microsoft yahei", "heiti sc", "songti sc", "simhei", "simsun",
+	},
+	"zh-hant": {
+		"pingfang tc", "pingfang hk", "noto sans tc", "noto serif tc",
+		"noto sans hk", "source han sans tc", "source han serif tc",
+		"microsoft jhenghei", "heiti tc", "pmingliu", "mingliu",
+	},
+	"ja": {
+		"hiragino", "yu gothic", "yugothic", "yu mincho", "meiryo",
+		"noto sans jp", "noto serif jp", "source han sans jp",
+		"source han serif jp", "ms gothic", "ms mincho", "ms pgothic",
+		"ipagothic", "ipaexgothic", "takao", "vl gothic",
+	},
+	"ko": {
+		"apple sd gothic neo", "applegothic", "malgun gothic",
+		"noto sans kr", "noto serif kr", "source han sans kr",
+		"source han serif kr", "nanum", "batang", "gulim", "dotum",
+	},
+}
+
+// normalizeCJKLang reduces a POSIX/BCP-47 locale string to one of the keys in
+// cjkLangPrefs ("zh-hans", "zh-hant", "ja", "ko"), or "" when the locale is
+// not a CJK language needing regional Han shaping. It strips the encoding
+// (".UTF-8") and modifier ("@euro") suffixes, lower-cases, and resolves the
+// Chinese script from an explicit Hans/Hant subtag or the region (CN/SG/MY →
+// Hans; TW/HK/MO → Hant; bare zh defaults to Hans).
+func normalizeCJKLang(lang string) string {
+	l := strings.ToLower(strings.TrimSpace(lang))
+	if l == "" {
+		return ""
+	}
+	if i := strings.IndexAny(l, ".@"); i >= 0 {
+		l = l[:i]
+	}
+	l = strings.ReplaceAll(l, "_", "-")
+	parts := strings.Split(l, "-")
+	switch parts[0] {
+	case "ja":
+		return "ja"
+	case "ko":
+		return "ko"
+	case "zh":
+		for _, p := range parts[1:] {
+			switch p {
+			case "hans":
+				return "zh-hans"
+			case "hant":
+				return "zh-hant"
+			case "cn", "sg", "my":
+				return "zh-hans"
+			case "tw", "hk", "mo":
+				return "zh-hant"
+			}
+		}
+		return "zh-hans" // bare "zh": default to Simplified
+	}
+	return ""
+}
+
+// orderCJKForLang stable-sorts the CJK fallback paths so families matching the
+// session locale lead, in preference order, with all other fonts keeping their
+// discovery order after. fams is index-aligned with paths. A no-op when the
+// locale needs no CJK reorder, the tier has fewer than two entries, or the
+// family list is not aligned.
+func orderCJKForLang(paths, fams []string, lang string) []string {
+	key := normalizeCJKLang(lang)
+	if key == "" || len(paths) < 2 || len(fams) != len(paths) {
+		return paths
+	}
+	prefs := cjkLangPrefs[key]
+	// Precompute each path's preference rank once (substring scans are the
+	// costly part), so the sort comparator is a plain int compare instead of
+	// re-running strings.Contains O(n log n) times.
+	ranks := make([]int, len(paths))
+	for i := range ranks {
+		fam := strings.ToLower(fams[i])
+		ranks[i] = len(prefs) // unmatched: after all matches, order preserved
+		for r, sub := range prefs {
+			if strings.Contains(fam, sub) {
+				ranks[i] = r
+				break
+			}
+		}
+	}
+	idx := make([]int, len(paths))
+	for i := range idx {
+		idx[i] = i
+	}
+	sort.SliceStable(idx, func(a, b int) bool {
+		return ranks[idx[a]] < ranks[idx[b]]
+	})
+	out := make([]string, len(paths))
+	for i, j := range idx {
+		out[i] = paths[j]
+	}
+	return out
 }
