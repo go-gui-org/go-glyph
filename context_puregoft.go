@@ -378,34 +378,48 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 		}
 	}
 
+	s.record(family, desc.Aspect, isColorFace, path)
+}
+
+// record files one already-parsed font into the fallback tiers. It is the
+// disk-free, ctx-free core of consider — tier bucketing and per-family
+// dedupe only — so the bucketing policy is unit-testable without font
+// fixtures. Callers pass the family name, its aspect (weight/style), whether
+// it carries color-glyph tables, and its path.
+func (s *fontScan) record(family string, _ font.Aspect,
+	color bool, path string) {
+
+	lowerFam := strings.ToLower(family)
+	// LastResort never belongs in a fallback tier (see consider); guard here
+	// too so record is correct when called directly.
+	if lowerFam == ".lastresort" {
+		return
+	}
+
 	// Color-emoji fonts (CBDT/CBLC/sbix) are tracked separately so the
 	// renderer can pick a true color font over a monochrome emoji font
 	// (e.g. Noto Emoji) that also covers the glyph.
-	if isColorFace && !s.seenColor[family] {
+	if color && !s.seenColor[family] {
 		s.colorPaths = append(s.colorPaths, path)
 		s.seenColor[family] = true
 		// Already leads the general fallback list; don't re-add below.
 		s.seenFallback[family] = true
 	}
 
-	if !s.seenFallback[family] {
-		switch {
-		case isEmojiFamily(lowerFam):
-			s.emojiPaths = append(s.emojiPaths, path)
-			s.seenFallback[family] = true
-		case isCJKFamily(lowerFam):
-			s.cjkPaths = append(s.cjkPaths, path)
-			s.seenFallback[family] = true
-		default:
-			if isScriptFamily(lowerFam) {
-				s.scriptPaths = append(s.scriptPaths, path)
-				s.seenFallback[family] = true
-			} else {
-				s.generalPaths = append(s.generalPaths, path)
-				s.seenFallback[family] = true
-			}
-		}
+	if s.seenFallback[family] {
+		return
 	}
+	switch {
+	case isEmojiFamily(lowerFam):
+		s.emojiPaths = append(s.emojiPaths, path)
+	case isCJKFamily(lowerFam):
+		s.cjkPaths = append(s.cjkPaths, path)
+	case isScriptFamily(lowerFam):
+		s.scriptPaths = append(s.scriptPaths, path)
+	default:
+		s.generalPaths = append(s.generalPaths, path)
+	}
+	s.seenFallback[family] = true
 }
 
 // finish assembles the fallback lists in priority order and stores them on
@@ -415,9 +429,21 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 // etc.) are the last-resort fallback tier.
 func (s *fontScan) finish() {
 	s.ctx.colorPaths = s.colorPaths
-	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.colorPaths...)
-	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.emojiPaths...)
-	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.cjkPaths...)
-	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.scriptPaths...)
-	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths, s.generalPaths...)
+	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths,
+		assembleFallbacks(s.colorPaths, s.emojiPaths, s.cjkPaths,
+			s.scriptPaths, s.generalPaths)...)
+}
+
+// assembleFallbacks concatenates the tier slices into the final fallback
+// priority order: color emoji, monochrome emoji, CJK, other scripts, then
+// general. Pure — no ctx or disk — so the ordering is unit-testable.
+func assembleFallbacks(color, emoji, cjk, script, general []string) []string {
+	out := make([]string, 0,
+		len(color)+len(emoji)+len(cjk)+len(script)+len(general))
+	out = append(out, color...)
+	out = append(out, emoji...)
+	out = append(out, cjk...)
+	out = append(out, script...)
+	out = append(out, general...)
+	return out
 }
