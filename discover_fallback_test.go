@@ -15,6 +15,7 @@ func newTestScan() *fontScan {
 	return &fontScan{
 		seenFallback: map[string]bool{},
 		seenColor:    map[string]bool{},
+		slots:        map[string]*fallbackSlot{},
 	}
 }
 
@@ -83,5 +84,96 @@ func TestAssembleFallbacksOrder(t *testing.T) {
 	want := []string{"c", "e", "j", "s", "g"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("assembleFallbacks order = %v, want %v", got, want)
+	}
+}
+
+func aspect(w font.Weight, italic bool) font.Aspect {
+	a := font.Aspect{Weight: w, Style: font.StyleNormal}
+	if italic {
+		a.Style = font.StyleItalic
+	}
+	return a
+}
+
+// TestRecordPrefersRegularOverBold is the #3 regression: a family whose Bold
+// file sorts ahead of its Regular file in the walk must still fall back in
+// Regular weight, not bold.
+func TestRecordPrefersRegularOverBold(t *testing.T) {
+	s := newTestScan()
+	s.record("Noto Sans CJK JP", aspect(font.WeightBold, false), false, "/cjk-bold.otf")
+	s.record("Noto Sans CJK JP", aspect(font.WeightNormal, false), false, "/cjk-reg.otf")
+	if want := []string{"/cjk-reg.otf"}; !reflect.DeepEqual(s.cjkPaths, want) {
+		t.Errorf("cjkPaths = %v, want %v (Regular must replace Bold)",
+			s.cjkPaths, want)
+	}
+}
+
+func TestRecordKeepsRegularWhenBoldFollows(t *testing.T) {
+	s := newTestScan()
+	s.record("Noto Sans CJK JP", aspect(font.WeightNormal, false), false, "/cjk-reg.otf")
+	s.record("Noto Sans CJK JP", aspect(font.WeightBold, false), false, "/cjk-bold.otf")
+	if want := []string{"/cjk-reg.otf"}; !reflect.DeepEqual(s.cjkPaths, want) {
+		t.Errorf("cjkPaths = %v, want %v (Bold must not replace Regular)",
+			s.cjkPaths, want)
+	}
+}
+
+// TestRecordClosestWeightWins checks Medium loses to Regular even though both
+// arrive after Bold: the closest-to-Normal face must end up stored.
+func TestRecordClosestWeightWins(t *testing.T) {
+	s := newTestScan()
+	s.record("Fallback Sans", aspect(font.WeightBold, false), false, "/b.ttf")
+	s.record("Fallback Sans", aspect(font.WeightMedium, false), false, "/m.ttf")
+	s.record("Fallback Sans", aspect(font.WeightNormal, false), false, "/r.ttf")
+	s.record("Fallback Sans", aspect(font.WeightBlack, false), false, "/x.ttf")
+	if want := []string{"/r.ttf"}; !reflect.DeepEqual(s.generalPaths, want) {
+		t.Errorf("generalPaths = %v, want %v", s.generalPaths, want)
+	}
+}
+
+// TestRecordPrefersUprightOverItalic: equal weight, upright beats italic.
+func TestRecordPrefersUprightOverItalic(t *testing.T) {
+	s := newTestScan()
+	s.record("Fallback Sans", aspect(font.WeightNormal, true), false, "/italic.ttf")
+	s.record("Fallback Sans", aspect(font.WeightNormal, false), false, "/upright.ttf")
+	if want := []string{"/upright.ttf"}; !reflect.DeepEqual(s.generalPaths, want) {
+		t.Errorf("generalPaths = %v, want %v (upright must replace italic)",
+			s.generalPaths, want)
+	}
+}
+
+// TestRecordReplacesInPlace: a replacement must hit the family's own slot and
+// leave other families in the same tier untouched.
+func TestRecordReplacesInPlace(t *testing.T) {
+	s := newTestScan()
+	s.record("Alpha", aspect(font.WeightBold, false), false, "/alpha-bold.ttf")
+	s.record("Beta", aspect(font.WeightNormal, false), false, "/beta.ttf")
+	s.record("Alpha", aspect(font.WeightNormal, false), false, "/alpha-reg.ttf")
+	want := []string{"/alpha-reg.ttf", "/beta.ttf"}
+	if !reflect.DeepEqual(s.generalPaths, want) {
+		t.Errorf("generalPaths = %v, want %v", s.generalPaths, want)
+	}
+}
+
+func TestBetterRegular(t *testing.T) {
+	cases := []struct {
+		name      string
+		w         font.Weight
+		italic    bool
+		curW      font.Weight
+		curItalic bool
+		want      bool
+	}{
+		{"regular beats bold", font.WeightNormal, false, font.WeightBold, false, true},
+		{"bold loses to regular", font.WeightBold, false, font.WeightNormal, false, false},
+		{"upright beats italic same weight", font.WeightNormal, false, font.WeightNormal, true, true},
+		{"italic loses same weight", font.WeightNormal, true, font.WeightNormal, false, false},
+		{"equal upright no change", font.WeightNormal, false, font.WeightNormal, false, false},
+		{"medium beats bold", font.WeightMedium, false, font.WeightBold, false, true},
+	}
+	for _, c := range cases {
+		if got := betterRegular(c.w, c.italic, c.curW, c.curItalic); got != c.want {
+			t.Errorf("%s: betterRegular = %v, want %v", c.name, got, c.want)
+		}
 	}
 }

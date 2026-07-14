@@ -327,6 +327,19 @@ type fontScan struct {
 	colorPaths   []string
 	seenFallback map[string]bool
 	seenColor    map[string]bool
+	// slots records where each family landed in a weight-preferring tier so a
+	// later, closer-to-Regular face of the same family can replace it in place.
+	slots map[string]*fallbackSlot
+}
+
+// fallbackSlot points at a family's entry in one fallback tier and remembers
+// the aspect of the face currently stored there, so preferRegular can swap in
+// a plainer face without disturbing tier order.
+type fallbackSlot struct {
+	tier   *[]string // the tier slice this family sits in
+	index  int       // its index within that tier
+	weight font.Weight
+	italic bool
 }
 
 func newFontScan(ctx *Context) *fontScan {
@@ -334,6 +347,7 @@ func newFontScan(ctx *Context) *fontScan {
 		ctx:          ctx,
 		seenFallback: map[string]bool{},
 		seenColor:    map[string]bool{},
+		slots:        map[string]*fallbackSlot{},
 	}
 }
 
@@ -385,8 +399,11 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 // disk-free, ctx-free core of consider — tier bucketing and per-family
 // dedupe only — so the bucketing policy is unit-testable without font
 // fixtures. Callers pass the family name, its aspect (weight/style), whether
-// it carries color-glyph tables, and its path.
-func (s *fontScan) record(family string, _ font.Aspect,
+// it carries color-glyph tables, and its path. When a family recurs, a face
+// closer to Regular replaces the stored one (see preferRegular) so a bold or
+// italic file sorting ahead of Regular in the walk does not become the
+// fallback face.
+func (s *fontScan) record(family string, aspect font.Aspect,
 	color bool, path string) {
 
 	lowerFam := strings.ToLower(family)
@@ -407,19 +424,62 @@ func (s *fontScan) record(family string, _ font.Aspect,
 	}
 
 	if s.seenFallback[family] {
+		// Already placed. If it sits in a weight-preferring tier, swap in a
+		// face closer to Regular. Color families carry no slot: no-op.
+		s.preferRegular(family, aspect, path)
 		return
 	}
+
+	var tier *[]string
 	switch {
 	case isEmojiFamily(lowerFam):
-		s.emojiPaths = append(s.emojiPaths, path)
+		tier = &s.emojiPaths
 	case isCJKFamily(lowerFam):
-		s.cjkPaths = append(s.cjkPaths, path)
+		tier = &s.cjkPaths
 	case isScriptFamily(lowerFam):
-		s.scriptPaths = append(s.scriptPaths, path)
+		tier = &s.scriptPaths
 	default:
-		s.generalPaths = append(s.generalPaths, path)
+		tier = &s.generalPaths
 	}
+	*tier = append(*tier, path)
 	s.seenFallback[family] = true
+	s.slots[family] = &fallbackSlot{
+		tier:   tier,
+		index:  len(*tier) - 1,
+		weight: aspect.Weight,
+		italic: aspect.Style == font.StyleItalic,
+	}
+}
+
+// preferRegular replaces a family's stored fallback face with path when the
+// new face is a plainer choice — closer to Regular weight, or equally close
+// but upright where the stored face is italic. A no-op for families with no
+// tier slot (color-emoji fonts, which lead by first-seen).
+func (s *fontScan) preferRegular(family string, aspect font.Aspect, path string) {
+	slot, ok := s.slots[family]
+	if !ok {
+		return
+	}
+	newItalic := aspect.Style == font.StyleItalic
+	if betterRegular(aspect.Weight, newItalic, slot.weight, slot.italic) {
+		(*slot.tier)[slot.index] = path
+		slot.weight = aspect.Weight
+		slot.italic = newItalic
+	}
+}
+
+// betterRegular reports whether a candidate face (weight w, italic) is a
+// better plain fallback than the stored one: strictly closer to Regular
+// weight, or equally close but upright where the stored face is italic.
+func betterRegular(w font.Weight, italic bool,
+	curW font.Weight, curItalic bool) bool {
+
+	nd := weightDist(w, font.WeightNormal)
+	cd := weightDist(curW, font.WeightNormal)
+	if nd != cd {
+		return nd < cd
+	}
+	return curItalic && !italic
 }
 
 // finish assembles the fallback lists in priority order and stores them on
