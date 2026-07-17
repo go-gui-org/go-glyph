@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.17.0] - 2026-07-17
+
 ### Added
 
 - **CJK fallback follows the session locale.** The CJK fallback tier is
