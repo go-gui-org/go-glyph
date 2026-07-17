@@ -65,6 +65,10 @@ func (ctx *Context) ScaleFactor() float32 { return ctx.scaleFactor }
 // before creating the TextSystem.
 func (ctx *Context) AddFontFile(_ string) error { return nil }
 
+// listFontFamilies returns nil under WASM: the Canvas2D backend keeps no
+// discovered font catalog. Backs (*TextSystem).ListFontFamilies.
+func (ctx *Context) listFontFamilies() []string { return nil }
+
 // FontHeight returns ascent + descent in logical pixels.
 func (ctx *Context) FontHeight(cfg TextConfig) (float32, error) {
 	cssFont := buildCSSFont(cfg.Style)

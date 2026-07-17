@@ -29,6 +29,11 @@ type Context struct {
 	fallbackPaths []string               // script fallback fonts (CJK, Arabic, etc.)
 	colorPaths    []string               // color-emoji fonts (CBDT/CBLC), render side
 
+	// families is a case-folded set of collected family names
+	// (lower(displayName) → first-seen display case). Built at
+	// registerFontPath; excludes generic aliases and leading-"." names.
+	families map[string]string
+
 	// lang is the session locale (from LC_ALL/LC_CTYPE/LANG), used only to
 	// order the CJK fallback tier so Han-unified ideographs render in the
 	// reader's expected regional shapes (zh-Hans/zh-Hant/ja/ko). Empty means
@@ -82,6 +87,7 @@ func NewContext(scaleFactor float32) (*Context, error) {
 		metrics:     newMetricsCache(256),
 		fontPaths:   make(map[string]string),
 		fontWeights: make(map[string]font.Weight),
+		families:    make(map[string]string),
 		lang:        detectLang(),
 	}
 	setFTLib(ctx.ftLib)
@@ -108,7 +114,7 @@ func (ctx *Context) AddFontFile(path string) error {
 	if !ok {
 		return fmt.Errorf("failed to parse font %q", path)
 	}
-	registerFontPath(ctx.fontPaths, ctx.fontWeights,
+	registerFontPath(ctx.fontPaths, ctx.fontWeights, ctx.families,
 		desc.Family, desc.Aspect, path)
 	return nil
 }
@@ -197,10 +203,22 @@ func aspectBoldItalic(a font.Aspect) (bold, italic bool) {
 // keyWeights tracks the stored weight per key and may be nil (no tie
 // resolution — first-wins), as when registering a single AddFontFile.
 func registerFontPath(fontPaths map[string]string,
-	keyWeights map[string]font.Weight, family string,
-	aspect font.Aspect, path string) {
+	keyWeights map[string]font.Weight, families map[string]string,
+	family string, aspect font.Aspect, path string) {
 	if family == "" {
 		return
+	}
+	// Collect the clean family name into the case-folded set. Exclude
+	// leading-"." names (e.g. ".LastResort") — they are private Apple
+	// fallback fonts useful for resolution but never a user-facing family.
+	// Generic aliases are inserted outside registerFontPath and never
+	// reach this set. families may be nil (as keyWeights may) — callers
+	// that don't collect names pass nil; writing to a nil map panics.
+	if families != nil && !strings.HasPrefix(family, ".") {
+		lc := strings.ToLower(family)
+		if _, ok := families[lc]; !ok {
+			families[lc] = family // first-seen display case
+		}
 	}
 	bold, italic := aspectBoldItalic(aspect)
 	styleKey := family + styleSuffix(bold, italic)
@@ -210,6 +228,26 @@ func registerFontPath(fontPaths map[string]string,
 	// so it should hold the Regular-weight face when several weights exist.
 	considerFontKey(fontPaths, keyWeights, family,
 		aspect.Weight, font.WeightNormal, path)
+}
+
+// listFontFamilies backs (*TextSystem).ListFontFamilies on native
+// builds. families is keyed by the case-folded name, so sorting the keys
+// gives a case-insensitive order without re-lowercasing per comparison;
+// each key maps back to its display-case value.
+func (ctx *Context) listFontFamilies() []string {
+	if ctx.families == nil {
+		return nil
+	}
+	keys := make([]string, 0, len(ctx.families))
+	for lc := range ctx.families {
+		keys = append(keys, lc)
+	}
+	sort.Strings(keys)
+	names := make([]string, len(keys))
+	for i, lc := range keys {
+		names[i] = ctx.families[lc]
+	}
+	return names
 }
 
 // considerFontKey records path under key when the key is unset, or when
@@ -381,7 +419,7 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 		return
 	}
 	family := desc.Family
-	registerFontPath(s.ctx.fontPaths, s.ctx.fontWeights, family, desc.Aspect, path)
+	registerFontPath(s.ctx.fontPaths, s.ctx.fontWeights, s.ctx.families, family, desc.Aspect, path)
 
 	// Register the generic alias on first match.
 	lowerFam := strings.ToLower(family)

@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SC/TC, Hiragino/Yu Gothic, Apple SD Gothic/Malgun, etc. — so Han-unified
   ideographs render in the reader's regional shapes, matching how native
   terminals route CJK. Non-CJK or unset locales keep discovery order.
+- **Font family enumeration.** New `(*TextSystem).ListFontFamilies()`
+  returns the collected font family names (system discovery plus
+  `RegisterAppFont`/`AddFontFile`), sorted case-insensitively and
+  de-duplicated by case fold (first-seen display case wins). Leading-`"."`
+  private names and generic aliases are excluded by construction. Not safe
+  for concurrent use — call from the main/UI thread.
 
 ### Fixed
 
