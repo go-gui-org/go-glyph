@@ -197,11 +197,11 @@ func hasColorTable(ld *ot.Loader) bool {
 // layout code (layout_ft.go) is platform-agnostic.
 type ftFont struct {
 	face  *font.Face // parsed face; nil means "failed to open"
-	upem  uint16
+	cf    *cachedFace
+	path  string  // file path the face was loaded from (by-glyph-id render)
 	size  float64 // physical pixel size (already includes scaleFactor)
 	scale int32   // 26.6 shaping scale = round(size*64)
-	path  string  // file path the face was loaded from (by-glyph-id render)
-	cf    *cachedFace
+	upem  uint16
 }
 
 // newFTFont creates a shaping font from a TextStyle, trying the

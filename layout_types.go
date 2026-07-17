@@ -108,11 +108,11 @@ type Item struct {
 
 // Glyph holds a shaped glyph index and its positioning offsets.
 type Glyph struct {
-	Index     uint32
 	XOffset   float64
 	YOffset   float64
 	XAdvance  float64
 	YAdvance  float64
+	Index     uint32
 	Codepoint uint32 // Cluster byte length (use with Index as byte offset).
 	GlyphID   uint32 // Resolved CGGlyph/HB glyph ID (0 = .notdef or unknown).
 	// Shaped marks a glyph whose GlyphID came from shaping this item's
