@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.17.1] - 2026-07-17
+
+### Changed
+
+- **Struct field alignment.** `ftFont` and `Glyph` fields are reordered to
+  minimize padding on 64-bit targets, shrinking per-instance memory with no
+  API change.
+
 ## [v1.17.0] - 2026-07-17
 
 ### Added
