@@ -193,6 +193,17 @@ func (ts *TextSystem) ResolveFontName(name string) (string, error) {
 	return ts.ctx.ResolveFontName(name)
 }
 
+// ListFontFamilies returns all collected font family names, sorted
+// case-insensitively. Each family appears once (case-folded at
+// registration). The list includes families from system discovery
+// and RegisterAppFont/AddFontFile. Excludes leading-"." private names
+// and generic aliases by construction. Returns nil on backends with no
+// font catalog (wasm/Canvas2D).
+// Not safe for concurrent use — call from the main/UI thread.
+func (ts *TextSystem) ListFontFamilies() []string {
+	return ts.ctx.listFontFamilies()
+}
+
 // LayoutText computes a new Layout (bypasses cache).
 func (ts *TextSystem) LayoutText(text string, cfg TextConfig) (Layout, error) {
 	if err := ValidateTextInput(text, MaxTextLength, "LayoutText"); err != nil {
