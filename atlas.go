@@ -2,7 +2,10 @@ package glyph
 
 import (
 	"fmt"
+	"image"
 	"math"
+
+	"golang.org/x/image/vector"
 )
 
 // atlasGlyphPadding is the number of transparent pixels surrounding
@@ -45,6 +48,13 @@ type GlyphAtlas struct {
 	FrameCounter      uint64
 	MaxGlyphDimension int
 	LastFrame         uint64
+
+	// scratchAlpha and scratchRGBA are grow-only byte buffers reused
+	// across rasterization calls to eliminate per-glyph allocations.
+	// scratchRasterizer is a reused vector rasterizer.
+	scratchAlpha  []byte
+	scratchRGBA   []byte
+	scratchRaster *vector.Rasterizer
 }
 
 // CachedGlyph stores atlas coordinates and bearing info for a
@@ -371,4 +381,46 @@ func copyBitmapToPage(page *AtlasPage, bmp Bitmap, x, y int) error {
 		copy(page.StagingBack[dstOff:dstOff+rowBytes], bmp.Data[srcOff:srcOff+rowBytes])
 	}
 	return nil
+}
+
+// ensureAlpha grows the scratch-alpha buffer if needed and returns an
+// *image.Alpha wrapping the buffer at the requested dimensions. The
+// contents are not zeroed; the caller must fully overwrite via draw.Src.
+func (atlas *GlyphAtlas) ensureAlpha(w, h int) *image.Alpha {
+	size := w * h
+	if cap(atlas.scratchAlpha) < size {
+		atlas.scratchAlpha = make([]byte, size)
+	}
+	return &image.Alpha{
+		Pix:    atlas.scratchAlpha[:size],
+		Stride: w,
+		Rect:   image.Rect(0, 0, w, h),
+	}
+}
+
+// ensureRGBA grows the scratch-RGBA buffer if needed and returns an
+// *image.RGBA wrapping the buffer at the requested dimensions. The
+// contents are not zeroed; the caller must fully overwrite via draw.Src.
+func (atlas *GlyphAtlas) ensureRGBA(w, h int) *image.RGBA {
+	size := w * h * 4
+	if cap(atlas.scratchRGBA) < size {
+		atlas.scratchRGBA = make([]byte, size)
+	}
+	return &image.RGBA{
+		Pix:    atlas.scratchRGBA[:size],
+		Stride: w * 4,
+		Rect:   image.Rect(0, 0, w, h),
+	}
+}
+
+// ensureRasterizer returns a *vector.Rasterizer of the given dimensions,
+// reusing the atlas's rasterizer when present. The rasterizer's DrawOp is
+// NOT set; the caller must assign it.
+func (atlas *GlyphAtlas) ensureRasterizer(w, h int) *vector.Rasterizer {
+	if atlas.scratchRaster == nil {
+		atlas.scratchRaster = vector.NewRasterizer(w, h)
+	} else {
+		atlas.scratchRaster.Reset(w, h)
+	}
+	return atlas.scratchRaster
 }

@@ -47,11 +47,11 @@ func resolveTestGlyph(t *testing.T, ch string) (path string, size float64, gid u
 func TestRenderGlyphByIDMatchesShaped(t *testing.T) {
 	path, size, gid := resolveTestGlyph(t, "H")
 
-	byID := renderGlyphByID(path, size, 0, 0, gid)
+	byID := renderGlyphByID(nil, path, size, 0, 0, gid)
 	if byID == nil {
 		t.Fatal("renderGlyphByID produced no ink for H")
 	}
-	shaped, _ := renderMonoRun(path, size, 0, "H", "", 0, false)
+	shaped, _ := renderMonoRun(nil, path, size, 0, "H", "", 0, false)
 	if shaped == nil {
 		t.Fatal("renderMonoRun produced no ink for H")
 	}
@@ -74,11 +74,11 @@ func TestRenderGlyphByIDStrokedMatchesShaped(t *testing.T) {
 	path, size, gid := resolveTestGlyph(t, "H")
 	const sw = 1.5
 
-	byID := renderGlyphByID(path, size, sw, 0, gid)
+	byID := renderGlyphByID(nil, path, size, sw, 0, gid)
 	if byID == nil {
 		t.Fatal("renderGlyphByID (stroked) produced no ink for H")
 	}
-	shaped, _ := renderStrokedRun(path, size, sw, 0, "H", "", 0, false)
+	shaped, _ := renderStrokedRun(nil, path, size, sw, 0, "H", "", 0, false)
 	if shaped == nil {
 		t.Fatal("renderStrokedRun produced no ink for H")
 	}

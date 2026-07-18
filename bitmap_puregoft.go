@@ -71,12 +71,12 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 
 	if item.UseOriginalColor {
 		for _, fp := range ftColorFallbacksSingleton {
-			if r, ok := renderColorGlyph(fp, fontSize, ch); ok {
+			if r, ok := renderColorGlyph(atlas, fp, fontSize, ch); ok {
 				r.top = max(0, int(float64(r.h)-float64(item.Descent)*float64(scaleFactor)/2))
 				res = r
 				break
 			}
-			if r, ok := renderCOLRGlyph(fp, fontSize, ch); ok {
+			if r, ok := renderCOLRGlyph(atlas, fp, fontSize, ch); ok {
 				res = r
 				break
 			}
@@ -86,7 +86,7 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 	covered := false
 	if res == nil {
 		for _, fontPath := range paths {
-			r, rejected := renderMonoRun(fontPath, fontSize,
+			r, rejected := renderMonoRun(atlas, fontPath, fontSize,
 				subpixelShift, ch, runText, targetRuneIdx, true)
 			if !rejected {
 				res = r
@@ -98,7 +98,7 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 
 	if !covered && res == nil {
 		for _, fp := range orderedTextFallbackPaths(ch) {
-			r, rejected := renderMonoRun(fp, fontSize, subpixelShift,
+			r, rejected := renderMonoRun(atlas, fp, fontSize, subpixelShift,
 				ch, runText, targetRuneIdx, true)
 			if !rejected {
 				res = r
@@ -109,7 +109,7 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 	}
 
 	if !covered && res == nil && len(paths) > 0 {
-		res, _ = renderMonoRun(paths[0], fontSize, subpixelShift,
+		res, _ = renderMonoRun(atlas, paths[0], fontSize, subpixelShift,
 			ch, runText, targetRuneIdx, false)
 	}
 
@@ -148,7 +148,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 
 	covered := false
 	for _, fontPath := range paths {
-		r, rejected := renderStrokedRun(fontPath, fontSize, sw,
+		r, rejected := renderStrokedRun(atlas, fontPath, fontSize, sw,
 			subpixelShift, ch, runText, targetRuneIdx, true)
 		if !rejected {
 			res = r
@@ -159,7 +159,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 
 	if !covered && res == nil {
 		for _, fp := range orderedTextFallbackPaths(ch) {
-			r, rejected := renderStrokedRun(fp, fontSize, sw,
+			r, rejected := renderStrokedRun(atlas, fp, fontSize, sw,
 				subpixelShift, ch, runText, targetRuneIdx, true)
 			if !rejected {
 				res = r
@@ -170,7 +170,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 	}
 
 	if !covered && res == nil && len(paths) > 0 {
-		res, _ = renderStrokedRun(paths[0], fontSize, sw,
+		res, _ = renderStrokedRun(atlas, paths[0], fontSize, sw,
 			subpixelShift, ch, runText, targetRuneIdx, false)
 	}
 
@@ -188,7 +188,7 @@ func loadGlyphByIDFT(atlas *GlyphAtlas, path string, gid uint32, item Item,
 
 	_, fontSize, _, _ := resolveFTFontParams(item.Style, scaleFactor)
 	subpixelShift := float64(subpixelBin) / 4.0
-	res := renderGlyphByID(path, fontSize, float64(strokeWidth),
+	res := renderGlyphByID(atlas, path, fontSize, float64(strokeWidth),
 		subpixelShift, gid)
 	return insertRaster(atlas, res)
 }
@@ -227,19 +227,19 @@ type placedGlyph struct {
 }
 
 // renderMonoRun rasterizes filled outline glyphs (no stroke).
-func renderMonoRun(path string, size, subpixelShift float64,
+func renderMonoRun(atlas *GlyphAtlas, path string, size, subpixelShift float64,
 	text string, runText string, targetRuneIdx int,
 	rejectNotdef bool) (*rasterResult, bool) {
-	return renderRun(path, size, 0, subpixelShift, text, runText,
+	return renderRun(atlas, path, size, 0, subpixelShift, text, runText,
 		targetRuneIdx, rejectNotdef)
 }
 
 // renderStrokedRun rasterizes the stroke border of the outline glyphs at
 // the given stroke radius, using the pure-Go stroker.
-func renderStrokedRun(path string, size, strokeWidth, subpixelShift float64,
+func renderStrokedRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift float64,
 	text string, runText string, targetRuneIdx int,
 	rejectNotdef bool) (*rasterResult, bool) {
-	return renderRun(path, size, strokeWidth, subpixelShift, text, runText,
+	return renderRun(atlas, path, size, strokeWidth, subpixelShift, text, runText,
 		targetRuneIdx, rejectNotdef)
 }
 
@@ -253,7 +253,7 @@ func renderStrokedRun(path string, size, strokeWidth, subpixelShift float64,
 // correct Arabic shaping. targetRuneIdx identifies which rune(s) in
 // runText to rasterize; glyphs from other clusters advance penX but are
 // not rasterized.
-func renderRun(path string, size, strokeWidth, subpixelShift float64,
+func renderRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift float64,
 	text string, runText string, targetRuneIdx int,
 	rejectNotdef bool) (*rasterResult, bool) {
 
@@ -303,7 +303,7 @@ func renderRun(path string, size, strokeWidth, subpixelShift float64,
 		}
 		penX += float64(pos.XAdvance) / 64.0
 	}
-	return rasterizeGlyphs(cf, size, strokeWidth, glyphs)
+	return rasterizeGlyphs(atlas, cf, size, strokeWidth, glyphs)
 }
 
 // renderGlyphByID rasterizes a single glyph by its font-specific glyph id,
@@ -313,7 +313,7 @@ func renderRun(path string, size, strokeWidth, subpixelShift float64,
 // draw loop applies them via Glyph.XOffset/YOffset. Returns (nil, false) when
 // the glyph has no outline (a space, or a bitmap/color glyph handled by the
 // color paths).
-func renderGlyphByID(path string, size, strokeWidth, subpixelShift float64,
+func renderGlyphByID(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift float64,
 	gid uint32) *rasterResult {
 
 	cf := loadCachedFace(path)
@@ -326,7 +326,7 @@ func renderGlyphByID(path string, size, strokeWidth, subpixelShift float64,
 		return nil
 	}
 	glyphs := []placedGlyph{{segs: out.Segments, penX: subpixelShift}}
-	res, _ := rasterizeGlyphs(cf, size, strokeWidth, glyphs)
+	res, _ := rasterizeGlyphs(atlas, cf, size, strokeWidth, glyphs)
 	return res
 }
 
@@ -335,7 +335,10 @@ func renderGlyphByID(path string, size, strokeWidth, subpixelShift float64,
 // joins/caps, radius = strokeWidth) instead of filled. Each glyph's penX and
 // xOff/yOff place it; glyph coordinates are scaled by size/upem. Returns
 // (nil, false) when the glyphs carry no ink.
-func rasterizeGlyphs(cf *cachedFace, size, strokeWidth float64,
+//
+// When atlas is non-nil, scratch buffers from the atlas are reused to reduce
+// per-glyph allocations. When nil, buffers are freshly allocated (test path).
+func rasterizeGlyphs(atlas *GlyphAtlas, cf *cachedFace, size, strokeWidth float64,
 	glyphs []placedGlyph) (*rasterResult, bool) {
 
 	if len(glyphs) == 0 {
@@ -379,7 +382,12 @@ func rasterizeGlyphs(cf *cachedFace, size, strokeWidth float64,
 	h := int(math.Ceil(maxDy)) - topEdge + glyphBitmapPad
 	w, h = clampBitmapDim(w), clampBitmapDim(h)
 
-	rz := vector.NewRasterizer(w, h)
+	var rz *vector.Rasterizer
+	if atlas != nil {
+		rz = atlas.ensureRasterizer(w, h)
+	} else {
+		rz = vector.NewRasterizer(w, h)
+	}
 	rz.DrawOp = draw.Src
 	offX, offY := float64(-left), float64(-topEdge)
 	for _, g := range glyphs {
@@ -388,6 +396,20 @@ func rasterizeGlyphs(cf *cachedFace, size, strokeWidth float64,
 		} else {
 			addOutline(rz, g, mapPt, offX, offY)
 		}
+	}
+
+	if atlas != nil {
+		alpha := atlas.ensureAlpha(w, h)
+		rz.Draw(alpha, alpha.Bounds(), image.Opaque, image.Point{})
+		data := atlas.ensureRGBA(w, h).Pix
+		for i, a := range alpha.Pix {
+			o := i * 4
+			data[o+0] = 255
+			data[o+1] = 255
+			data[o+2] = 255
+			data[o+3] = a
+		}
+		return &rasterResult{data: data, w: w, h: h, left: left, top: -topEdge}, false
 	}
 
 	alpha := image.NewAlpha(image.Rect(0, 0, w, h))
@@ -448,7 +470,7 @@ func addOutline(rz *vector.Rasterizer, g placedGlyph,
 // the first shaped glyph of text. Positioning is approximate for the
 // spike: the glyph is placed as a full-ascent cell (left=0, top=height);
 // the renderer scales it into the emoji cell.
-func renderColorGlyph(path string, size float64, text string) (*rasterResult, bool) {
+func renderColorGlyph(atlas *GlyphAtlas, path string, size float64, text string) (*rasterResult, bool) {
 	cf := loadCachedFace(path)
 	if cf == nil {
 		return nil, false
@@ -489,7 +511,12 @@ func renderColorGlyph(path string, size float64, text string) (*rasterResult, bo
 		return nil, false
 	}
 	w, h = clampBitmapDim(w), clampBitmapDim(h)
-	rgba := image.NewRGBA(image.Rect(0, 0, w, h))
+	var rgba *image.RGBA
+	if atlas != nil {
+		rgba = atlas.ensureRGBA(w, h)
+	} else {
+		rgba = image.NewRGBA(image.Rect(0, 0, w, h))
+	}
 	draw.Draw(rgba, rgba.Bounds(), img, b.Min, draw.Src)
 	return &rasterResult{data: rgba.Pix, w: w, h: h, left: 0, top: h}, true
 }
@@ -501,7 +528,7 @@ func renderColorGlyph(path string, size float64, text string) (*rasterResult, bo
 // compositing, yielding a premultiplied-alpha RGBA cell. Returns false when
 // the font has no COLR v0 entry for the glyph (bitmap or COLR v1 emoji, or a
 // plain text font), so the caller can try the next fallback.
-func renderCOLRGlyph(path string, size float64, text string) (*rasterResult, bool) {
+func renderCOLRGlyph(atlas *GlyphAtlas, path string, size float64, text string) (*rasterResult, bool) {
 	cf := loadCachedFace(path)
 	if cf == nil || cf.face.COLR == nil || len(cf.face.CPAL) == 0 {
 		return nil, false
@@ -576,13 +603,32 @@ func renderCOLRGlyph(path string, size float64, text string) (*rasterResult, boo
 	h := int(math.Ceil(maxDy)) - topEdge + glyphBitmapPad
 	w, h = clampBitmapDim(w), clampBitmapDim(h)
 
-	acc := image.NewRGBA(image.Rect(0, 0, w, h))
+	var acc *image.RGBA
+	if atlas != nil {
+		acc = atlas.ensureRGBA(w, h)
+		clear(acc.Pix)
+	} else {
+		acc = image.NewRGBA(image.Rect(0, 0, w, h))
+	}
+	var rz *vector.Rasterizer
+	if atlas != nil {
+		rz = atlas.ensureRasterizer(w, h)
+	}
 	offX, offY := float64(-left), float64(-topEdge)
 	for _, cl := range cls {
-		rz := vector.NewRasterizer(w, h)
+		if atlas != nil {
+			rz.Reset(w, h)
+		} else {
+			rz = vector.NewRasterizer(w, h)
+		}
 		rz.DrawOp = draw.Src
 		addOutline(rz, cl.g, mapPt, offX, offY)
-		mask := image.NewAlpha(image.Rect(0, 0, w, h))
+		var mask *image.Alpha
+		if atlas != nil {
+			mask = atlas.ensureAlpha(w, h)
+		} else {
+			mask = image.NewAlpha(image.Rect(0, 0, w, h))
+		}
 		rz.Draw(mask, mask.Bounds(), image.Opaque, image.Point{})
 		draw.DrawMask(acc, acc.Bounds(), image.NewUniform(cl.col),
 			image.Point{}, mask, image.Point{}, draw.Over)
