@@ -12,8 +12,7 @@ import "math"
 type Renderer struct {
 	backend         DrawBackend
 	atlas           *GlyphAtlas
-	cache           map[uint64]CachedGlyph
-	cacheAges       map[uint64]uint64
+	cache           map[uint64]cacheEntry
 	pageKeys        map[int][]uint64
 	maxCacheEntries int
 	scaleFactor     float32
@@ -51,8 +50,7 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32,
 	return &Renderer{
 		backend:         backend,
 		atlas:           atlas,
-		cache:           make(map[uint64]CachedGlyph, 1024),
-		cacheAges:       make(map[uint64]uint64, 1024),
+		cache:           make(map[uint64]cacheEntry, 1024),
 		pageKeys:        make(map[int][]uint64),
 		maxCacheEntries: maxEntries,
 		scaleFactor:     safeScale,
@@ -63,7 +61,6 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32,
 func (r *Renderer) Free() {
 	r.atlas.Free()
 	r.cache = nil
-	r.cacheAges = nil
 	r.pageKeys = nil
 }
 
@@ -99,23 +96,41 @@ func (r *Renderer) DrawLayoutTransformedWithGradient(layout Layout,
 
 func (r *Renderer) Atlas() *GlyphAtlas { return r.atlas }
 
+// evictSampleSize bounds the eviction probe: examine at most this many
+// entries and evict the oldest of the sample (approximate LRU, memcached
+// style). Go's randomized map iteration order supplies the sampling, so a
+// full O(cache-size) age scan per insert is avoided; eviction only needs
+// "old", not "oldest".
+const evictSampleSize = 8
+
+// glyphAgeRefreshFrames is how stale a cache entry's age may get before a
+// hit stores back a refreshed age. Ages are only consumed by sampled
+// eviction, which tolerates quantization: an entry drawn every frame looks
+// at most this many frames old, still far younger than genuinely idle
+// entries. In exchange, steady-state hits are a single map lookup.
+const glyphAgeRefreshFrames = 64
+
 func (r *Renderer) evictOldestGlyph() {
 	var oldestKey uint64
+	oldestPage := 0
 	oldestAge := uint64(math.MaxUint64)
-	for k, age := range r.cacheAges {
-		if age < oldestAge {
-			oldestAge = age
+	sampled := 0
+	for k, e := range r.cache {
+		if e.age < oldestAge {
+			oldestAge = e.age
 			oldestKey = k
+			oldestPage = e.Page
+		}
+		sampled++
+		if sampled >= evictSampleSize {
+			break
 		}
 	}
-	if oldestAge == math.MaxUint64 {
+	if sampled == 0 {
 		return
 	}
-	if cg, ok := r.cache[oldestKey]; ok {
-		r.removePageKey(cg.Page, oldestKey)
-	}
+	r.removePageKey(oldestPage, oldestKey)
 	delete(r.cache, oldestKey)
-	delete(r.cacheAges, oldestKey)
 }
 
 func (r *Renderer) removePageKey(page int, key uint64) {
