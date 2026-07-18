@@ -47,8 +47,9 @@ func (ctx *Context) LayoutText(text string, cfg TextConfig) (Layout, error) {
 	}
 	defer font.close()
 
-	overrides, fbFonts := ctx.buildScriptFallbacks(text, font, cfg)
-	layout := ctx.buildLayout(text, font, cfg, overrides)
+	clusters := segmentGraphemes(text)
+	overrides, fbFonts := ctx.buildScriptFallbacks(clusters, font, cfg)
+	layout := ctx.buildLayout(clusters, text, font, cfg, overrides)
 	for i := range fbFonts {
 		fbFonts[i].close()
 	}
@@ -59,14 +60,13 @@ func (ctx *Context) LayoutText(text string, cfg TextConfig) (Layout, error) {
 // clusters whose glyphs are missing from the primary font. Returns
 // the overrides map and a list of opened fallback fonts to close
 // after layout.
-func (ctx *Context) buildScriptFallbacks(text string,
+func (ctx *Context) buildScriptFallbacks(clusters []graphemeCluster,
 	baseFont ftFont, cfg TextConfig) (
 	map[int]charFontOverride, []ftFont) {
 
 	if len(ctx.fallbackPaths) == 0 {
 		return nil, nil
 	}
-	clusters := segmentGraphemes(text)
 	fontSize := float64(parseSizeFromStyle(cfg.Style)) *
 		float64(ctx.scaleFactor)
 
@@ -347,7 +347,7 @@ func (ctx *Context) LayoutRichText(rt RichText,
 	// fallback while keeping the run's size and authored style.
 	fbFonts := ctx.applyRichScriptFallbacks(clusters, overrides, baseFont)
 
-	layout := ctx.buildLayout(text, baseFont, cfg, overrides)
+	layout := ctx.buildLayout(clusters, text, baseFont, cfg, overrides)
 
 	// Apply per-run styles to items.
 	for i := range layout.Items {
@@ -466,7 +466,7 @@ func (ctx *Context) applyRichScriptFallbacks(clusters []graphemeCluster,
 }
 
 // buildLayout creates a Layout from measured text with word wrapping.
-func (ctx *Context) buildLayout(text string, baseFont ftFont,
+func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFont ftFont,
 	cfg TextConfig,
 	overrides map[int]charFontOverride) Layout {
 
@@ -475,7 +475,8 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 	pixelScale := 1.0 / float64(ctx.scaleFactor)
 
 	if cfg.Orientation == OrientationVertical {
-		return ctx.buildVerticalLayout(text, baseFont, cfg, overrides,
+		return ctx.buildVerticalLayout(clusters, text, baseFont, cfg,
+			overrides,
 			ascent, descent, lineHeight, pixelScale)
 	}
 
@@ -510,7 +511,6 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		}
 		return c.glyphsEx[j-1]
 	}
-	clusters := segmentGraphemes(text)
 	chars := make([]charInfo, 0, len(clusters))
 	// charFonts[i] is the font used to measure chars[i]; parallel slice so
 	// the run-shaping pass below can detect font boundaries.
@@ -1086,7 +1086,8 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 }
 
 // buildVerticalLayout produces a vertical (top-to-bottom) layout.
-func (ctx *Context) buildVerticalLayout(text string, baseFont ftFont,
+func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
+	text string, baseFont ftFont,
 	cfg TextConfig, overrides map[int]charFontOverride,
 	fontAscent, fontDescent, lineHeight, pixelScale float64) Layout {
 
@@ -1102,7 +1103,6 @@ func (ctx *Context) buildVerticalLayout(text string, baseFont ftFont,
 	logAttrByIndex := make(map[int]int)
 
 	penY := fontAscent
-	clusters := segmentGraphemes(text)
 
 	for _, cl := range clusters {
 		if cl.text == "\n" || cl.text == "\r" {
