@@ -95,6 +95,10 @@ func NewContext(scaleFactor float32) (*Context, error) {
 	setFTFontPaths(ctx.fontPaths)
 	setFTScriptFallbacks(ctx.fallbackPaths)
 	setFTColorFallbacks(ctx.colorPaths)
+	// Warm the fallback coverage cache off the layout path, once per
+	// process (see warmFallbackCoverageOnce). fallbackPaths is never
+	// mutated after discovery, so the goroutine reads a stable slice.
+	warmFallbackCoverageOnce(ctx.fallbackPaths)
 	return ctx, nil
 }
 
