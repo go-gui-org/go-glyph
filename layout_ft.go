@@ -646,9 +646,11 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		// cluster is the last one starting at or before that rune.
 		for gi := range buf.Info {
 			c := int(buf.Info[gi].Cluster)
-			k := 0
-			for k+1 < len(startRune) && startRune[k+1] <= c {
-				k++
+			k := sort.Search(len(startRune), func(i int) bool {
+				return startRune[i] > c
+			}) - 1
+			if k < 0 {
+				k = 0
 			}
 			pos := buf.Pos[gi]
 			ci := &chars[ri+k]

@@ -2,7 +2,10 @@
 
 package glyph
 
-import "testing"
+import (
+	"sort"
+	"testing"
+)
 
 // TestClusterIsEmoji_MiscTechnical pins the Misc Technical (U+2300–U+23FF)
 // classification. Only default-emoji-presentation codepoints take the color
@@ -251,6 +254,82 @@ func TestEmojiBaseRangesInvariant(t *testing.T) {
 				i, lo, prevHi)
 		}
 		prevHi = hi
+	}
+}
+
+// TestClusterAssignmentEquivalence verifies the binary-search cluster assignment
+// in buildLayout produces the same results as the old linear scan for a variety of
+// cluster sequences: monotonically-increasing (LTR), non-increasing (RTL), and
+// merged ligature clusters.
+func TestClusterAssignmentEquivalence(t *testing.T) {
+	linearScan := func(startRune []int, c int) int {
+		k := 0
+		for k+1 < len(startRune) && startRune[k+1] <= c {
+			k++
+		}
+		return k
+	}
+
+	binarySearch := func(startRune []int, c int) int {
+		k := sort.Search(len(startRune), func(i int) bool {
+			return startRune[i] > c
+		}) - 1
+		if k < 0 {
+			k = 0
+		}
+		return k
+	}
+
+	tests := []struct {
+		name      string
+		startRune []int // rune-index of each cluster start
+		queries   []int // cluster values from HarfBuzz
+		desc      string
+	}{
+		{
+			name:      "LTR monotonic ASCII",
+			startRune: []int{0, 2, 4, 6, 8, 10},
+			queries:   []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			desc:      "monotonically increasing cluster values, no gaps",
+		},
+		{
+			name:      "RTL non-increasing",
+			startRune: []int{0, 3, 6, 9},
+			queries:   []int{9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
+			desc:      "HarfBuzz emits RTL glyphs in non-increasing cluster order",
+		},
+		{
+			name:      "merged ligature clusters",
+			startRune: []int{0, 1, 2, 4, 5, 6},
+			queries:   []int{0, 1, 2, 3, 4, 5, 6},
+			desc:      "cluster 3 belongs to rune 2 (f-i ligature merges 2..3)",
+		},
+		{
+			name:      "single cluster run",
+			startRune: []int{0},
+			queries:   []int{0, 0, 0, 0},
+			desc:      "all glyphs land on the sole cluster",
+		},
+		{
+			name:      "cluster values at exact boundaries",
+			startRune: []int{0, 5, 10, 15},
+			queries:   []int{0, 5, 10, 15},
+			desc:      "each query lands exactly on a boundary",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, c := range tt.queries {
+				want := linearScan(tt.startRune, c)
+				got := binarySearch(tt.startRune, c)
+				if got != want {
+					t.Errorf("startRune=%v c=%d: got k=%d, want k=%d (%s)",
+						tt.startRune, c, got, want, tt.desc)
+					return
+				}
+			}
+		})
 	}
 }
 
