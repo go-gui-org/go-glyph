@@ -267,6 +267,7 @@ func renderRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift 
 		shapeText = text
 	}
 	buf := shapeWith(cf, size, shapeText)
+	defer releaseShapeBuffer(buf) // nil-safe
 	if buf == nil || len(buf.Info) == 0 {
 		return nil, false
 	}
@@ -477,6 +478,7 @@ func renderColorGlyph(atlas *GlyphAtlas, path string, size float64, text string)
 	}
 
 	buf := shapeWith(cf, size, text)
+	defer releaseShapeBuffer(buf) // nil-safe
 	if buf == nil || len(buf.Info) == 0 {
 		return nil, false
 	}
@@ -534,6 +536,7 @@ func renderCOLRGlyph(atlas *GlyphAtlas, path string, size float64, text string) 
 		return nil, false
 	}
 	buf := shapeWith(cf, size, text)
+	defer releaseShapeBuffer(buf) // nil-safe
 	if buf == nil || len(buf.Info) == 0 {
 		return nil, false
 	}
@@ -648,7 +651,9 @@ func paletteColor(palette []tables.ColorRecord, idx uint16) color.NRGBA {
 }
 
 // shapeWith shapes text with a harfbuzz font borrowed from the face pool,
-// scaled so positions are in 26.6 fixed-point pixels.
+// scaled so positions are in 26.6 fixed-point pixels. The returned buffer is
+// pooled; callers hand it back with releaseShapeBuffer when done reading
+// Info/Pos (skipping the release is safe but forgoes reuse).
 func shapeWith(cf *cachedFace, size float64, text string) *harfbuzz.Buffer {
 	return shapeBuffer(cf, int32(math.Round(size*64)), text)
 }

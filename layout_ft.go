@@ -625,6 +625,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 		// the len==0 guard an empty buffer would leave every cluster with no
 		// glyph, marking the whole run absorbed and suppressing its caret stops.
 		if buf == nil || len(buf.Info) == 0 {
+			releaseShapeBuffer(buf) // nil-safe; empty buffers still recycle
 			for k := ri; k < rj; k++ {
 				chars[k].width = f.measureString(chars[k].text) +
 					chars[k].xPad*scale
@@ -669,6 +670,10 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 			}
 			ci.nGlyphs++
 		}
+		// Every glyph has been copied out into shapedGlyph values; the pooled
+		// buffer is done. Released here (not deferred) so a long layout does
+		// not hold one buffer per run until the function returns.
+		releaseShapeBuffer(buf)
 		// A cluster that received no glyph from a run that shaped successfully
 		// was absorbed into a neighbouring ligature (e.g. the alef of a
 		// lam-alef, or the second half of an "fi"). Its advance is ~0 and the
