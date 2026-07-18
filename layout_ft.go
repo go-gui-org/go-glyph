@@ -915,17 +915,11 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 		}
 
 		order := visualOrderForLine(text, bidiChars, li.startChar, li.endChar)
-		if len(order) == 0 {
-			order = make([]int, 0, li.endChar-li.startChar)
-			for ci := li.startChar; ci < li.endChar; ci++ {
-				order = append(order, ci)
-			}
-		}
 
-		for _, ci := range order {
+		processChar := func(ci int) {
 			ch := chars[ci]
 			if ch.text == "\n" {
-				continue
+				return
 			}
 
 			// Split the item whenever the color-emoji state changes (so
@@ -1030,6 +1024,16 @@ func (ctx *Context) buildLayout(text string, baseFont ftFont,
 			})
 			logAttrByIndex[ch.byteI] = attrIdx
 			cx += ch.width
+		}
+
+		if order != nil {
+			for _, ci := range order {
+				processChar(ci)
+			}
+		} else {
+			for ci := li.startChar; ci < li.endChar; ci++ {
+				processChar(ci)
+			}
 		}
 
 		flushItem(itemColor)

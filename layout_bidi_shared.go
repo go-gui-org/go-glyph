@@ -16,6 +16,18 @@ type charBidiInfo struct {
 	byteL int // byte length of the cluster
 }
 
+// isPureLTR returns true when every rune in text is below U+0590.
+// No RTL script exists below Hebrew (U+0590), so the bidi machinery can
+// be skipped entirely for such text — the visual order is sequential.
+func isPureLTR(text string) bool {
+	for _, r := range text {
+		if r >= 0x0590 {
+			return false
+		}
+	}
+	return true
+}
+
 // buildByteToRuneIndexSlice maps each byte offset to its rune index.
 // Non-rune-start positions are -1. Index len(text) holds the total
 // rune count.
@@ -49,6 +61,9 @@ func visualOrderForLine(text string, chars []charBidiInfo, startChar, endChar in
 		return nil
 	}
 	lineText := text[startByte:endByte]
+	if isPureLTR(lineText) {
+		return nil
+	}
 	runeMap := buildByteToRuneIndexSlice(lineText)
 
 	type span struct {
