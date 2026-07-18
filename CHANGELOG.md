@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.17.2] - 2026-07-18
+
+### Added
+
+- **Background cache warming.** The CJK fallback coverage cache is warmed
+  asynchronously at `NewContext` time, reducing first-shaping latency without
+  any API change.
+
 ## [v1.17.1] - 2026-07-17
 
 ### Changed
