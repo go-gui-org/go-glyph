@@ -3,7 +3,6 @@
 package glyph
 
 import (
-	"bytes"
 	"container/list"
 	"math"
 	"os"
@@ -148,13 +147,14 @@ func (c *faceLRU) add(path string, cf *cachedFace) {
 }
 
 func parseFace(path string) (cf *cachedFace) {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return nil
 	}
+	defer f.Close()
 	// Use the first loader so single fonts and collections (.ttc) both
 	// resolve to face index 0, matching FT_New_Face(path, 0).
-	loaders, err := ot.NewLoaders(bytes.NewReader(data))
+	loaders, err := ot.NewLoaders(f)
 	if err != nil || len(loaders) == 0 {
 		return nil
 	}
