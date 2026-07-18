@@ -3,6 +3,8 @@
 package glyph
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -324,6 +326,73 @@ func TestBetterRegular(t *testing.T) {
 	for _, c := range cases {
 		if got := betterRegular(c.w, c.italic, c.curW, c.curItalic); got != c.want {
 			t.Errorf("%s: betterRegular = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// TestWarmFallbackCoverage verifies the warm pass leaves a coverageCache
+// entry for every fallback font (see warmFallbackCoverage for why).
+// Entries may be nil (negative cache for unparseable fonts) — presence is
+// what matters.
+func TestWarmFallbackCoverage(t *testing.T) {
+	ctx, err := NewContext(1)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+	if len(ctx.fallbackPaths) == 0 {
+		t.Skip("no system fallback fonts discovered")
+	}
+
+	// Synchronous call: idempotent, so this deterministically completes
+	// the population even if the NewContext goroutine is still running.
+	warmFallbackCoverage(ctx.fallbackPaths)
+
+	coverageCache.mu.Lock()
+	defer coverageCache.mu.Unlock()
+	for _, p := range ctx.fallbackPaths {
+		if p == "" {
+			continue // loadCoverage skips "" without caching it
+		}
+		if _, ok := coverageCache.items[p]; !ok {
+			t.Errorf("fallback font %q not in coverage cache after warm", p)
+		}
+	}
+}
+
+// TestWarmFallbackCoverageBadPaths verifies the warm loop survives
+// degenerate fallback entries: empty strings are skipped without caching,
+// while nonexistent and corrupt font files are negative-cached as nil
+// instead of panicking or aborting the loop.
+func TestWarmFallbackCoverageBadPaths(t *testing.T) {
+	corrupt := filepath.Join(t.TempDir(), "corrupt.ttf")
+	if err := os.WriteFile(corrupt, []byte("not a font"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	missing := filepath.Join(t.TempDir(), "missing.ttf")
+
+	// Bad entries are negative-cached in the process-global map; remove
+	// them afterward so they never leak into other tests' probes.
+	t.Cleanup(func() {
+		coverageCache.mu.Lock()
+		delete(coverageCache.items, missing)
+		delete(coverageCache.items, corrupt)
+		coverageCache.mu.Unlock()
+	})
+
+	warmFallbackCoverage([]string{"", missing, corrupt})
+
+	coverageCache.mu.Lock()
+	defer coverageCache.mu.Unlock()
+	if _, ok := coverageCache.items[""]; ok {
+		t.Error("empty path must not be cached")
+	}
+	for _, p := range []string{missing, corrupt} {
+		cov, ok := coverageCache.items[p]
+		if !ok {
+			t.Errorf("bad path %q not negative-cached", p)
+		} else if cov != nil {
+			t.Errorf("bad path %q cached non-nil coverage", p)
 		}
 	}
 }

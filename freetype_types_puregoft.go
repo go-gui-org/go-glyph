@@ -401,12 +401,21 @@ func loadCoverage(path string) *coverage {
 // without building the full shaping face. It mirrors the cmap handling in
 // font.NewFont (OS/2 FontPage steers legacy-Arabic subtable selection) and
 // recovers from parser panics like parseFace, so a defective font is skipped.
+//
+// The file is opened lazily (like describeFontFile) rather than slurped:
+// NewLoaders on an *os.File reads tables via ReadAt on demand, and RawTable
+// copies each requested table into a fresh heap buffer, so only the cmap and
+// OS/2 tables are ever read — not the whole file, which for system .ttc
+// collections (Apple Color Emoji, Hiragino, Noto CJK) runs to hundreds of MB.
+// Nothing retains the loader or file: coverage holds a parsed font.Cmap over
+// those heap copies, so closing on return is safe.
 func parseCoverage(path string) (cov *coverage) {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return nil
 	}
-	loaders, err := ot.NewLoaders(bytes.NewReader(data))
+	defer f.Close()
+	loaders, err := ot.NewLoaders(f)
 	if err != nil || len(loaders) == 0 {
 		return nil
 	}
@@ -433,6 +442,49 @@ func parseCoverage(path string) (cov *coverage) {
 		return nil
 	}
 	return &coverage{cmap: cm, color: hasColorTable(ld)}
+}
+
+// warmFallbackOnce gates the background warm to once per process: the
+// fallback set is derived from the system font dirs, so every Context in a
+// process sees the same set and re-warming is pure waste (goroutine spawn +
+// full-slice loop contending coverageCache.mu against live layout probes).
+// A Context whose set somehow differed loses nothing: orderTextFallbacks
+// loads any un-warmed path on demand, exactly as before.
+var warmFallbackOnce sync.Once
+
+// warmFallbackCoverageOnce fires warmFallbackCoverage in a background
+// goroutine, once per process (warmFallbackOnce). The recover backstop
+// keeps a defective font file from ever crashing the process from a
+// best-effort warm: parseCoverage recovers parser panics itself, this
+// covers anything outside that window, and a failed warm only means the
+// layout path parses coverage on demand, as it always has. The slice is a
+// parameter rather than a closure capture so the caller's Context stays
+// collectable while the warm runs.
+func warmFallbackCoverageOnce(fallbackPaths []string) {
+	warmFallbackOnce.Do(func() {
+		go func() {
+			defer func() { _ = recover() }()
+			warmFallbackCoverage(fallbackPaths)
+		}()
+	})
+}
+
+// warmFallbackCoverage pre-populates the resident coverage cache for every
+// font in the fallback set. Without it, the first cluster the base font does
+// not cover (and that is not emoji — the color path exits at the first color
+// font) forces orderTextFallbacks to read and cmap-parse the entire fallback
+// set on the layout path: file I/O surfacing as a one-time UI freeze at an
+// arbitrary moment (first ⌘, →, box-drawing char, …). NewContext runs this
+// in a background goroutine (via warmFallbackCoverageOnce) so the cost is
+// paid off the layout path, during startup. Safe concurrently with layout-time
+// probes: loadCoverage is designed for concurrent callers, and a probe
+// racing the warm either finds the entry cached or parses it first itself.
+func warmFallbackCoverage(fallbackPaths []string) {
+	// Fallback order is priority order, so the fonts most likely to be
+	// needed first are warmed first.
+	for _, path := range fallbackPaths {
+		loadCoverage(path)
+	}
 }
 
 // orderTextFallbacks partitions fallbackPaths into the fonts that cover text,
