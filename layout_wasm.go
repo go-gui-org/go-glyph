@@ -28,7 +28,8 @@ func (ctx *Context) LayoutText(text string, cfg TextConfig) (Layout, error) {
 	cssFont := buildCSSFont(cfg.Style)
 	ctx.ctx2d.Set("font", cssFont)
 
-	return ctx.buildLayout(text, cssFont, cfg, nil), nil
+	clusters := segmentGraphemes(text)
+	return ctx.buildLayout(clusters, text, cssFont, cfg, nil), nil
 }
 
 // LayoutRichText shapes multi-styled text.
@@ -119,7 +120,8 @@ func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error) 
 		}
 	}
 
-	layout := ctx.buildLayout(text, baseCSS, cfg, overrides)
+	clusters := segmentGraphemes(text)
+	layout := ctx.buildLayout(clusters, text, baseCSS, cfg, overrides)
 
 	// Apply per-run styles to items.
 	for i := range layout.Items {
@@ -155,7 +157,8 @@ func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error) 
 // buildLayout creates a Layout from measured text with word wrapping.
 // overrides maps byte indices to per-character font/position
 // adjustments (may be nil for plain text).
-func (ctx *Context) buildLayout(text, cssFont string,
+func (ctx *Context) buildLayout(clusters []graphemeCluster,
+	text, cssFont string,
 	cfg TextConfig, overrides map[int]charFontOverride) Layout {
 
 	ctx.ctx2d.Set("font", cssFont)
@@ -171,7 +174,8 @@ func (ctx *Context) buildLayout(text, cssFont string,
 
 	// Vertical text: stack characters top-to-bottom.
 	if cfg.Orientation == OrientationVertical {
-		return ctx.buildVerticalLayout(text, cssFont, cfg, overrides,
+		return ctx.buildVerticalLayout(clusters, text, cssFont, cfg,
+			overrides,
 			fontAscent, fontDescent, lineHeight, pixelScale)
 	}
 
@@ -186,7 +190,6 @@ func (ctx *Context) buildLayout(text, cssFont string,
 		isObject bool
 		objWidth float64
 	}
-	clusters := segmentGraphemes(text)
 	chars := make([]charInfo, 0, len(clusters))
 	currentFont := cssFont
 	for _, cl := range clusters {
@@ -493,7 +496,8 @@ func (ctx *Context) buildLayout(text, cssFont string,
 
 // buildVerticalLayout produces a vertical (top-to-bottom) layout.
 // Each character occupies one row; XAdvance=0, YAdvance=-lineHeight.
-func (ctx *Context) buildVerticalLayout(text, cssFont string,
+func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
+	text, cssFont string,
 	cfg TextConfig, overrides map[int]charFontOverride,
 	fontAscent, fontDescent, lineHeight, pixelScale float64) Layout {
 
@@ -511,7 +515,6 @@ func (ctx *Context) buildVerticalLayout(text, cssFont string,
 	logAttrByIndex := make(map[int]int)
 
 	penY := fontAscent // start at first baseline
-	clusters := segmentGraphemes(text)
 
 	for _, cl := range clusters {
 		if cl.text == "\n" || cl.text == "\r" {
