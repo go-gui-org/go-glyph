@@ -5,6 +5,8 @@ package glyph
 import (
 	"strconv"
 	"testing"
+
+	"github.com/go-text/typesetting/harfbuzz"
 )
 
 // TestIsDefaultIgnorable checks the boundary of every default-ignorable
@@ -176,6 +178,100 @@ func TestPooledFontRescales(t *testing.T) {
 		t.Errorf("advance at 40px (%d) not greater than at 20px (%d): "+
 			"pooled font scale not reapplied",
 			big.Pos[0].XAdvance, small.Pos[0].XAdvance)
+	}
+}
+
+// TestPooledShapeBufferReset guards the pooled-shaping-buffer invariant:
+// releaseShapeBuffer must fully reset a buffer (glyph content AND the segment
+// properties GuessSegmentProperties filled in) before it is reused. A leak of
+// either would carry stale glyphs into the next shape's Info/Pos or freeze the
+// first shape's script/direction onto unrelated text. The pool may hand back a
+// fresh buffer instead of the recycled one — a fresh buffer passes trivially,
+// a recycled one passes only if Clear worked, so the test is valid either way.
+func TestPooledShapeBufferReset(t *testing.T) {
+	releaseShapeBuffer(nil) // failure paths release unconditionally; must not panic
+
+	path, _, _ := resolveTestGlyph(t, "H")
+	cf := loadCachedFace(path)
+	if cf == nil {
+		t.Skipf("could not load face %q", path)
+	}
+
+	ltr := shapeWith(cf, 20, "HHH")
+	if ltr == nil || len(ltr.Info) != 3 {
+		t.Skip("HHH did not shape to three glyphs in the default font")
+	}
+	if ltr.Props.Direction != harfbuzz.LeftToRight {
+		t.Fatalf("Latin shape direction = %v, want LeftToRight", ltr.Props.Direction)
+	}
+	releaseShapeBuffer(ltr)
+
+	// Arabic through the (likely recycled) buffer: stale content would leave
+	// more than one glyph; stale segment properties would keep LeftToRight,
+	// since GuessSegmentProperties only fills unset fields.
+	rtl := shapeWith(cf, 20, "\u0628") // ARABIC LETTER BEH
+	if rtl == nil {
+		t.Fatal("shapeWith(Arabic) = nil, want buffer")
+	}
+	defer releaseShapeBuffer(rtl)
+	if len(rtl.Info) != 1 {
+		t.Errorf("len(Info) after reuse = %d, want 1 (stale glyphs leaked)",
+			len(rtl.Info))
+	}
+	if rtl.Props.Direction != harfbuzz.RightToLeft {
+		t.Errorf("Arabic shape direction = %v, want RightToLeft "+
+			"(segment properties leaked across pool reuse)", rtl.Props.Direction)
+	}
+}
+
+// TestReleaseShapeBufferDropsOversized guards the pool's memory cap: a buffer
+// grown past shapeBufMaxRetain glyphs must be dropped on release (observable
+// as its content surviving untouched, since the drop path skips Clear), while
+// a normal-sized buffer is cleared for reuse. Without the cap, one
+// multi-megabyte run would pin its full Info/Pos growth inside the pool.
+func TestReleaseShapeBufferDropsOversized(t *testing.T) {
+	big := harfbuzz.NewBuffer()
+	for i := 0; i <= shapeBufMaxRetain; i++ {
+		big.AddRune('a', i)
+	}
+	releaseShapeBuffer(big)
+	if len(big.Info) != shapeBufMaxRetain+1 {
+		t.Errorf("oversized buffer was cleared (len=%d): it entered the pool "+
+			"instead of being dropped", len(big.Info))
+	}
+
+	small := harfbuzz.NewBuffer()
+	small.AddRune('a', 0)
+	releaseShapeBuffer(small)
+	if len(small.Info) != 0 {
+		t.Errorf("normal buffer not cleared on release: len=%d, want 0",
+			len(small.Info))
+	}
+}
+
+// BenchmarkMeasureString tracks the steady-state cost of shaping-based
+// measurement, the hot path of relayout (scroll/resize). Guards the pooled
+// shape-buffer optimization: a regression back to per-shape NewBuffer +
+// []rune(text) shows up as a jump in allocs/op.
+func BenchmarkMeasureString(b *testing.B) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		b.Skipf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+	var item Item
+	family, size, bold, italic := resolveFTFontParams(item.Style, 1.0)
+	paths := fontFallbackPaths(ftFontPathsSingleton, family, bold, italic)
+	if len(paths) == 0 {
+		b.Skip("no font installed")
+	}
+	f := openFTFont(paths[0], size)
+	if f.face == nil {
+		b.Skipf("could not open face %q", paths[0])
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = f.measureString("The quick brown fox jumps over the lazy dog")
 	}
 }
 

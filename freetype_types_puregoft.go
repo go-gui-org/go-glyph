@@ -250,28 +250,85 @@ func (f *ftFont) close() {
 	f.cf = nil
 }
 
-// shapeRunes shapes text and returns the harfbuzz buffer. Caller reads
-// buf.Info / buf.Pos. Returns nil if the font is not loaded. The shaping
-// font is borrowed from the face pool for the duration of the shape only.
+// shape shapes text and returns a pooled harfbuzz buffer. Caller reads
+// buf.Info / buf.Pos and hands the buffer back with releaseShapeBuffer when
+// done (nil is safe to release). Returns nil if the font is not loaded. The
+// shaping font is borrowed from the face pool for the duration of the shape
+// only.
 func (f ftFont) shape(text string) *harfbuzz.Buffer {
 	return shapeBuffer(f.cf, f.scale, text)
 }
 
+// shapeBufPool recycles HarfBuzz buffers across shapes. NewBuffer starts with
+// empty Info/Pos slices that regrow from zero on every shape, and each fresh
+// buffer also starts with an empty shape-plan cache, so a plan is rebuilt per
+// shape. Reusing buffers keeps the grown slices and the plan cache (keyed by
+// face, so correct across fonts), turning a steady per-layout allocation
+// stream into a handful of long-lived buffers. The pool is shared across
+// Contexts; sync.Pool guarantees exclusive ownership between Get and Put, so
+// a borrowed buffer is never touched by another goroutine.
+//
+// Caveat: the per-buffer plan cache matches on segment properties and user
+// features but NOT variation coords. That is safe only while this path shapes
+// with Shape(hb, nil) and never applies variation coords to the pooled
+// harfbuzz.Fonts; if variable-font support is added here, pooled buffers must
+// stop caching plans (or the fork's plan.equal must learn about coords).
+var shapeBufPool = sync.Pool{
+	New: func() any { return harfbuzz.NewBuffer() },
+}
+
+// shapeBufMaxRetain caps the glyph capacity a buffer may keep when returned
+// to the pool. A pathological single run (multi-megabyte paste shaped as one
+// span) grows Info/Pos to millions of entries; pooling that buffer would pin
+// the growth until the GC drains the pool. Oversized buffers are dropped and
+// reallocated small on the next borrow. 4096 glyphs ≈ a few hundred KB per
+// pooled buffer, far above any real layout run.
+const shapeBufMaxRetain = 4096
+
+// releaseShapeBuffer returns a buffer obtained from shape / shapeBuffer /
+// shapeWith to the pool. Safe on nil (shaping failure paths release
+// unconditionally). The caller must not touch buf.Info / buf.Pos afterwards:
+// the next borrower reuses the same backing arrays.
+func releaseShapeBuffer(buf *harfbuzz.Buffer) {
+	if buf == nil {
+		return
+	}
+	if cap(buf.Info) > shapeBufMaxRetain {
+		return // drop oversized buffers; see shapeBufMaxRetain
+	}
+	// Clear resets content and segment properties (set per shape by
+	// GuessSegmentProperties) while keeping Info/Pos capacity and the
+	// shape-plan cache — exactly the state worth recycling. maxOps needs no
+	// reset here: the shaper restores it at the end of every clean shape, and
+	// a panicked shape never reaches this release (the buffer is discarded).
+	buf.Clear()
+	shapeBufPool.Put(buf)
+}
+
 // shapeBuffer shapes text with a HarfBuzz font borrowed from cf's pool at the
-// given 26.6 scale, returning the buffer (nil when cf is unset or text empty).
-// The font is returned to the pool after a clean shape and discarded after a
-// recovered panic.
+// given 26.6 scale, returning a pooled buffer (nil when cf is unset or text
+// empty) that the caller releases via releaseShapeBuffer. The font is returned
+// to its pool after a clean shape; after a recovered panic both the font and
+// the buffer are discarded, since the panic may have left either corrupt
+// mid-shape.
 func shapeBuffer(cf *cachedFace, scale int32, text string) *harfbuzz.Buffer {
 	if cf == nil || len(text) == 0 {
 		return nil
 	}
-	buf := harfbuzz.NewBuffer()
-	runes := []rune(text)
-	buf.AddRunes(runes, 0, len(runes))
+	buf := shapeBufPool.Get().(*harfbuzz.Buffer)
+	// Feeding runes straight off the string is equivalent to the former
+	// AddRunes([]rune(text), 0, n) — same appends, same cluster values (rune
+	// index) — without materializing a throwaway []rune conversion slice
+	// (AddRunes copies into the buffer, so the slice was garbage immediately).
+	i := 0
+	for _, r := range text {
+		buf.AddRune(r, i)
+		i++
+	}
 	buf.GuessSegmentProperties()
 	hb := cf.getHB(scale)
 	if !safeShape(buf, hb) {
-		return nil // discard hb: a recovered panic may have left it corrupt
+		return nil // discard hb AND buf: neither returns to its pool
 	}
 	cf.putHB(hb)
 	return buf
@@ -298,7 +355,11 @@ func safeShape(buf *harfbuzz.Buffer, hb *harfbuzz.Font) (ok bool) {
 // missing (.notdef, GID 0) glyphs.
 func (f ftFont) hasGlyphs(text string) bool {
 	buf := f.shape(text)
-	if buf == nil || len(buf.Info) == 0 {
+	if buf == nil {
+		return false
+	}
+	defer releaseShapeBuffer(buf)
+	if len(buf.Info) == 0 {
 		return false
 	}
 	for i := range buf.Info {
@@ -590,6 +651,7 @@ func (f ftFont) measureString(text string) float64 {
 	for i := range buf.Pos {
 		w += float64(buf.Pos[i].XAdvance) / 64.0
 	}
+	releaseShapeBuffer(buf)
 	return w
 }
 
