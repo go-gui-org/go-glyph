@@ -702,20 +702,29 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 	}
 
 	// Precompute UAX #14 line-break opportunities for CJK and non-space wrap.
+	// Segment end offsets and chars[i].byteI both increase monotonically, so a
+	// two-pointer merge maps each break offset to its char index with zero
+	// allocation — no byte->index map, and the string variant of the uniseg
+	// segmenter avoids copying text into a []byte.
 	canBreakBefore := make([]bool, len(chars))
 	if len(chars) > 1 {
-		byteToChar := make(map[int]int, len(chars))
-		for i, ch := range chars {
-			byteToChar[ch.byteI] = i
-		}
-		tb := []byte(text)
+		rest := text
 		consumed := 0
 		state := -1
-		for len(tb) > 0 {
-			var seg []byte
-			seg, tb, _, state = uniseg.FirstLineSegment(tb, state)
+		ci := 0
+		for len(rest) > 0 {
+			var seg string
+			seg, rest, _, state = uniseg.FirstLineSegmentInString(rest, state)
+			if len(seg) == 0 {
+				// uniseg guarantees progress on non-empty input; guard
+				// anyway so a violated invariant cannot hang layout.
+				break
+			}
 			consumed += len(seg)
-			if ci, ok := byteToChar[consumed]; ok {
+			for ci < len(chars) && chars[ci].byteI < consumed {
+				ci++
+			}
+			if ci < len(chars) && chars[ci].byteI == consumed {
 				canBreakBefore[ci] = true
 			}
 		}
