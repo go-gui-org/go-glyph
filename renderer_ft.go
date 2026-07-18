@@ -101,12 +101,19 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 		}
 	}
 
-	if cached, ok := r.cache[key]; ok {
-		r.cacheAges[key] = r.atlas.FrameCounter
-		if cached.Page < 0 {
+	if e, ok := r.cache[key]; ok {
+		// Refresh the LRU age only once it is glyphAgeRefreshFrames stale.
+		// Eviction is sampled ("old", not "oldest"), so quantized ages are
+		// fine, and steady-state hits stay a single map lookup instead of
+		// lookup + full-entry store-back every frame.
+		if r.atlas.FrameCounter-e.age >= glyphAgeRefreshFrames {
+			e.age = r.atlas.FrameCounter
+			r.cache[key] = e
+		}
+		if e.Page < 0 {
 			return CachedGlyph{}
 		}
-		return cached
+		return e.CachedGlyph
 	}
 
 	var result LoadGlyphResult
@@ -123,16 +130,23 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 			targetRuneIdx, item, bin, r.scaleFactor)
 	}
 	if loadErr != nil {
-		failed := CachedGlyph{Page: -1}
-		r.cache[key] = failed
-		r.cacheAges[key] = r.atlas.FrameCounter
+		// Negative-cache the failure (Page -1) so a broken glyph is not
+		// re-rasterized every frame. The cap applies here too: without it a
+		// stream of distinct un-rasterizable glyphs (hostile or corrupt
+		// text) would grow the cache without bound.
+		if len(r.cache) >= r.maxCacheEntries {
+			r.evictOldestGlyph()
+		}
+		r.cache[key] = cacheEntry{
+			CachedGlyph: CachedGlyph{Page: -1},
+			age:         r.atlas.FrameCounter,
+		}
 		return CachedGlyph{}
 	}
 
 	if result.ResetOccurred {
 		for _, k := range r.pageKeys[result.ResetPage] {
 			delete(r.cache, k)
-			delete(r.cacheAges, k)
 		}
 		delete(r.pageKeys, result.ResetPage)
 	}
@@ -141,8 +155,10 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 		r.evictOldestGlyph()
 	}
 
-	r.cache[key] = result.Cached
-	r.cacheAges[key] = r.atlas.FrameCounter
+	r.cache[key] = cacheEntry{
+		CachedGlyph: result.Cached,
+		age:         r.atlas.FrameCounter,
+	}
 	r.pageKeys[result.Cached.Page] = append(
 		r.pageKeys[result.Cached.Page], key)
 	return result.Cached

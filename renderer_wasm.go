@@ -10,8 +10,7 @@ package glyph
 type Renderer struct {
 	backend         DrawBackend
 	atlas           *GlyphAtlas
-	cache           map[uint64]CachedGlyph
-	cacheAges       map[uint64]uint64
+	cache           map[uint64]cacheEntry
 	pageKeys        map[int][]uint64
 	maxCacheEntries int
 	scaleFactor     float32
@@ -49,8 +48,7 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32,
 	return &Renderer{
 		backend:         backend,
 		atlas:           atlas,
-		cache:           make(map[uint64]CachedGlyph, 1024),
-		cacheAges:       make(map[uint64]uint64, 1024),
+		cache:           make(map[uint64]cacheEntry, 1024),
 		pageKeys:        make(map[int][]uint64),
 		maxCacheEntries: maxEntries,
 		scaleFactor:     safeScale,
@@ -61,7 +59,6 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32,
 func (r *Renderer) Free() {
 	r.atlas.Free()
 	r.cache = nil
-	r.cacheAges = nil
 	r.pageKeys = nil
 }
 
