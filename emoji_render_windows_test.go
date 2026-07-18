@@ -23,11 +23,11 @@ func TestEmojiRendersColorCOLR(t *testing.T) {
 	// (e.g. COLR v1) — that environment skips rather than fails.
 	renderable := false
 	for _, p := range ftColorFallbacksSingleton {
-		if _, ok := renderCOLRGlyph(p, 32, "\U0001F600"); ok {
+		if _, ok := renderCOLRGlyph(nil, p, 32, "\U0001F600"); ok {
 			renderable = true
 			break
 		}
-		if _, ok := renderColorGlyph(p, 32, "\U0001F600"); ok {
+		if _, ok := renderColorGlyph(nil, p, 32, "\U0001F600"); ok {
 			renderable = true
 			break
 		}
