@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.17.3] - 2026-07-19
+
+### Changed
+
+- **Layout: fewer allocations across the shaping pipeline.** Scratch buffers are
+  reused across layout calls, grapheme segmentation runs once per layout,
+  glyph-to-cluster assignment uses binary search, and the bidi pass is skipped
+  for pure-LTR lines.
+- **Fonts: parseFace opens lazily.** Font files are no longer fully slurped at
+  parse time; the face opens on-demand, matching parseCoverage behavior.
+- **Raster: scratch buffers reused.** Rasterizes and color paths share pooled
+  scratch buffers.
+- **Renderer: sampled glyph-cache eviction.** Cache ages are folded into
+  glyph-cache values and eviction uses sampling rather than a full sweep.
+
 ## [v1.17.2] - 2026-07-18
 
 ### Added
