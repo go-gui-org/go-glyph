@@ -44,6 +44,10 @@ type Context struct {
 	// wins); acceptable for the single-Context terminal case.
 	lang string
 
+	// scratch holds buildLayout's reusable working buffers; safe because the
+	// Context is documented single-goroutine. See layoutScratch.
+	scratch layoutScratch
+
 	// fallbackResolve memoizes script-fallback selection per grapheme cluster.
 	// The result (winning font path, or "" when no fallback covers the cluster)
 	// depends only on the fixed fallback set, so it is stable across the base

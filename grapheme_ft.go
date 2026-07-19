@@ -16,13 +16,21 @@ type graphemeCluster struct {
 }
 
 // segmentGraphemes splits text into grapheme clusters using
-// rivo/uniseg for UAX #29 grapheme cluster segmentation.
-func segmentGraphemes(text string) []graphemeCluster {
+// rivo/uniseg for UAX #29 grapheme cluster segmentation. The result is
+// written into dst (truncated first; may be nil), reusing its backing array
+// when capacity suffices. Callers pass the Context's scratch buffer so
+// repeated layout calls do not reallocate the cluster slice.
+func segmentGraphemes(dst []graphemeCluster, text string) []graphemeCluster {
+	// Truncate up front so a caller passing a non-empty slice can never get
+	// stale elements prepended to the new segmentation, and so empty text
+	// hands the scratch's backing array straight back instead of dropping it.
+	clusters := dst[:0]
 	if len(text) == 0 {
-		return nil
+		return clusters
 	}
-	clusters := make([]graphemeCluster, 0,
-		utf8.RuneCountInString(text))
+	if need := utf8.RuneCountInString(text); cap(clusters) < need {
+		clusters = make([]graphemeCluster, 0, need)
+	}
 	gr := uniseg.NewGraphemes(text)
 	byteIdx := 0
 	for gr.Next() {

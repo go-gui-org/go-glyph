@@ -47,9 +47,10 @@ func (ctx *Context) LayoutText(text string, cfg TextConfig) (Layout, error) {
 	}
 	defer font.close()
 
-	clusters := segmentGraphemes(text)
+	clusters := segmentGraphemes(ctx.scratch.clusters, text)
 	overrides, fbFonts := ctx.buildScriptFallbacks(clusters, font, cfg)
 	layout := ctx.buildLayout(clusters, text, font, cfg, overrides)
+	ctx.scratch.clusters = recycleScratch(clusters)
 	for i := range fbFonts {
 		fbFonts[i].close()
 	}
@@ -329,7 +330,7 @@ func (ctx *Context) LayoutRichText(rt RichText,
 
 	// Detect emoji clusters and mark them as color so the renderer uses
 	// the color-font path instead of monochrome glyphs.
-	clusters := segmentGraphemes(text)
+	clusters := segmentGraphemes(ctx.scratch.clusters, text)
 	for _, cl := range clusters {
 		if clusterIsEmoji(cl.text) {
 			if ov, ok := overrides[cl.byteI]; ok {
@@ -348,6 +349,7 @@ func (ctx *Context) LayoutRichText(rt RichText,
 	fbFonts := ctx.applyRichScriptFallbacks(clusters, overrides, baseFont)
 
 	layout := ctx.buildLayout(clusters, text, baseFont, cfg, overrides)
+	ctx.scratch.clusters = recycleScratch(clusters)
 
 	// Apply per-run styles to items.
 	for i := range layout.Items {
@@ -465,6 +467,76 @@ func (ctx *Context) applyRichScriptFallbacks(clusters []graphemeCluster,
 	return fontsToClose
 }
 
+// charInfo is buildLayout's per-cluster working record: the measured cluster
+// plus its shaped-glyph stream. Package-scoped (rather than local to
+// buildLayout) so instances can live in the Context's layoutScratch and be
+// reused across layout calls.
+type charInfo struct {
+	text     string
+	width    float64
+	byteI    int
+	byteL    int
+	yShift   float64
+	xPad     float64
+	isColor  bool
+	isObject bool
+	objWidth float64 // InlineObject width at scale factor, 0 if none
+	absorbed bool    // consumed by a ligature; not a caret stop
+	styleKey uint64  // per-run appearance identity; splits items
+	// The cluster's shaped-glyph stream (HarfBuzz output owned by this
+	// cluster), in visual order. nGlyphs == 0 means the cluster was not
+	// shaped (newline, color emoji, unloaded font) and falls back to
+	// text-based rasterization. Almost every cluster is a single glyph, so
+	// the first is stored inline (glyph0) and glyphsEx is allocated only
+	// for the rare multi-glyph cluster (ligatures, marks) — avoiding a
+	// per-cluster slice allocation on the common path.
+	glyph0   shapedGlyph
+	glyphsEx []shapedGlyph
+	nGlyphs  int
+}
+
+// glyphAt returns the cluster's j-th shaped glyph (0-based, j < nGlyphs).
+func (c *charInfo) glyphAt(j int) shapedGlyph {
+	if j == 0 {
+		return c.glyph0
+	}
+	return c.glyphsEx[j-1]
+}
+
+// layoutScratch holds buildLayout's working buffers, reused across layout
+// calls on the same Context (documented not safe for concurrent use, so a
+// single set suffices). These slices never escape into the returned Layout —
+// every value the Layout needs is copied into its own slices — so reusing
+// them removes the largest steady-state allocations of a layout pass
+// (~11 KB/op on a 44-cluster line) without changing results.
+type layoutScratch struct {
+	clusters  []graphemeCluster
+	chars     []charInfo
+	charFonts []ftFont
+	bidiChars []charBidiInfo
+	canBreak  []bool
+	startRune []int
+}
+
+// maxLayoutScratch caps the element capacity a scratch slice may keep between
+// layouts. A pathological layout (multi-megabyte paste) grows the buffers to
+// millions of entries; retaining that would pin the growth on the Context
+// forever. Oversized buffers are dropped and reallocated small on the next
+// layout — same policy as shapeBufMaxRetain.
+const maxLayoutScratch = 4096
+
+// recycleScratch returns s emptied for reuse, or nil when its capacity
+// exceeds maxLayoutScratch. Elements are cleared first so pointer fields
+// (cluster text substrings, face pointers, per-cluster glyph slices) do not
+// pin the just-built layout's text beyond the Layout's own lifetime.
+func recycleScratch[T any](s []T) []T {
+	if cap(s) > maxLayoutScratch {
+		return nil
+	}
+	clear(s)
+	return s[:0]
+}
+
 // buildLayout creates a Layout from measured text with word wrapping.
 func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFont ftFont,
 	cfg TextConfig,
@@ -480,41 +552,19 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 			ascent, descent, lineHeight, pixelScale)
 	}
 
-	// Measure each grapheme cluster.
-	type charInfo struct {
-		text     string
-		width    float64
-		byteI    int
-		byteL    int
-		yShift   float64
-		xPad     float64
-		isColor  bool
-		isObject bool
-		objWidth float64 // InlineObject width at scale factor, 0 if none
-		absorbed bool    // consumed by a ligature; not a caret stop
-		styleKey uint64  // per-run appearance identity; splits items
-		// The cluster's shaped-glyph stream (HarfBuzz output owned by this
-		// cluster), in visual order. nGlyphs == 0 means the cluster was not
-		// shaped (newline, color emoji, unloaded font) and falls back to
-		// text-based rasterization. Almost every cluster is a single glyph, so
-		// the first is stored inline (glyph0) and glyphsEx is allocated only
-		// for the rare multi-glyph cluster (ligatures, marks) — avoiding a
-		// per-cluster slice allocation on the common path.
-		glyph0   shapedGlyph
-		glyphsEx []shapedGlyph
-		nGlyphs  int
+	// Measure each grapheme cluster. Working buffers come from the Context's
+	// scratch (returned via recycleScratch before this function exits).
+	sc := &ctx.scratch
+	chars := sc.chars
+	if cap(chars) < len(clusters) {
+		chars = make([]charInfo, 0, len(clusters))
 	}
-	// glyphAt returns the cluster's j-th shaped glyph (0-based, j < nGlyphs).
-	glyphAt := func(c *charInfo, j int) shapedGlyph {
-		if j == 0 {
-			return c.glyph0
-		}
-		return c.glyphsEx[j-1]
-	}
-	chars := make([]charInfo, 0, len(clusters))
 	// charFonts[i] is the font used to measure chars[i]; parallel slice so
 	// the run-shaping pass below can detect font boundaries.
-	charFonts := make([]ftFont, 0, len(clusters))
+	charFonts := sc.charFonts
+	if cap(charFonts) < len(clusters) {
+		charFonts = make([]ftFont, 0, len(clusters))
+	}
 	for _, cl := range clusters {
 		var yShift, xPad float64
 		var isColor bool
@@ -633,8 +683,13 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 			ri = rj
 			continue
 		}
-		// Starting rune index (within the run) of each cluster.
-		startRune := make([]int, rj-ri)
+		// Starting rune index (within the run) of each cluster. The scratch
+		// buffer is safe to reuse across runs: every element is written below
+		// before the glyph-assignment loop reads any.
+		if cap(sc.startRune) < rj-ri {
+			sc.startRune = make([]int, rj-ri)
+		}
+		startRune := sc.startRune[:rj-ri]
 		acc := 0
 		for k := ri; k < rj; k++ {
 			startRune[k-ri] = acc
@@ -706,7 +761,13 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 	// two-pointer merge maps each break offset to its char index with zero
 	// allocation — no byte->index map, and the string variant of the uniseg
 	// segmenter avoids copying text into a []byte.
-	canBreakBefore := make([]bool, len(chars))
+	canBreakBefore := sc.canBreak
+	if cap(canBreakBefore) < len(chars) {
+		canBreakBefore = make([]bool, len(chars))
+	} else {
+		canBreakBefore = canBreakBefore[:len(chars)]
+		clear(canBreakBefore)
+	}
 	if len(chars) > 1 {
 		rest := text
 		consumed := 0
@@ -814,8 +875,14 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 		lines = append(lines, lineInfo{lineStart, len(chars), lineW})
 	}
 
-	// Build bidi char info once for all lines.
-	bidiChars := make([]charBidiInfo, len(chars))
+	// Build bidi char info once for all lines. Fully overwritten before use,
+	// so the reused scratch needs no clearing.
+	bidiChars := sc.bidiChars
+	if cap(bidiChars) < len(chars) {
+		bidiChars = make([]charBidiInfo, len(chars))
+	} else {
+		bidiChars = bidiChars[:len(chars)]
+	}
 	for i, ch := range chars {
 		bidiChars[i] = charBidiInfo{byteI: ch.byteI, byteL: ch.byteL}
 	}
@@ -823,12 +890,19 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 	// Build Layout structures. allGlyphs/charRects/logAttrs run about one
 	// entry per cluster, so presize to avoid append regrowth reallocation.
 	allGlyphs := make([]Glyph, 0, len(chars))
-	var items []Item
 	charRects := make([]CharRect, 0, len(chars))
-	charRectByIndex := make(map[int]int)
-	var layoutLines []Line
-	logAttrs := make([]LogAttr, 0, len(chars))
-	logAttrByIndex := make(map[int]int)
+	// The maps get one entry per processed char (plus the end-of-text attr),
+	// so presize to allocate their buckets once instead of growing through
+	// several rehashes while filling.
+	charRectByIndex := make(map[int]int, len(chars))
+	// Exactly one Line per wrapped line, and at least one Item per line
+	// (more when font/color/style splits occur mid-line).
+	layoutLines := make([]Line, 0, len(lines))
+	items := make([]Item, 0, len(lines))
+	// +1: the end-of-text attr appended after the line loop must not force a
+	// regrowth copy of an exactly-sized slice.
+	logAttrs := make([]LogAttr, 0, len(chars)+1)
+	logAttrByIndex := make(map[int]int, len(chars)+1)
 
 	var totalWidth, totalHeight float64
 	lineY := float64(0)
@@ -978,12 +1052,12 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 			if ch.nGlyphs > 0 {
 				var hbSum float64
 				for j := 0; j < ch.nGlyphs; j++ {
-					hbSum += glyphAt(&ch, j).xAdv
+					hbSum += ch.glyphAt(j).xAdv
 				}
 				extra := ch.width - hbSum
 				last := ch.nGlyphs - 1
 				for j := 0; j < ch.nGlyphs; j++ {
-					sg := glyphAt(&ch, j)
+					sg := ch.glyphAt(j)
 					xOff := sg.xOff
 					if j == 0 {
 						xOff += ch.xPad
@@ -1081,6 +1155,15 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 	logAttrs = append(logAttrs, LogAttr{IsCursorPosition: true})
 	logAttrByIndex[len(text)] = endAttrIdx
 
+	// Hand the working buffers back to the Context for the next layout.
+	// Nothing below reads them, and none of their contents were retained by
+	// the Layout being returned.
+	sc.chars = recycleScratch(chars)
+	sc.charFonts = recycleScratch(charFonts)
+	sc.bidiChars = recycleScratch(bidiChars)
+	sc.canBreak = recycleScratch(canBreakBefore)
+	sc.startRune = recycleScratch(sc.startRune)
+
 	result := Layout{
 		Text:            text,
 		Items:           items,
@@ -1112,9 +1195,9 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 
 	var allGlyphs []Glyph
 	var charRects []CharRect
-	charRectByIndex := make(map[int]int)
+	charRectByIndex := make(map[int]int, len(clusters))
 	var logAttrs []LogAttr
-	logAttrByIndex := make(map[int]int)
+	logAttrByIndex := make(map[int]int, len(clusters)+1)
 
 	penY := fontAscent
 

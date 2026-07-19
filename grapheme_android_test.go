@@ -5,7 +5,7 @@ package glyph
 import "testing"
 
 func TestSegmentGraphemes_ASCII(t *testing.T) {
-	clusters := segmentGraphemes("hello")
+	clusters := segmentGraphemes(nil, "hello")
 	if len(clusters) != 5 {
 		t.Fatalf("got %d clusters, want 5", len(clusters))
 	}
@@ -18,7 +18,7 @@ func TestSegmentGraphemes_ASCII(t *testing.T) {
 }
 
 func TestSegmentGraphemes_Empty(t *testing.T) {
-	clusters := segmentGraphemes("")
+	clusters := segmentGraphemes(nil, "")
 	if len(clusters) != 0 {
 		t.Fatalf("got %d clusters for empty string", len(clusters))
 	}
@@ -27,7 +27,7 @@ func TestSegmentGraphemes_Empty(t *testing.T) {
 func TestSegmentGraphemes_Emoji(t *testing.T) {
 	// Family emoji: should be 1 grapheme cluster.
 	text := "\U0001F468\u200D\U0001F469\u200D\U0001F467"
-	clusters := segmentGraphemes(text)
+	clusters := segmentGraphemes(nil, text)
 	if len(clusters) != 1 {
 		t.Errorf("got %d clusters for family emoji, want 1",
 			len(clusters))
@@ -35,7 +35,7 @@ func TestSegmentGraphemes_Emoji(t *testing.T) {
 }
 
 func TestSegmentGraphemes_ByteOffsets(t *testing.T) {
-	clusters := segmentGraphemes("aé")
+	clusters := segmentGraphemes(nil, "aé")
 	if len(clusters) != 2 {
 		t.Fatalf("got %d clusters, want 2", len(clusters))
 	}
