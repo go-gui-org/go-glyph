@@ -3,7 +3,9 @@
 package glyph
 
 import (
+	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/go-text/typesetting/harfbuzz"
@@ -272,6 +274,165 @@ func BenchmarkMeasureString(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		_ = f.measureString("The quick brown fox jumps over the lazy dog")
+	}
+}
+
+// BenchmarkLayoutText tracks the steady-state cost of a full layout pass.
+// Guards the Context-scoped scratch buffers (layoutScratch) and the presized
+// index maps: a regression back to per-call slice/map allocation shows up as
+// a jump in allocs/op.
+func BenchmarkLayoutText(b *testing.B) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		b.Skipf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+	cfg := TextConfig{}
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := ctx.LayoutText(
+			"The quick brown fox jumps over the lazy dog", cfg); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// TestRecycleScratch guards the scratch-recycling contract buildLayout relies
+// on: a normal-sized buffer comes back emptied (len 0, capacity kept) with its
+// elements cleared so pointer fields cannot pin the previous layout's text or
+// faces, an oversized buffer is dropped entirely (maxLayoutScratch cap), and
+// nil is safe.
+func TestRecycleScratch(t *testing.T) {
+	s := make([]graphemeCluster, 3, 8)
+	s[0] = graphemeCluster{text: "x", byteI: 1, byteL: 1}
+	r := recycleScratch(s)
+	if len(r) != 0 || cap(r) != 8 {
+		t.Fatalf("recycleScratch len/cap = %d/%d, want 0/8", len(r), cap(r))
+	}
+	// The cleared elements are still reachable through the shared backing
+	// array; any surviving field would pin the old layout's strings.
+	if got := r[:3][0]; got != (graphemeCluster{}) {
+		t.Errorf("element not cleared on recycle: %+v", got)
+	}
+
+	big := make([]charInfo, maxLayoutScratch+1)
+	if got := recycleScratch(big); got != nil {
+		t.Errorf("oversized scratch retained (cap %d), want nil", cap(got))
+	}
+
+	if got := recycleScratch[charInfo](nil); len(got) != 0 {
+		t.Errorf("recycleScratch(nil) len = %d, want 0", len(got))
+	}
+}
+
+// TestSegmentGraphemesScratchReuse guards the dst contract of
+// segmentGraphemes: sufficient capacity is reused rather than reallocated, a
+// dirty (non-truncated) dst never leaks stale clusters into the result, empty
+// text hands the backing array back instead of dropping it, and segmentation
+// output stays correct through reuse.
+func TestSegmentGraphemesScratchReuse(t *testing.T) {
+	first := segmentGraphemes(nil, strings.Repeat("x", 64))
+	if len(first) != 64 {
+		t.Fatalf("len(first) = %d, want 64", len(first))
+	}
+
+	// A dirty dst (len > 0) must be truncated, not appended onto.
+	out := segmentGraphemes(first, "aé\U0001F600")
+	if len(out) != 3 {
+		t.Fatalf("dirty dst: len = %d, want 3 (stale clusters leaked)", len(out))
+	}
+	if cap(out) < 64 {
+		t.Errorf("dst backing dropped: cap = %d, want >= 64", cap(out))
+	}
+	want := []graphemeCluster{
+		{text: "a", byteI: 0, byteL: 1},
+		{text: "é", byteI: 1, byteL: 2},
+		{text: "\U0001F600", byteI: 3, byteL: 4},
+	}
+	for i, w := range want {
+		if out[i] != w {
+			t.Errorf("cluster[%d] = %+v, want %+v", i, out[i], w)
+		}
+	}
+
+	// Empty text must preserve the scratch's backing array for the next call.
+	empty := segmentGraphemes(out[:0], "")
+	if len(empty) != 0 || cap(empty) < 64 {
+		t.Errorf("empty text: len/cap = %d/%d, want 0 with cap >= 64",
+			len(empty), cap(empty))
+	}
+
+	if got := segmentGraphemes(nil, ""); got != nil {
+		t.Errorf("segmentGraphemes(nil, \"\") = %v, want nil", got)
+	}
+}
+
+// TestLayoutScratchReuseDeterminism is the end-to-end regression guard for
+// layoutScratch: a Context that has laid out many different texts (growing,
+// shrinking, and dirtying every scratch buffer) must produce layouts
+// byte-identical to a fresh Context's for the same input. A stale element
+// surviving buffer reuse — a break flag, a bidi range, a leftover glyph
+// stream — shows up here as a diff. The sequence crosses the paths that
+// stress each buffer: word wrap (canBreak), RTL + ligatures (bidiChars,
+// absorbed clusters, multi-glyph streams), emoji fallback, newlines, empty
+// text, and a text large enough to trip the maxLayoutScratch drop.
+func TestLayoutScratchReuseDeterminism(t *testing.T) {
+	reused, err := NewContext(1.0)
+	if err != nil {
+		t.Skipf("NewContext: %v", err)
+	}
+	defer reused.Free()
+
+	wrapCfg := TextConfig{
+		Block: BlockStyle{Width: 60, Wrap: WrapWordChar, Align: AlignLeft},
+	}
+	cases := []struct {
+		name string
+		text string
+		cfg  TextConfig
+	}{
+		{"wrapped", strings.Repeat("The quick brown fox ", 8), wrapCfg},
+		{"short", "short", TextConfig{}},
+		{"rtl-ligature", "مرحبا الاتحاد hello", TextConfig{}},
+		{"emoji-combining", "a\u0301 \U0001F600 b", TextConfig{}},
+		{"newlines", "line one\nline two\n", TextConfig{}},
+		{"empty", "", TextConfig{}},
+		{"oversized", strings.Repeat("a", maxLayoutScratch+8), TextConfig{}},
+	}
+	for _, tc := range cases {
+		got, err := reused.LayoutText(tc.text, tc.cfg)
+		if err != nil {
+			t.Skipf("%s: LayoutText(reused): %v", tc.name, err)
+		}
+		fresh, err := NewContext(1.0)
+		if err != nil {
+			t.Skipf("%s: NewContext(fresh): %v", tc.name, err)
+		}
+		wantL, err := fresh.LayoutText(tc.text, tc.cfg)
+		fresh.Free()
+		if err != nil {
+			t.Skipf("%s: LayoutText(fresh): %v", tc.name, err)
+		}
+		if !reflect.DeepEqual(got, wantL) {
+			t.Errorf("%s: reused-Context layout differs from fresh-Context "+
+				"layout (scratch reuse leaked state)", tc.name)
+		}
+	}
+
+	// Retention policy: after the oversized layout above, every grown scratch
+	// buffer must have been dropped, not pinned on the Context…
+	if got := cap(reused.scratch.chars); got != 0 {
+		t.Errorf("oversized chars scratch retained: cap = %d, want 0", got)
+	}
+	if got := cap(reused.scratch.clusters); got != 0 {
+		t.Errorf("oversized clusters scratch retained: cap = %d, want 0", got)
+	}
+	// …while a normal-sized layout leaves its buffers behind for reuse.
+	if _, err := reused.LayoutText("retain me", TextConfig{}); err != nil {
+		t.Fatalf("LayoutText(retain me): %v", err)
+	}
+	if cap(reused.scratch.chars) == 0 || cap(reused.scratch.clusters) == 0 {
+		t.Error("small-layout scratch not retained: chars/clusters cap = 0")
 	}
 }
 

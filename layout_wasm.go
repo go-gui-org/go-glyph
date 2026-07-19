@@ -302,10 +302,14 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 	var allGlyphs []Glyph
 	var items []Item
 	var charRects []CharRect
-	charRectByIndex := make(map[int]int)
-	var layoutLines []Line
-	var logAttrs []LogAttr
-	logAttrByIndex := make(map[int]int)
+	// One entry per processed char (plus the end-of-text attr); presize to
+	// allocate the buckets once instead of rehashing while filling.
+	charRectByIndex := make(map[int]int, len(chars))
+	layoutLines := make([]Line, 0, len(lines))
+	// +1: the end-of-text attr appended after the line loop must not force a
+	// regrowth copy of an exactly-sized slice.
+	logAttrs := make([]LogAttr, 0, len(chars)+1)
+	logAttrByIndex := make(map[int]int, len(chars)+1)
 
 	var totalWidth, totalHeight float64
 	lineY := float64(0)
@@ -510,9 +514,9 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 
 	var allGlyphs []Glyph
 	var charRects []CharRect
-	charRectByIndex := make(map[int]int)
+	charRectByIndex := make(map[int]int, len(clusters))
 	var logAttrs []LogAttr
-	logAttrByIndex := make(map[int]int)
+	logAttrByIndex := make(map[int]int, len(clusters)+1)
 
 	penY := fontAscent // start at first baseline
 
