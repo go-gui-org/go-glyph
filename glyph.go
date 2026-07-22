@@ -146,6 +146,17 @@ func (ts *TextSystem) Commit() {
 	ts.pruneCache()
 }
 
+// Purge clears the layout cache, glyph cache, and resets atlas
+// pages. Call after a full terminal clear (e.g. CSI 3 J) to
+// reclaim memory for glyphs no longer on screen while keeping
+// the TextSystem alive.
+func (ts *TextSystem) Purge() {
+	clear(ts.cache)
+	if ts.renderer != nil {
+		ts.renderer.PurgeGlyphCache()
+	}
+}
+
 // AddFontFile registers a font file (TTF/OTF).
 // Clears the layout cache to prevent stale FT_Face pointers.
 func (ts *TextSystem) AddFontFile(path string) error {

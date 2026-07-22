@@ -127,6 +127,55 @@ func TestTextSystemAddFontBytes(t *testing.T) {
 	}
 }
 
+func TestTextSystemPurge(t *testing.T) {
+	backend := newRecordingBackend()
+	ts, err := NewTextSystem(backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Free()
+
+	cfg := TextConfig{
+		Style: TextStyle{
+			FontName: "Sans 16",
+			Color:    Color{0, 0, 0, 255},
+		},
+	}
+	err = ts.DrawText(100, 200, "Hello", cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts.Commit()
+
+	if len(ts.cache) == 0 {
+		t.Error("layout cache should have entry after DrawText")
+	}
+	if len(ts.renderer.cache) == 0 {
+		t.Error("glyph cache should have entries after DrawText")
+	}
+
+	ts.Purge()
+
+	if len(ts.cache) != 0 {
+		t.Error("layout cache should be empty after Purge")
+	}
+	if len(ts.renderer.cache) != 0 {
+		t.Error("glyph cache should be empty after Purge")
+	}
+	if len(ts.renderer.pageKeys) != 0 {
+		t.Error("pageKeys should be empty after Purge")
+	}
+	// Verify atlas pages are reset (shelves cleared, staging zeroed).
+	for i, page := range ts.renderer.atlas.Pages {
+		if len(page.Shelves) != 0 {
+			t.Errorf("page %d shelves not empty after Purge", i)
+		}
+		if page.UsedPixels != 0 {
+			t.Errorf("page %d UsedPixels = %d, want 0", i, page.UsedPixels)
+		}
+	}
+}
+
 func testLayout() Layout {
 	charRects := []CharRect{
 		{Rect: Rect{X: 0, Y: 0, Width: 10, Height: 20}, Index: 0},

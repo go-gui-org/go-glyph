@@ -106,6 +106,16 @@ func NewGlyphAtlas(backend DrawBackend, w, h int) (*GlyphAtlas, error) {
 	}, nil
 }
 
+// Reset clears all atlas pages (shelves, staging buffers) without
+// deleting GPU textures. Use to reclaim atlas space mid-session
+// while keeping the TextSystem alive.
+func (atlas *GlyphAtlas) Reset() {
+	for i := range atlas.Pages {
+		atlas.resetPage(i)
+	}
+	atlas.Garbage = atlas.Garbage[:0]
+}
+
 // Free releases all atlas textures.
 func (atlas *GlyphAtlas) Free() {
 	for _, page := range atlas.Pages {
