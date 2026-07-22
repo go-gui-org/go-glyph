@@ -67,6 +67,16 @@ func (r *Renderer) Commit() {
 	r.atlas.SwapAndUpload()
 }
 
+// PurgeGlyphCache clears the glyph cache and resets atlas pages,
+// reclaiming GPU textures and Go heap memory. Call after a full
+// terminal clear (e.g. CSI 3 J) to drop cached glyphs no longer
+// on screen while keeping the TextSystem alive.
+func (r *Renderer) PurgeGlyphCache() {
+	clear(r.cache)
+	clear(r.pageKeys)
+	r.atlas.Reset()
+}
+
 func (r *Renderer) DrawLayout(layout Layout, x, y float32) {
 	r.drawLayoutImpl(layout, x, y, AffineIdentity(), nil)
 }

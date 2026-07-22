@@ -307,6 +307,45 @@ func TestAtlasFree(t *testing.T) {
 	}
 }
 
+func TestAtlasReset(t *testing.T) {
+	backend := newMockBackend()
+	atlas, err := NewGlyphAtlas(backend, 256, 256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+
+	// Insert some glyphs to populate shelves.
+	bmp := makeSyntheticBitmap(10, 12, 255, 255, 255, 200)
+	for range 10 {
+		_, _, _, err := atlas.InsertBitmap(bmp, 3, 11)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	page := &atlas.Pages[0]
+	if len(page.Shelves) == 0 {
+		t.Fatal("expected shelves populated before Reset")
+	}
+
+	texID := page.TextureID
+	atlas.Reset()
+
+	if len(page.Shelves) != 0 {
+		t.Error("expected shelves cleared after Reset")
+	}
+	if page.UsedPixels != 0 {
+		t.Errorf("UsedPixels = %d, want 0", page.UsedPixels)
+	}
+	if page.TextureID != texID {
+		t.Error("texture should not be deleted after Reset")
+	}
+	if _, ok := backend.textures[texID]; !ok {
+		t.Error("texture should still exist after Reset")
+	}
+}
+
 func TestAtlasPageEvictionPressure(t *testing.T) {
 	backend := newMockBackend()
 	atlas, err := NewGlyphAtlas(backend, 64, 64)
