@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.18.0] - 2026-07-26
+
+### Added
+
+- **Memory reclamation after a full clear.** `TextSystem.Purge` drops the
+  layout cache and glyph cache and resets atlas pages without tearing down the
+  `TextSystem`, so callers can reclaim heap and atlas memory mid-session — e.g.
+  a terminal handling `CSI 3 J`. Supporting entry points: `GlyphAtlas.Reset`
+  and `Renderer.PurgeGlyphCache` (both the common and wasm renderers).
+
+### Changed
+
+- **Dependencies: `go-gui-org/typesetting` pseudo-version bumped.**
+
 ## [v1.17.3] - 2026-07-19
 
 ### Changed
