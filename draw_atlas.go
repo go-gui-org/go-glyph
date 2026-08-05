@@ -41,6 +41,80 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 
 	isIdentity := transform == AffineIdentity()
 
+	// Pass 1 — resolve (rasterize) every glyph in the layout before any
+	// textured quad is emitted. Hosts call Commit after their draw pass,
+	// so without an in-call upload the quads below would sample atlas
+	// texels still in CPU staging memory and a glyph's first appearance
+	// would render blank for one frame (issue #89). Dirty pages are
+	// uploaded once after resolution; warm frames (no inserts) only pay
+	// a scan of the (≤ MaxPages) page list.
+	fills := make([]CachedGlyph, len(layout.Glyphs))
+	strokes := make([]CachedGlyph, len(layout.Glyphs))
+
+	// Resolve stroke glyphs first, then fills: both must complete before
+	// the single upload so one upload covers every page touched here.
+	// Guards mirror the emit loops below; skipped glyphs keep a zero
+	// CachedGlyph, which the emit loops' Width > 0 check discards.
+	for _, item := range layout.Items {
+		if !item.HasStroke || item.UseOriginalColor {
+			continue
+		}
+		cx := float32(item.X)
+		cy := float32(item.Y)
+		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
+			if i < 0 || i >= len(layout.Glyphs) {
+				continue
+			}
+			g := layout.Glyphs[i]
+			if (g.Index & PangoGlyphUnknownFlag) != 0 {
+				cx += float32(g.XAdvance)
+				cy -= float32(g.YAdvance)
+				continue
+			}
+			strokes[i] = r.getOrLoadGlyph(layout.Text, item, g, 0,
+				item.StrokeWidth)
+			r.touchPage(strokes[i])
+			cx += float32(g.XAdvance)
+			cy -= float32(g.YAdvance)
+		}
+	}
+	for _, item := range layout.Items {
+		if item.HasStroke && item.Color.A == 0 {
+			continue
+		}
+		cx := float32(item.X)
+		cy := float32(item.Y)
+		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
+			if i < 0 || i >= len(layout.Glyphs) {
+				continue
+			}
+			g := layout.Glyphs[i]
+			if (g.Index & PangoGlyphUnknownFlag) != 0 {
+				cx += float32(g.XAdvance)
+				cy -= float32(g.YAdvance)
+				continue
+			}
+			_, _, bin := r.computeDrawOrigin(
+				cx+float32(g.XOffset), cy-float32(g.YOffset))
+			if item.UseOriginalColor {
+				bin = 0
+			}
+			fills[i] = r.getOrLoadGlyph(layout.Text, item, g, bin, 0)
+			r.touchPage(fills[i])
+			cx += float32(g.XAdvance)
+			cy -= float32(g.YAdvance)
+		}
+	}
+
+	// Upload dirty pages once, before any textured quad samples them.
+	// Known edge (pre-existing): when the atlas exhausts its pages, a
+	// resolve can reset the oldest page, evicting glyphs resolved earlier
+	// in this pass that lived on it — their quads sample cleared texels
+	// and render blank for one frame until the next pass re-rasterizes
+	// them (ResetOccurred drops their cache entries). Self-healing, and
+	// only reachable under full-atlas thrash (> ~4k distinct glyphs).
+	r.atlas.SwapAndUpload()
+
 	// 1. Backgrounds.
 	for _, item := range layout.Items {
 		if !item.HasBgColor {
@@ -83,9 +157,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 				continue
 			}
 
-			cg := r.getOrLoadGlyph(layout.Text, item, g, 0,
-				item.StrokeWidth)
-			r.touchPage(cg)
+			cg := strokes[i]
 
 			if cg.Width > 0 && cg.Height > 0 &&
 				cg.Page >= 0 && cg.Page < len(r.atlas.Pages) {
@@ -121,14 +193,10 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 			}
 
 			targetX := cx + float32(g.XOffset)
-			drawOriginX, drawOriginY, bin := r.computeDrawOrigin(
+			drawOriginX, drawOriginY, _ := r.computeDrawOrigin(
 				targetX, cy-float32(g.YOffset))
-			if item.UseOriginalColor {
-				bin = 0
-			}
 
-			cg := r.getOrLoadGlyph(layout.Text, item, g, bin, 0)
-			r.touchPage(cg)
+			cg := fills[i]
 
 			if cg.Width > 0 && cg.Height > 0 &&
 				cg.Page >= 0 && cg.Page < len(r.atlas.Pages) {

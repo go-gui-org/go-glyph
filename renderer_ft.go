@@ -12,6 +12,34 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 	}
 	r.atlas.Cleanup(r.atlas.FrameCounter)
 
+	// Resolve (rasterize) every glyph before emitting any quad: hosts call
+	// Commit after their draw pass, so quads emitted in the same frame as
+	// rasterization would sample atlas texels still in CPU staging memory
+	// and the glyphs' first appearance would render blank (issue #89).
+	// Skipped glyphs keep a zero CachedGlyph, discarded by the Width > 0
+	// check in the emit pass below.
+	cgs := make([]CachedGlyph, len(layout.Glyphs))
+	for _, item := range layout.Items {
+		if item.HasStroke && item.Color.A == 0 {
+			continue
+		}
+		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
+			if i < 0 || i >= len(layout.Glyphs) {
+				continue
+			}
+			g := layout.Glyphs[i]
+			if (g.Index & PangoGlyphUnknownFlag) != 0 {
+				continue
+			}
+			placement := placements[i]
+			bin := r.computeSubpixelBin(placement.X, item.UseOriginalColor)
+			cgs[i] = r.getOrLoadGlyph(layout.Text, item, g, bin, 0)
+			r.touchPage(cgs[i])
+		}
+	}
+	// Upload dirty pages once, before any textured quad samples them.
+	r.atlas.SwapAndUpload()
+
 	for _, item := range layout.Items {
 		if item.HasStroke && item.Color.A == 0 {
 			continue
@@ -30,9 +58,7 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 				continue
 			}
 			placement := placements[i]
-			bin := r.computeSubpixelBin(placement.X, item.UseOriginalColor)
-			cg := r.getOrLoadGlyph(layout.Text, item, g, bin, 0)
-			r.touchPage(cg)
+			cg := cgs[i]
 			if cg.Width > 0 && cg.Height > 0 &&
 				cg.Page >= 0 && cg.Page < len(r.atlas.Pages) {
 				r.emitPlacedQuad(cg, placement, c,
