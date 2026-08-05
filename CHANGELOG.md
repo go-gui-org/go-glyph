@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.18.1] - 2026-08-05
+
+### Fixed
+
+- **Newline bytes are caret stops for paragraph cursor movement.** The caret
+  now stops at `\n` inside a paragraph when moving left/right through text,
+  so editing a multi-line paragraph behaves like an editor instead of
+  skipping to the paragraph start/end.
+
 ## [v1.18.0] - 2026-07-26
 
 ### Added
