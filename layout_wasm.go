@@ -307,9 +307,11 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 	charRectByIndex := make(map[int]int, len(chars))
 	layoutLines := make([]Line, 0, len(lines))
 	// +1: the end-of-text attr appended after the line loop must not force a
-	// regrowth copy of an exactly-sized slice.
-	logAttrs := make([]LogAttr, 0, len(chars)+1)
-	logAttrByIndex := make(map[int]int, len(chars)+1)
+	// regrowth copy of an exactly-sized slice. The newline attrs appended by
+	// the post-pass below add one entry per '\n' byte.
+	newlineAttrs := strings.Count(text, "\n")
+	logAttrs := make([]LogAttr, 0, len(chars)+1+newlineAttrs)
+	logAttrByIndex := make(map[int]int, len(chars)+1+newlineAttrs)
 
 	var totalWidth, totalHeight float64
 	lineY := float64(0)
@@ -475,6 +477,22 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 		}
 	}
 	totalHeight = lineY
+
+	// Newline bytes are never visited by the per-line char loop — each
+	// line's [startChar, endChar) range stops just before its terminating
+	// '\n' — but they are still caret stops: the byte index of a '\n' is
+	// the end of the current line, and in a "\n\n" run it is also the
+	// empty line separating paragraphs. Mirrors layout_ft.go.
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\n' {
+			attrIdx := len(logAttrs)
+			logAttrs = append(logAttrs, LogAttr{
+				IsCursorPosition: true,
+				IsLineBreak:      true,
+			})
+			logAttrByIndex[i] = attrIdx
+		}
+	}
 
 	endAttrIdx := len(logAttrs)
 	logAttrs = append(logAttrs, LogAttr{IsCursorPosition: true})
