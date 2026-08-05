@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.18.2] - 2026-08-05
+
+### Fixed
+
+- **Glyph atlas uploads now precede textured draws (one-frame lag).**
+  `drawLayoutImpl` and `DrawLayoutPlaced` resolve every glyph in the layout,
+  upload dirty atlas pages once, then emit quads. Previously the first
+  appearance of a glyph sampled CPU-staging texels and rendered blank for one
+  frame — most visible as text popping in one frame late.
+
 ## [v1.18.1] - 2026-08-05
 
 ### Fixed
