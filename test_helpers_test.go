@@ -7,6 +7,16 @@ type recordingBackend struct {
 	mockBackend
 	drawCalls   []drawCall
 	filledRects []filledRectCall
+	// ops is an ordered log of texture uploads and textured draws
+	// ("upload"/"draw" with the TextureID) for upload-ordering assertions.
+	ops []backendOp
+}
+
+// backendOp is a single recorded backend operation. kind is "upload"
+// (UpdateTexture) or "draw" (DrawTexturedQuad / ...Transformed).
+type backendOp struct {
+	kind string
+	id   TextureID
 }
 
 type drawCall struct {
@@ -27,7 +37,13 @@ func newRecordingBackend() *recordingBackend {
 	}
 }
 
+func (r *recordingBackend) UpdateTexture(id TextureID, data []byte) {
+	r.ops = append(r.ops, backendOp{kind: "upload", id: id})
+	r.mockBackend.UpdateTexture(id, data)
+}
+
 func (r *recordingBackend) DrawTexturedQuad(id TextureID, src, dst Rect, c Color) {
+	r.ops = append(r.ops, backendOp{kind: "draw", id: id})
 	r.drawCalls = append(r.drawCalls, drawCall{id, src, dst, c})
 }
 
@@ -37,6 +53,7 @@ func (r *recordingBackend) DrawFilledRect(dst Rect, c Color) {
 
 func (r *recordingBackend) DrawTexturedQuadTransformed(id TextureID,
 	src, dst Rect, c Color, t AffineTransform) {
+	r.ops = append(r.ops, backendOp{kind: "draw", id: id})
 	r.drawCalls = append(r.drawCalls, drawCall{id, src, dst, c})
 }
 
