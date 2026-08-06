@@ -17,6 +17,13 @@ type Renderer struct {
 	maxCacheEntries int
 	scaleFactor     float32
 	scaleInv        float32
+	// Scratch slices reused across draw calls so the resolve-then-emit
+	// passes (issue #89) don't allocate per call (issue #92). Each is
+	// consumed within a single draw call and never escapes; the Renderer
+	// is single-goroutine, so reuse is safe. They grow only when a
+	// layout's glyph count exceeds the previous high-water mark.
+	scratchFills   []CachedGlyph
+	scratchStrokes []CachedGlyph
 }
 
 // RendererConfig configures the Renderer.
@@ -105,6 +112,34 @@ func (r *Renderer) DrawLayoutTransformedWithGradient(layout Layout,
 }
 
 func (r *Renderer) Atlas() *GlyphAtlas { return r.atlas }
+
+// maxScratchGlyphs bounds how much scratch memory draw calls may retain.
+// Layouts produced through the public API are capped by MaxTextLength
+// (~10k runes, one glyph per cluster), so this leaves headroom for
+// legitimate layouts. Larger layouts can only come from a host-built
+// Layout struct; retaining their scratch forever would turn one bad draw
+// call into a permanent multi-MB hold, so they fall back to a transient
+// allocation (the pre-issue-#92 behavior).
+const maxScratchGlyphs = 16384
+
+// scratch returns a slice of n zeroed CachedGlyphs backed by *buf,
+// growing *buf only when its capacity is insufficient. Callers must not
+// retain the returned slice past the current draw call.
+func scratch(buf *[]CachedGlyph, n int) []CachedGlyph {
+	if n > maxScratchGlyphs {
+		return make([]CachedGlyph, n)
+	}
+	if cap(*buf) < n {
+		*buf = make([]CachedGlyph, n)
+	}
+	out := (*buf)[:n]
+	// Zero every slot: resolve passes leave skipped glyphs (unknown-flag,
+	// out-of-range) untouched, and the emit passes discard slots whose
+	// Width is 0. A stale entry from a previous call would otherwise emit
+	// a phantom quad.
+	clear(out)
+	return out
+}
 
 // evictSampleSize bounds the eviction probe: examine at most this many
 // entries and evict the oldest of the sample (approximate LRU, memcached
