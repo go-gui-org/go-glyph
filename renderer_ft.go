@@ -12,10 +12,12 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 	}
 	r.atlas.Cleanup(r.atlas.FrameCounter)
 
-	// Resolve (rasterize) every glyph before emitting any quad: hosts call
-	// Commit after their draw pass, so quads emitted in the same frame as
-	// rasterization would sample atlas texels still in CPU staging memory
-	// and the glyphs' first appearance would render blank (issue #89).
+	// Resolve (rasterize) every glyph before emitting any quad, so a
+	// mid-call atlas reset cannot leave this call's quads sampling
+	// evicted texels (issue #89). Uploads are deferred to Commit — hosts
+	// call it after their draw pass and before the render pass samples
+	// the textures, and batching the dirty pages there costs one
+	// full-page upload per frame per page instead of one per draw call.
 	// Skipped glyphs keep a zero CachedGlyph, discarded by the Width > 0
 	// check in the emit pass below.
 	cgs := make([]CachedGlyph, len(layout.Glyphs))
@@ -37,8 +39,9 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 			r.touchPage(cgs[i])
 		}
 	}
-	// Upload dirty pages once, before any textured quad samples them.
-	r.atlas.SwapAndUpload()
+	// Dirty pages are uploaded once per frame by Commit, never here: a
+	// per-call upload would transfer the whole page for every draw call
+	// that inserted a glyph (see the resolve-pass comment).
 
 	for _, item := range layout.Items {
 		if item.HasStroke && item.Color.A == 0 {
