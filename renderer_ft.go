@@ -19,8 +19,10 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 	// the textures, and batching the dirty pages there costs one
 	// full-page upload per frame per page instead of one per draw call.
 	// Skipped glyphs keep a zero CachedGlyph, discarded by the Width > 0
-	// check in the emit pass below.
-	cgs := make([]CachedGlyph, len(layout.Glyphs))
+	// check in the emit pass below. Reuses the fill scratch from
+	// drawLayoutImpl: DrawLayoutPlaced and drawLayoutImpl never nest, so
+	// the buffers cannot be live simultaneously (issue #92).
+	cgs := scratch(&r.scratchFills, len(layout.Glyphs))
 	for _, item := range layout.Items {
 		if item.HasStroke && item.Color.A == 0 {
 			continue

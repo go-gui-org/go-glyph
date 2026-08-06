@@ -51,8 +51,8 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 	// instead of one per draw call (a terminal frame issues hundreds of
 	// per-glyph calls; per-call uploads multiply 4 MiB page transfers
 	// into GB-scale traffic whenever new glyphs appear).
-	fills := make([]CachedGlyph, len(layout.Glyphs))
-	strokes := make([]CachedGlyph, len(layout.Glyphs))
+	fills := scratch(&r.scratchFills, len(layout.Glyphs))
+	strokes := scratch(&r.scratchStrokes, len(layout.Glyphs))
 
 	// Resolve stroke glyphs first, then fills: both must complete before
 	// the single upload so one upload covers every page touched here.
