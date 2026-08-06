@@ -98,7 +98,11 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 
 	if !covered && res == nil {
 		for _, fp := range orderedTextFallbackPaths(ch) {
-			r, rejected := renderMonoRun(atlas, fp, fontSize, subpixelShift,
+			// Same cap-height match the layout path applies, so a cluster
+			// rasterized here is the size it would be if it had been shaped
+			// into its own item.
+			r, rejected := renderMonoRun(atlas, fp,
+				fontSize*textFallbackFitScale(paths, fp), subpixelShift,
 				ch, runText, targetRuneIdx, true)
 			if !rejected {
 				res = r
@@ -159,7 +163,8 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 
 	if !covered && res == nil {
 		for _, fp := range orderedTextFallbackPaths(ch) {
-			r, rejected := renderStrokedRun(atlas, fp, fontSize, sw,
+			r, rejected := renderStrokedRun(atlas, fp,
+				fontSize*textFallbackFitScale(paths, fp), sw,
 				subpixelShift, ch, runText, targetRuneIdx, true)
 			if !rejected {
 				res = r
@@ -187,6 +192,7 @@ func loadGlyphByIDFT(atlas *GlyphAtlas, path string, gid uint32, item Item,
 	scaleFactor float32) (LoadGlyphResult, error) {
 
 	_, fontSize, _, _ := resolveFTFontParams(item.Style, scaleFactor)
+	fontSize *= itemFontScale(item)
 	subpixelShift := float64(subpixelBin) / 4.0
 	res := renderGlyphByID(atlas, path, fontSize, float64(strokeWidth),
 		subpixelShift, gid)

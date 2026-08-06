@@ -87,6 +87,11 @@ func hashGlyphStyle(key uint64, item Item, bin, targetH int,
 	key = fnvHashString(key, item.Style.FontName)
 	key = fnvHashF32(key, item.Style.Size)
 	key = fnvHashU64(key, uint64(item.Style.Typeface))
+	// A fallback item rasterizes at a cap-height-matched size, so two items
+	// sharing a font path and glyph id but not a fit factor are different
+	// rasters. Zero (the unscaled case) hashes as itself, so keys for items
+	// that predate the field are unchanged.
+	key = fnvHashF32(key, float32(item.FontScale))
 	return key
 }
 
