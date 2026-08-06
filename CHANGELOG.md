@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.19.0] - 2026-08-06
+
+### Added
+
+- **Fallback glyphs match the primary font's cap height.** Fallback faces
+  were opened at the primary font's pixel size, which equalizes the em, not
+  the visible letter size: a CJK or icon face reserves its em for other
+  shapes, so its Latin and symbol glyphs read as "small" next to the
+  surrounding text. Fallback faces now open at a size scaled by the cap-height
+  ratio (what kitty and WezTerm do), so fallback letters are as tall as the
+  primary's. `fallbackFitScale` measures the cap height lazily per face
+  (memoized, panic-recovered like the rest of the font path) and clamps the
+  correction to [0.8, 1.3] with a 0.02 deadband. Items split on size as well
+  as face, and the fit rides to the renderer on `Item.FontScale`. PUA clusters
+  are additionally re-ranked by Nerd Font probe coverage
+  (`rankIconFallbacks`), dropping candidates that cover no probe rune so an
+  unrelated glyph does not silently stand in for a missing icon.
+
+### Fixed
+
+- **Bare family key prefers the upright face on a weight tie.** When a
+  family name resolves to several faces of equal weight, the resolver now
+  picks the upright one instead of leaving the choice to registration order.
+- **Scratch `CachedGlyph` slices are reused across draw calls.** The
+  terminal steady-state frame path no longer allocates ~3000 slices per
+  frame (issue #92); `BenchmarkTerminalFrame1500` pins the target at 0
+  allocs/op.
+
 ## [v1.18.3] - 2026-08-06
 
 ### Fixed
