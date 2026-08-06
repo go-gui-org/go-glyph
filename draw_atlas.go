@@ -42,12 +42,15 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 	isIdentity := transform == AffineIdentity()
 
 	// Pass 1 — resolve (rasterize) every glyph in the layout before any
-	// textured quad is emitted. Hosts call Commit after their draw pass,
-	// so without an in-call upload the quads below would sample atlas
-	// texels still in CPU staging memory and a glyph's first appearance
-	// would render blank for one frame (issue #89). Dirty pages are
-	// uploaded once after resolution; warm frames (no inserts) only pay
-	// a scan of the (≤ MaxPages) page list.
+	// textured quad is emitted, so a mid-call atlas reset cannot leave
+	// earlier quads of this call sampling evicted texels (issue #89).
+	// The upload itself is deferred to Commit: hosts call Commit after
+	// their draw pass and before the render pass samples the textures,
+	// so frame-boundary uploads are visible to the same frame's quads —
+	// and batching them costs one full-page upload per frame per page
+	// instead of one per draw call (a terminal frame issues hundreds of
+	// per-glyph calls; per-call uploads multiply 4 MiB page transfers
+	// into GB-scale traffic whenever new glyphs appear).
 	fills := make([]CachedGlyph, len(layout.Glyphs))
 	strokes := make([]CachedGlyph, len(layout.Glyphs))
 
@@ -106,14 +109,15 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		}
 	}
 
-	// Upload dirty pages once, before any textured quad samples them.
-	// Known edge (pre-existing): when the atlas exhausts its pages, a
-	// resolve can reset the oldest page, evicting glyphs resolved earlier
-	// in this pass that lived on it — their quads sample cleared texels
-	// and render blank for one frame until the next pass re-rasterizes
+	// Dirty pages are uploaded once per frame by Commit, never here: a
+	// per-call upload would transfer the whole page for every draw call
+	// that inserted a glyph (see the Pass 1 comment). Known edge
+	// (pre-existing): when the atlas exhausts its pages, a resolve can
+	// reset the oldest page, evicting glyphs resolved earlier in this
+	// pass that lived on it — their quads sample cleared texels and
+	// render blank for one frame until the next pass re-rasterizes
 	// them (ResetOccurred drops their cache entries). Self-healing, and
 	// only reachable under full-atlas thrash (> ~4k distinct glyphs).
-	r.atlas.SwapAndUpload()
 
 	// 1. Backgrounds.
 	for _, item := range layout.Items {

@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v1.18.3] - 2026-08-06
+
+### Fixed
+
+- **Atlas uploads batch to the frame boundary (per-call upload storm).**
+  `drawLayoutImpl` and `DrawLayoutPlaced` defer dirty-page uploads to `Commit`
+  instead of uploading the whole atlas page per draw call. A terminal frame
+  issues hundreds of per-glyph text calls, so the v1.18.2 per-call upload
+  multiplied the 4 MiB page transfer into GB-scale main-thread traffic
+  whenever a frame rasterized any new glyph (measured: 1500 fresh glyphs cost
+  355 ms / 5.86 GB of uploads; frame-boundary batching costs 17 ms / 43 MB).
+  The issue-#89 guarantee is preserved — hosts call `Commit` after their draw
+  pass and before the render pass samples the textures, so the upload still
+  lands before the quads' first appearance.
 
 ## [v1.18.2] - 2026-08-05
 
