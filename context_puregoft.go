@@ -26,6 +26,7 @@ type Context struct {
 	metrics       metricsCache
 	fontPaths     map[string]string
 	fontWeights   map[string]font.Weight // weight backing each fontPaths key
+	fontItalics   map[string]bool        // italic flag backing each fontPaths key
 	fallbackPaths []string               // script fallback fonts (CJK, Arabic, etc.)
 	colorPaths    []string               // color-emoji fonts (CBDT/CBLC), render side
 
@@ -91,6 +92,7 @@ func NewContext(scaleFactor float32) (*Context, error) {
 		metrics:     newMetricsCache(256),
 		fontPaths:   make(map[string]string),
 		fontWeights: make(map[string]font.Weight),
+		fontItalics: make(map[string]bool),
 		families:    make(map[string]string),
 		lang:        detectLang(),
 	}
@@ -122,8 +124,8 @@ func (ctx *Context) AddFontFile(path string) error {
 	if !ok {
 		return fmt.Errorf("failed to parse font %q", path)
 	}
-	registerFontPath(ctx.fontPaths, ctx.fontWeights, ctx.families,
-		desc.Family, desc.Aspect, path)
+	registerFontPath(ctx.fontPaths, ctx.fontWeights, ctx.fontItalics,
+		ctx.families, desc.Family, desc.Aspect, path)
 	return nil
 }
 
@@ -207,12 +209,17 @@ func aspectBoldItalic(a font.Aspect) (bold, italic bool) {
 // (e.g. Book, Regular, and Medium all map to "-Regular"). To keep a
 // family with multiple weights from resolving to the wrong one, the
 // entry whose weight is closest to the bucket's canonical weight wins;
-// ties keep the first (preserving the user-fonts-first discovery order).
-// keyWeights tracks the stored weight per key and may be nil (no tie
-// resolution — first-wins), as when registering a single AddFontFile.
+// on a weight tie the upright face wins over an italic one (Regular and
+// Italic both carry WeightNormal, so without this the bare family key
+// could fall to an italic face that sorts first in the walk). Ties
+// otherwise keep the first (preserving the user-fonts-first discovery
+// order). keyWeights/keyItalics track the stored weight and italic flag
+// per key; both may be nil (no tie resolution — first-wins) for callers
+// that do not track them.
 func registerFontPath(fontPaths map[string]string,
-	keyWeights map[string]font.Weight, families map[string]string,
-	family string, aspect font.Aspect, path string) {
+	keyWeights map[string]font.Weight, keyItalics map[string]bool,
+	families map[string]string, family string, aspect font.Aspect,
+	path string) {
 	if family == "" {
 		return
 	}
@@ -230,12 +237,12 @@ func registerFontPath(fontPaths map[string]string,
 	}
 	bold, italic := aspectBoldItalic(aspect)
 	styleKey := family + styleSuffix(bold, italic)
-	considerFontKey(fontPaths, keyWeights, styleKey,
-		aspect.Weight, canonicalWeight(bold), path)
+	considerFontKey(fontPaths, keyWeights, keyItalics, styleKey,
+		aspect.Weight, italic, canonicalWeight(bold), path)
 	// The bare family key is the last-resort fallback in resolveFontPath,
 	// so it should hold the Regular-weight face when several weights exist.
-	considerFontKey(fontPaths, keyWeights, family,
-		aspect.Weight, font.WeightNormal, path)
+	considerFontKey(fontPaths, keyWeights, keyItalics, family,
+		aspect.Weight, italic, font.WeightNormal, path)
 }
 
 // listFontFamilies backs (*TextSystem).ListFontFamilies on native
@@ -259,14 +266,26 @@ func (ctx *Context) listFontFamilies() []string {
 }
 
 // considerFontKey records path under key when the key is unset, or when
-// weight is strictly closer to target than the weight already stored.
+// weight is strictly closer to target than the weight already stored. On a
+// weight tie the upright face wins over the stored italic one (mirroring
+// betterRegular, which the fallback tiers use): Regular and Italic both
+// carry WeightNormal, so without this rule the bare family key could end up
+// holding an italic face that merely sorted first in the directory walk.
+// keyItalics tracks the stored italic flag per key and must accompany
+// keyWeights (both nil disables tie resolution — first-wins). It may be
+// nil when keyWeights is non-nil, in which case only the weight-distance
+// comparison applies.
 func considerFontKey(fontPaths map[string]string,
-	keyWeights map[string]font.Weight, key string,
-	weight, target font.Weight, path string) {
+	keyWeights map[string]font.Weight, keyItalics map[string]bool,
+	key string, weight font.Weight, italic bool,
+	target font.Weight, path string) {
 	if _, exists := fontPaths[key]; !exists {
 		fontPaths[key] = path
 		if keyWeights != nil {
 			keyWeights[key] = weight
+			if keyItalics != nil {
+				keyItalics[key] = italic
+			}
 		}
 		return
 	}
@@ -277,9 +296,16 @@ func considerFontKey(fontPaths map[string]string,
 	if !ok {
 		return
 	}
-	if weightDist(weight, target) < weightDist(prev, target) {
+	prevDist := weightDist(prev, target)
+	newDist := weightDist(weight, target)
+	if newDist < prevDist ||
+		// Weight ties: upright beats the stored italic face.
+		(newDist == prevDist && keyItalics != nil && keyItalics[key] && !italic) {
 		fontPaths[key] = path
 		keyWeights[key] = weight
+		if keyItalics != nil {
+			keyItalics[key] = italic
+		}
 	}
 }
 
@@ -427,7 +453,8 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 		return
 	}
 	family := desc.Family
-	registerFontPath(s.ctx.fontPaths, s.ctx.fontWeights, s.ctx.families, family, desc.Aspect, path)
+	registerFontPath(s.ctx.fontPaths, s.ctx.fontWeights, s.ctx.fontItalics,
+		s.ctx.families, family, desc.Aspect, path)
 
 	// Register the generic alias on first match.
 	lowerFam := strings.ToLower(family)
