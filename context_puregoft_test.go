@@ -170,10 +170,10 @@ func TestRegisterFontPathWeightSelection(t *testing.T) {
 	weights := map[string]font.Weight{}
 
 	// Medium walked before Regular must not keep the "-Regular"/bare slots.
-	registerFontPath(paths, weights, nil, "Foo", norm(font.WeightMedium), "medium.ttf")
-	registerFontPath(paths, weights, nil, "Foo", norm(font.WeightNormal), "regular.ttf")
+	registerFontPath(paths, weights, nil, nil, "Foo", norm(font.WeightMedium), "medium.ttf")
+	registerFontPath(paths, weights, nil, nil, "Foo", norm(font.WeightNormal), "regular.ttf")
 	// A later Book (380) is farther from 400 than Regular, so Regular stays.
-	registerFontPath(paths, weights, nil, "Foo", norm(font.WeightNormal-20), "book.ttf")
+	registerFontPath(paths, weights, nil, nil, "Foo", norm(font.WeightNormal-20), "book.ttf")
 
 	if got := paths["Foo-Regular"]; got != "regular.ttf" {
 		t.Errorf("Foo-Regular = %q, want regular.ttf", got)
@@ -183,27 +183,104 @@ func TestRegisterFontPathWeightSelection(t *testing.T) {
 	}
 
 	// Bold bucket: Bold(700) is canonical; a heavier Black(900) must not win.
-	registerFontPath(paths, weights, nil, "Foo", font.Aspect{
+	registerFontPath(paths, weights, nil, nil, "Foo", font.Aspect{
 		Style: font.StyleNormal, Weight: font.WeightBlack}, "black.ttf")
-	registerFontPath(paths, weights, nil, "Foo", font.Aspect{
+	registerFontPath(paths, weights, nil, nil, "Foo", font.Aspect{
 		Style: font.StyleNormal, Weight: font.WeightBold}, "bold.ttf")
 	if got := paths["Foo-Bold"]; got != "bold.ttf" {
 		t.Errorf("Foo-Bold = %q, want bold.ttf", got)
 	}
 
 	// Exact-weight tie keeps the first registration (user-fonts-first order).
-	registerFontPath(paths, weights, nil, "Bar", norm(font.WeightNormal), "user.ttf")
-	registerFontPath(paths, weights, nil, "Bar", norm(font.WeightNormal), "system.ttf")
+	registerFontPath(paths, weights, nil, nil, "Bar", norm(font.WeightNormal), "user.ttf")
+	registerFontPath(paths, weights, nil, nil, "Bar", norm(font.WeightNormal), "system.ttf")
 	if got := paths["Bar-Regular"]; got != "user.ttf" {
 		t.Errorf("Bar-Regular = %q, want user.ttf (first wins on tie)", got)
 	}
 
 	// nil keyWeights disables tie resolution (first-wins), as in AddFontFile.
 	p2 := map[string]string{}
-	registerFontPath(p2, nil, nil, "Baz", norm(font.WeightMedium), "medium.ttf")
-	registerFontPath(p2, nil, nil, "Baz", norm(font.WeightNormal), "regular.ttf")
+	registerFontPath(p2, nil, nil, nil, "Baz", norm(font.WeightMedium), "medium.ttf")
+	registerFontPath(p2, nil, nil, nil, "Baz", norm(font.WeightNormal), "regular.ttf")
 	if got := p2["Baz-Regular"]; got != "medium.ttf" {
 		t.Errorf("Baz-Regular = %q, want medium.ttf (nil weights = first-wins)", got)
+	}
+}
+
+// TestRegisterFontPathItalicTiebreak verifies that the bare family key —
+// which resolveFontPath uses as its last-resort fallback — prefers the
+// upright face over an italic one when their weights tie. Regular and
+// Italic both carry WeightNormal, so without this rule the first file in
+// the directory walk wins, and a Nerd Font family whose -Italic.ttf sorts
+// before -Regular.ttf would resolve the bare key to the italic face.
+func TestRegisterFontPathItalicTiebreak(t *testing.T) {
+	ital := func(w font.Weight) font.Aspect {
+		return font.Aspect{Style: font.StyleItalic, Weight: w}
+	}
+
+	// Italic discovered before Regular: the bare key must hold the upright
+	// face regardless of walk order, while each style key keeps its own.
+	paths := map[string]string{}
+	weights := map[string]font.Weight{}
+	italics := map[string]bool{}
+	registerFontPath(paths, weights, italics, nil, "Foo", ital(font.WeightNormal), "italic.ttf")
+	registerFontPath(paths, weights, italics, nil, "Foo", font.Aspect{
+		Style: font.StyleNormal, Weight: font.WeightNormal}, "regular.ttf")
+	if got := paths["Foo"]; got != "regular.ttf" {
+		t.Errorf("Foo (bare) = %q, want regular.ttf (upright beats italic on tie)", got)
+	}
+	if got := paths["Foo-Italic"]; got != "italic.ttf" {
+		t.Errorf("Foo-Italic = %q, want italic.ttf", got)
+	}
+	if got := paths["Foo-Regular"]; got != "regular.ttf" {
+		t.Errorf("Foo-Regular = %q, want regular.ttf", got)
+	}
+
+	// Reverse order: Regular first, Italic second — same result.
+	paths2 := map[string]string{}
+	weights2 := map[string]font.Weight{}
+	italics2 := map[string]bool{}
+	registerFontPath(paths2, weights2, italics2, nil, "Bar", font.Aspect{
+		Style: font.StyleNormal, Weight: font.WeightNormal}, "regular.ttf")
+	registerFontPath(paths2, weights2, italics2, nil, "Bar", ital(font.WeightNormal), "italic.ttf")
+	if got := paths2["Bar"]; got != "regular.ttf" {
+		t.Errorf("Bar (bare) = %q, want regular.ttf (stored upright kept)", got)
+	}
+
+	// Weight still dominates the tie-break: a Bold face is farther from
+	// Normal than an italic Regular, so the bare key keeps the italic face.
+	paths3 := map[string]string{}
+	weights3 := map[string]font.Weight{}
+	italics3 := map[string]bool{}
+	registerFontPath(paths3, weights3, italics3, nil, "Baz", ital(font.WeightNormal), "italic.ttf")
+	registerFontPath(paths3, weights3, italics3, nil, "Baz", font.Aspect{
+		Style: font.StyleNormal, Weight: font.WeightBold}, "bold.ttf")
+	if got := paths3["Baz"]; got != "italic.ttf" {
+		t.Errorf("Baz (bare) = %q, want italic.ttf (closer to Regular weight)", got)
+	}
+
+	// nil keyItalics (with keyWeights non-nil) disables the upright
+	// tie-break: italic still wins by first-seen order.
+	p4 := map[string]string{}
+	w4 := map[string]font.Weight{}
+	registerFontPath(p4, w4, nil, nil, "Qux", ital(font.WeightNormal), "italic.ttf")
+	registerFontPath(p4, w4, nil, nil, "Qux", font.Aspect{
+		Style: font.StyleNormal, Weight: font.WeightNormal}, "regular.ttf")
+	if got := p4["Qux"]; got != "italic.ttf" {
+		t.Errorf("Qux (bare) = %q, want italic.ttf (nil keyItalics = first-wins)", got)
+	}
+
+	// Italic-vs-italic weight tie keeps the first: the upright tie-break
+	// only fires when the stored face is italic and the new one is not.
+	paths5 := map[string]string{}
+	weights5 := map[string]font.Weight{}
+	italics5 := map[string]bool{}
+	registerFontPath(paths5, weights5, italics5, nil, "Frob",
+		ital(font.WeightNormal), "italic-a.ttf")
+	registerFontPath(paths5, weights5, italics5, nil, "Frob",
+		ital(font.WeightNormal), "italic-b.ttf")
+	if got := paths5["Frob"]; got != "italic-a.ttf" {
+		t.Errorf("Frob (bare) = %q, want italic-a.ttf (first italic wins)", got)
 	}
 }
 
@@ -387,11 +464,13 @@ func TestListFontFamiliesForwardReverse(t *testing.T) {
 	defer ctx2.Free()
 
 	// Add a font file we know is in the test fixtures.
-	registerFontPath(ctx2.fontPaths, ctx2.fontWeights, ctx2.families,
+	registerFontPath(ctx2.fontPaths, ctx2.fontWeights, ctx2.fontItalics,
+		ctx2.families,
 		"TestForward", font.Aspect{Style: font.StyleNormal, Weight: font.WeightNormal},
 		"/nonexistent.ttf")
 	// Same family with a different style should NOT duplicate.
-	registerFontPath(ctx2.fontPaths, ctx2.fontWeights, ctx2.families,
+	registerFontPath(ctx2.fontPaths, ctx2.fontWeights, ctx2.fontItalics,
+		ctx2.families,
 		"TestForward", font.Aspect{Style: font.StyleNormal, Weight: font.WeightBold},
 		"/nonexistent-bold.ttf")
 
@@ -409,7 +488,8 @@ func TestListFontFamiliesForwardReverse(t *testing.T) {
 	}
 
 	// Leading-"." names should not appear.
-	registerFontPath(ctx2.fontPaths, ctx2.fontWeights, ctx2.families,
+	registerFontPath(ctx2.fontPaths, ctx2.fontWeights, ctx2.fontItalics,
+		ctx2.families,
 		".PrivateFont", font.Aspect{Style: font.StyleNormal, Weight: font.WeightNormal},
 		"/private.ttf")
 	fams2 = ts2.ListFontFamilies()
@@ -426,10 +506,12 @@ func TestListFontFamiliesForwardReverse(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ctx3.Free()
-	registerFontPath(ctx3.fontPaths, ctx3.fontWeights, ctx3.families,
+	registerFontPath(ctx3.fontPaths, ctx3.fontWeights, ctx3.fontItalics,
+		ctx3.families,
 		"Helvetica", font.Aspect{Style: font.StyleNormal, Weight: font.WeightNormal},
 		"/helvetica.ttf")
-	registerFontPath(ctx3.fontPaths, ctx3.fontWeights, ctx3.families,
+	registerFontPath(ctx3.fontPaths, ctx3.fontWeights, ctx3.fontItalics,
+		ctx3.families,
 		"HELVETICA", font.Aspect{Style: font.StyleNormal, Weight: font.WeightBold},
 		"/helvetica-caps.ttf")
 
