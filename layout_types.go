@@ -74,6 +74,12 @@ type Item struct {
 	// directly by id from this font, skipping re-shaping.
 	FontPath string
 
+	// FontScale multiplies the style's pixel size when rasterizing this
+	// item's glyphs. Set for fallback runs whose face was opened at a
+	// cap-height-matched size (see fallbackFitScale) so the raster matches
+	// what layout shaped. Zero means "unset" and is read as 1.
+	FontScale float64
+
 	Width   float64
 	X       float64 // Run position relative to layout.
 	Y       float64 // Baseline y relative to layout.

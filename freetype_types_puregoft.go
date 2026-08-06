@@ -27,15 +27,20 @@ var colorTableTags = []ot.Tag{
 
 // cachedFace holds a parsed go-text face plus the cheap-to-read
 // attributes the backend queries repeatedly. The parsed face is shared
-// across ftFont values; its only mutable state is the bitmap ppem, set
-// under mu by the color-glyph path (renderColorGlyph), so concurrent
-// color renders across Contexts cannot corrupt each other's strike
-// selection.
+// across ftFont values; its mutable state is the bitmap ppem (set under
+// mu by the color-glyph path) and the extent cache GlyphExtents fills
+// (read under mu by capEm), so concurrent renders/measurements across
+// Contexts cannot corrupt each other's strike selection or measurements.
 type cachedFace struct {
 	mu    sync.Mutex // guards ppem-dependent access to face (SetPpem+GlyphData)
 	face  *font.Face
 	upem  uint16
 	color bool
+	// cap is the face's cap height in em units, measured lazily by capEm for
+	// the fallback fit scale; capMeasured distinguishes "not yet measured"
+	// from "measured, this face has no cap height".
+	cap         float64
+	capMeasured bool
 	// hbPool recycles HarfBuzz shaping fonts. NewFont builds the face's
 	// shaping accelerators and is the single largest source of layout
 	// allocations, so rebuilding one per shape (per line) is wasteful. A Font
@@ -196,11 +201,16 @@ func hasColorTable(ld *ot.Loader) bool {
 // pixel size. It mirrors the method set of the cgo ftFont so the shared
 // layout code (layout_ft.go) is platform-agnostic.
 type ftFont struct {
-	face  *font.Face // parsed face; nil means "failed to open"
-	cf    *cachedFace
-	path  string  // file path the face was loaded from (by-glyph-id render)
-	size  float64 // physical pixel size (already includes scaleFactor)
-	scale int32   // 26.6 shaping scale = round(size*64)
+	face *font.Face // parsed face; nil means "failed to open"
+	cf   *cachedFace
+	path string  // file path the face was loaded from (by-glyph-id render)
+	size float64 // physical pixel size (already includes scaleFactor)
+	// fit is the cap-height match factor already folded into size for a
+	// fallback face (see fallbackFitScale). 0 means none was applied. The
+	// renderer needs it to rasterize at the size layout shaped with, since it
+	// re-derives the size from the item's style rather than from size here.
+	fit   float64
+	scale int32 // 26.6 shaping scale = round(size*64)
 	upem  uint16
 }
 
@@ -408,6 +418,11 @@ func faceCovers(face *font.Face, text string) bool {
 type coverage struct {
 	cmap  font.Cmap
 	color bool
+	// iconScore counts the iconProbeRunes this font maps (see
+	// scoreIconCoverage). It ranks Private Use Area candidates, where plain
+	// coverage cannot tell a real icon font from a text face squatting a few
+	// PUA slots with unrelated shapes.
+	iconScore int8
 }
 
 // covers reports whether the cmap maps every non-ignorable rune in text,
@@ -502,7 +517,9 @@ func parseCoverage(path string) (cov *coverage) {
 	if err != nil {
 		return nil
 	}
-	return &coverage{cmap: cm, color: hasColorTable(ld)}
+	cov = &coverage{cmap: cm, color: hasColorTable(ld)}
+	cov.iconScore = scoreIconCoverage(cov)
+	return cov
 }
 
 // warmFallbackOnce gates the background warm to once per process: the
@@ -557,6 +574,11 @@ func warmFallbackCoverage(fallbackPaths []string) {
 // color-emoji font that merely sorts earlier. Coverage is a cmap lookup via the
 // resident coverage cache (no shaping, no face parse), matching how the base
 // coverage check decides.
+//
+// Within the monochrome group a Private Use Area cluster is re-ranked by icon
+// coverage (rankIconFallbacks): tier order is meaningless for PUA, where the
+// first covering font is routinely a text face that maps the slot to an
+// unrelated glyph.
 func orderTextFallbacks(fallbackPaths []string, text string) (mono, color []string) {
 	for _, path := range fallbackPaths {
 		cov := loadCoverage(path)
@@ -569,7 +591,7 @@ func orderTextFallbacks(fallbackPaths []string, text string) (mono, color []stri
 			mono = append(mono, path)
 		}
 	}
-	return mono, color
+	return rankIconFallbacks(mono, text), color
 }
 
 // isDefaultIgnorable reports whether r is a Unicode default-ignorable code

@@ -77,11 +77,17 @@ func (ctx *Context) buildScriptFallbacks(clusters []graphemeCluster,
 
 	// ensureFont builds (once) the shaping ftFont for a chosen fallback path.
 	// Only fonts actually selected for a cluster get a HarfBuzz font; probing
-	// uses the cached face's cmap and never allocates a shaper.
+	// uses the cached face's cmap and never allocates a shaper. The face opens
+	// at the cap-height-matched size (fallbackFitScale), not the primary's
+	// size, so the fallback's letters are as tall as the surrounding text; the
+	// glyphs are shaped at that size too, so advances stay consistent with
+	// what the renderer rasterizes.
 	ensureFont := func(path string) ftFont {
 		fb, opened := fontByPath[path]
 		if !opened {
-			fb = newFTFontFromPath(ctx.ftLib, path, fontSize)
+			fit := fallbackFitScale(baseFont.cf, loadCachedFace(path))
+			fb = newFTFontFromPath(ctx.ftLib, path, fontSize*fit)
+			fb.fit = fit
 			fontByPath[path] = fb
 			if fb.face != nil {
 				fontsToClose = append(fontsToClose, fb)
@@ -455,10 +461,16 @@ func (ctx *Context) applyRichScriptFallbacks(clusters []graphemeCluster,
 		if res.path == "" {
 			continue // no fallback: run font renders (tofu)
 		}
-		fb := ensureFont(res.path, runFont.size)
+		// Cap-height matched against the run's own font, so a fallback inside
+		// a heading scales off the heading rather than the body text. The
+		// scaled size is part of fontKey, so two runs at different sizes keep
+		// their own faces.
+		fit := fallbackFitScale(runFont.cf, loadCachedFace(res.path))
+		fb := ensureFont(res.path, runFont.size*fit)
 		if fb.face == nil {
 			continue
 		}
+		fb.fit = fit
 		ov.font = fb
 		ov.isColor = res.isColor
 		ov.isRichRun = true
@@ -958,6 +970,12 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 		itemStyleKey := uint64(0)
 		itemFace := baseFont.face
 		itemPath := baseFont.path
+		// itemSize is the pixel size the item's glyphs were shaped at, and
+		// itemFit the cap-height match folded into it. The renderer re-derives
+		// the size from the item's style, so it needs the factor, not the
+		// size: a rich-text run's own size already rides on Item.Style.
+		itemSize := baseFont.size
+		itemFit := baseFont.fit
 		// Logical byte span of the current item. Clusters are visited in
 		// visual order, so for an RTL run the first-visited cluster is the
 		// logical last; track min/max to keep StartIndex/Length logical.
@@ -989,6 +1007,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 				StartIndex:             itemMinByte,
 				Length:                 length,
 				FontPath:               itemPath,
+				FontScale:              itemFit,
 				Color:                  baseColor,
 				UseOriginalColor:       useOrig,
 				UnderlineOffset:        2.0,
@@ -1023,10 +1042,15 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 			// single-script run, so the renderer reshapes exactly the run the
 			// layout measured — essential for Arabic joining/ligatures, which
 			// break when a mixed-script line is shaped as one unit.
+			// The size is part of the split test alongside the face: the same
+			// face can appear at two sizes (a rich-text size run, or a
+			// cap-height-matched fallback next to the same font used
+			// unscaled), and one item carries a single FontScale.
 			face := charFonts[ci].face
+			size := charFonts[ci].size
 			if len(allGlyphs) > itemStart &&
 				(ch.isColor != itemColor || ch.styleKey != itemStyleKey ||
-					face != itemFace) {
+					face != itemFace || size != itemSize) {
 				flushItem(itemColor)
 				itemX = cx
 				itemFirst = true
@@ -1034,6 +1058,8 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 			itemColor = ch.isColor
 			itemStyleKey = ch.styleKey
 			itemFace = face
+			itemSize = size
+			itemFit = charFonts[ci].fit
 			itemPath = charFonts[ci].path
 			if itemFirst {
 				itemMinByte = ch.byteI
