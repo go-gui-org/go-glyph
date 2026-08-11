@@ -1,4 +1,4 @@
-// Package showcase_sections contains the 22 showcase section
+// Package showcase_sections contains the 23 showcase section
 // drawing functions shared by showcase_gpu and showcase_web.
 package showcase_sections
 
@@ -45,7 +45,7 @@ const (
 	SectionGap = 30
 )
 
-// BuildSections returns all 22 showcase sections.
+// BuildSections returns all 23 showcase sections.
 func BuildSections() []Section {
 	return []Section{
 		{"INTRO", 100, DrawIntro},
@@ -66,6 +66,7 @@ func BuildSections() []Section {
 		{"TEXT ON PATH", 290, DrawPathText},
 		{"SKEWED TEXT", 160, DrawSkewed},
 		{"SUBPIXEL RENDERING", 120, DrawSubpixel},
+		{"BOX DRAWING", 130, DrawBoxDrawing},
 		{"HIT TESTING", 100, DrawHitTest},
 		{"DIRECT TEXT RENDERING", 160, DrawDirectText},
 		{"TRANSFORMS", 180, DrawTransforms},

@@ -343,6 +343,11 @@ func (ts *TextSystem) getCacheKey(text string, cfg TextConfig) uint64 {
 	h = fnvHashF32(h, cfg.Style.LetterSpacing)
 	h = fnvHashF32(h, cfg.Style.StrokeWidth)
 	h = fnvHashColor(h, cfg.Style.StrokeColor)
+	// Cell size and the box-glyph opt-out affect rasterization, not layout,
+	// but a cached Layout carries its Items' Style forward to the renderer,
+	// so leaving them out would silently pin the first call's values.
+	h = fnvHashF32(h, cfg.Style.CellWidth)
+	h = fnvHashF32(h, cfg.Style.CellHeight)
 
 	// Pack scalar fields.
 	packed := uint64(cfg.Style.Typeface)
@@ -359,6 +364,10 @@ func (ts *TextSystem) getCacheKey(text string, cfg TextConfig) uint64 {
 	}
 	if cfg.NoHitTesting {
 		packed |= 1 << 15
+	}
+	// Bit 24 keeps clear of Orientation, which occupies bits 16 and up.
+	if cfg.Style.NoBuiltinBoxGlyphs {
+		packed |= 1 << 24
 	}
 	packed |= uint64(cfg.Orientation) << 16
 	h = fnvHashU64(h, packed)

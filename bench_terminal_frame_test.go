@@ -8,20 +8,33 @@ import "testing"
 // bin 0). Steady state = glyph cache warm; the issue target is 0
 // allocs/op after the scratch-buffer fix (was ~3000/frame).
 func BenchmarkTerminalFrame1500(b *testing.B) {
+	benchTerminalFrame(b, []string{"a", "e", "fg", "hi", "l", "m", "n", "o",
+		"p", "rs", "t", "uv", "w", "x", "y", "z", " "}, TextConfig{})
+}
+
+// BenchmarkTerminalFrameBoxDrawing is the same frame drawn from the
+// codepoints the built-in rasterizer owns (issue #99), with the grid
+// caller's real cell declared. Same target: 0 allocs/op in steady state.
+func BenchmarkTerminalFrameBoxDrawing(b *testing.B) {
+	benchTerminalFrame(b, []string{"─", "│", "┌", "┐", "└", "┘", "├", "┤",
+		"┬", "┴", "┼", "═", "║", "╔", "╬", "█", "▀", "▄", "░", "▒", "╭"},
+		TextConfig{Style: TextStyle{CellWidth: 12, CellHeight: 16}})
+}
+
+func benchTerminalFrame(b *testing.B, cellTexts []string, cfg TextConfig) {
+	b.Helper()
 	ctx, err := NewContext(1.0)
 	if err != nil {
 		b.Fatal(err)
 	}
 	defer ctx.Free()
 
-	cellTexts := []string{"a", "e", "fg", "hi", "l", "m", "n", "o",
-		"p", "rs", "t", "uv", "w", "x", "y", "z", " "}
 	const cells = 1500
 	layouts := make([]Layout, cells)
 	xs := make([]float32, cells)
 	ys := make([]float32, cells)
 	for i := range layouts {
-		l, err := ctx.LayoutText(cellTexts[i%len(cellTexts)], TextConfig{})
+		l, err := ctx.LayoutText(cellTexts[i%len(cellTexts)], cfg)
 		if err != nil {
 			b.Fatal(err)
 		}

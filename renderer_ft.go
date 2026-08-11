@@ -106,6 +106,18 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 	}
 	targetH := max(1, int(float32(item.Ascent)*r.scaleFactor))
 
+	// Box-drawing, block-element and Powerline codepoints are drawn
+	// procedurally at cell size and snapped to whole physical pixels, so
+	// every cell in a run gets the same stroke weight at the same offset and
+	// neighbours abut (issue #99). Single-rune clusters only: a combining
+	// mark on a box character is vanishingly rare, and the font path already
+	// handles it correctly.
+	var boxM boxMetrics
+	isBox := false
+	if cp, n := utf8.DecodeRuneInString(ch); n == len(ch) {
+		boxM, isBox = boxMetricsFor(item, g, cp, r.scaleFactor)
+	}
+
 	// When layout resolved a concrete glyph id and its font, rasterize by id
 	// directly (no re-shaping). Otherwise fall back to text-based shaping,
 	// which handles color emoji, unloaded fonts, and ligature-absorbed
@@ -113,13 +125,16 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 	// the font's box glyph — so unsupported scripts (tofu) share one atlas
 	// entry per font instead of re-shaping the whole run per distinct
 	// codepoint on every scroll re-render.
-	byID := item.FontPath != "" && (g.GlyphID != 0 || g.Shaped)
+	byID := !isBox && item.FontPath != "" && (g.GlyphID != 0 || g.Shaped)
 
 	var runText string
 	var targetRuneIdx int
 
 	key := fnvOffsetBasis
-	if byID {
+	switch {
+	case isBox:
+		key = hashBoxGlyph(key, boxM)
+	case byID:
 		// The render size comes from resolveFTFontParams(item.Style), which
 		// reads FontName when Style.Size is 0 (size encoded as "Sans 16").
 		// FontName and Size share one .ttf FontPath, so both are needed (via
@@ -127,7 +142,7 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 		key = fnvHashU64(key, uint64(g.GlyphID))
 		key = fnvHashString(key, item.FontPath)
 		key = hashGlyphStyle(key, item, bin, targetH, strokeWidth)
-	} else {
+	default:
 		runText, targetRuneIdx = computeRunText(text, item, g)
 		key = fnvHashString(key, ch)
 		key = hashGlyphStyle(key, item, bin, targetH, strokeWidth)
@@ -155,6 +170,8 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 	var result LoadGlyphResult
 	var loadErr error
 	switch {
+	case isBox:
+		result, loadErr = loadBoxGlyphFT(r.atlas, boxM)
 	case byID:
 		result, loadErr = loadGlyphByIDFT(r.atlas, item.FontPath,
 			g.GlyphID, item, strokeWidth, bin, r.scaleFactor)

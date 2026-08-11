@@ -3,6 +3,7 @@ package showcase_sections
 import (
 	"fmt"
 	"math"
+	"unicode/utf8"
 
 	"github.com/go-gui-org/go-glyph"
 )
@@ -690,4 +691,77 @@ func DrawTransforms(a *App, x, y, w float32) {
 			a.TS.DrawLayoutTransformed(l, x+s.dx, y+s.dy+18, s.transform)
 		}
 	}
+}
+
+// DrawBoxDrawing shows the built-in box-drawing rasterizer against the
+// font's own glyphs. Both panels draw the same frame cell by cell on the
+// same grid; the left one lets go-glyph synthesize U+2500-259F at cell
+// size, the right one opts out with NoBuiltinBoxGlyphs. The difference to
+// look for is along the runs: uneven stroke weight, banding down the
+// verticals, and nicks where one cell's glyph ends before the next begins.
+func DrawBoxDrawing(a *App, x, y, w float32) {
+	// A deliberately fractional cell width: at an integer advance the two
+	// panels would differ only in weight, and the join artifact — the one
+	// the caller cannot fix by snapping — would not appear at all.
+	const cellW, cellH = 10.5, 20
+
+	frame := []string{
+		"┌────┬────┐ ╔═══╗ █▀▄░▒▓",
+		"│    │    │ ║   ║ ├──┼──┤",
+		"╞════╪════╡ ╚═══╝ ╭──┴──╮",
+	}
+
+	// Widest row drives the panel pitch, so the two panels stay clear of each
+	// other whatever the frame content, and both stay inside w.
+	cols := 0
+	for _, line := range frame {
+		cols = max(cols, utf8.RuneCountInString(line))
+	}
+	pitch := min(float32(cols)*cellW+24, w/2)
+
+	panels := []struct {
+		label   string
+		builtin bool
+		dx      float32
+	}{
+		{"built-in (cell-sized, pixel-snapped)", true, 0},
+		{"font glyphs (NoBuiltinBoxGlyphs)", false, pitch},
+	}
+
+	for _, p := range panels {
+		_ = a.TS.DrawText(x+p.dx, y, p.label, glyph.TextConfig{
+			Style: glyph.TextStyle{FontName: "Sans 10", Color: DimColor},
+		})
+
+		style := glyph.TextStyle{
+			FontName: "Monospace 14",
+			Color:    Accent,
+			// Declaring the real cell is what makes neighbouring cells abut
+			// exactly; without it the built-in path falls back to the glyph
+			// advance and overlaps by the fractional part.
+			CellWidth:          cellW,
+			CellHeight:         cellH,
+			NoBuiltinBoxGlyphs: !p.builtin,
+		}
+
+		for row, line := range frame {
+			ry := y + 22 + float32(row)*cellH
+			col := 0
+			for _, r := range line {
+				// One draw call per cell, at the cell origin — the same way a
+				// terminal emits a frame, and the reason the sub-pixel phase
+				// varies from cell to cell.
+				_ = a.TS.DrawText(x+p.dx+float32(col)*cellW, ry, string(r),
+					glyph.TextConfig{Style: style})
+				col++
+			}
+		}
+	}
+
+	_ = a.TS.DrawText(x, y+22+3*cellH+8,
+		"Left: integer stroke weight, stems at the same offset in every "+
+			"cell, full-cell extent. Right: whatever the font ships.",
+		glyph.TextConfig{
+			Style: glyph.TextStyle{FontName: "Sans 12", Color: DimColor},
+		})
 }

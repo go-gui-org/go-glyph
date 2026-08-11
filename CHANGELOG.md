@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Box-drawing and block-element characters are now drawn procedurally at cell
+  size.** Rendering U+2500–257F and U+2580–259F through the font gives visibly
+  uneven TUI frames, and three separate causes stack. The cell origin's
+  sub-pixel phase renders a 1px stem crisp in bin 0 and split across two columns
+  in the others, so a fractional cell advance walks the bins and the border
+  alternates between crisp and half-lit. A font's box glyph need not span the
+  full advance or line box, so neighbouring cells gap at the join — and by how
+  much is font-dependent. And the stem thickness comes from the font's design at
+  that ppem, so it is not an integer number of pixels. Snapping at the caller
+  fixes only the first. These codepoints now bypass the font entirely: every
+  dimension is in whole physical pixels, stems are centered by integer division
+  so the same weight lands at the same offset in every cell, and the drawn
+  extent is the full cell box so neighbours abut. Shades (U+2591–2593) are
+  uniform coverage fills rather than the font's stipple, so they stay flat under
+  scaling. kitty, Alacritty, WezTerm and Ghostty all do this, for the same
+  reasons (issue #99).
+
+  On by default. `TextStyle.NoBuiltinBoxGlyphs` keeps the font's own glyphs;
+  stroked runs (`StrokeWidth` > 0) always use the font, since a built-in fill
+  inside a font-derived outline would not match. The cell defaults to
+  `ceil(advance × scale)` by the run's ascent+descent, which fixes the weight
+  and the phase but leaves a sub-pixel overlap wherever the advance is
+  fractional — grid callers should set `TextStyle.CellWidth` and `CellHeight` to
+  their real cell, which is what makes the joins exact. The atlas key is the
+  cell geometry alone: the sub-pixel bin is deliberately absent (four identical
+  copies would reintroduce the phase variation) and so is the font identity, so
+  two faces at one cell size share the entry and a frame looks the same
+  whichever monospace face the user picked. The WASM backend redraws text with
+  Canvas2D instead of rasterizing, so it keeps the font's glyphs.
+
+- **Powerline separators U+E0B0–E0B3 are drawn when the font has none.** These
+  are private-use codepoints, so a patched Nerd Font legitimately owns them and
+  draws them to match the rest of its E0Bx family. Synthesis is therefore gated
+  on an authoritative `.notdef` from the item's own face: the alternative in
+  that case is tofu, not a different look.
+
 ## [v1.19.0] - 2026-08-06
 
 ### Added
