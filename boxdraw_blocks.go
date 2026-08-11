@@ -37,17 +37,17 @@ func blockOp(e uint16) uint16   { return (e >> 4) & 7 }
 func blockEdge(e uint16) uint16 { return (e >> 7) & 3 }
 
 // drawBoxBlock renders one U+2580-259F codepoint.
-func drawBoxBlock(dst []byte, m boxMetrics, e uint16) {
+func drawBoxBlock(s boxSink, m boxMetrics, e uint16) {
 	switch blockOp(e) {
 	case boxBlockFill:
-		drawBlockFill(dst, m, blockParam(e), blockEdge(e))
+		drawBlockFill(s, m, blockParam(e), blockEdge(e))
 	case boxBlockQuads:
-		drawBlockQuadrants(dst, m, blockParam(e))
+		drawBlockQuadrants(s, m, blockParam(e))
 	case boxBlockShade:
 		// Shades are a uniform coverage fill, not the font's stipple, so
 		// they stay flat at any size and never moire under scaling. The
 		// values are the nominal 25 / 50 / 75 percent.
-		fillRect(dst, m, 0, 0, m.cellW, m.cellH,
+		s.fillRect(0, 0, m.cellW, m.cellH,
 			byte(min(blockParam(e), 3))*0x40)
 	}
 }
@@ -61,35 +61,35 @@ func eighthEdge(extent, k int) int { return (extent*k + 4) / 8 }
 // drawBlockFill fills k eighths of the cell inward from one edge. Monotone
 // in k, and exactly the full extent at k == 8 so a run of U+2588 has no
 // seam.
-func drawBlockFill(dst []byte, m boxMetrics, k int, edge uint16) {
+func drawBlockFill(s boxSink, m boxMetrics, k int, edge uint16) {
 	switch edge {
 	case boxEdgeBottom:
-		fillRect(dst, m, 0, eighthEdge(m.cellH, 8-k), m.cellW, m.cellH, 255)
+		s.fillRect(0, eighthEdge(m.cellH, 8-k), m.cellW, m.cellH, 255)
 	case boxEdgeTop:
-		fillRect(dst, m, 0, 0, m.cellW, eighthEdge(m.cellH, k), 255)
+		s.fillRect(0, 0, m.cellW, eighthEdge(m.cellH, k), 255)
 	case boxEdgeLeft:
-		fillRect(dst, m, 0, 0, eighthEdge(m.cellW, k), m.cellH, 255)
+		s.fillRect(0, 0, eighthEdge(m.cellW, k), m.cellH, 255)
 	case boxEdgeRight:
-		fillRect(dst, m, eighthEdge(m.cellW, 8-k), 0, m.cellW, m.cellH, 255)
+		s.fillRect(eighthEdge(m.cellW, 8-k), 0, m.cellW, m.cellH, 255)
 	}
 }
 
 // drawBlockQuadrants fills the quadrants named by mask. The right and
 // bottom halves take the remainder of the split, so left+right is exactly
 // the cell whatever the parity of the cell size.
-func drawBlockQuadrants(dst []byte, m boxMetrics, mask int) {
+func drawBlockQuadrants(s boxSink, m boxMetrics, mask int) {
 	xm, ym := m.cellW/2, m.cellH/2
 	if mask&quadTL != 0 {
-		fillRect(dst, m, 0, 0, xm, ym, 255)
+		s.fillRect(0, 0, xm, ym, 255)
 	}
 	if mask&quadTR != 0 {
-		fillRect(dst, m, xm, 0, m.cellW, ym, 255)
+		s.fillRect(xm, 0, m.cellW, ym, 255)
 	}
 	if mask&quadBL != 0 {
-		fillRect(dst, m, 0, ym, xm, m.cellH, 255)
+		s.fillRect(0, ym, xm, m.cellH, 255)
 	}
 	if mask&quadBR != 0 {
-		fillRect(dst, m, xm, ym, m.cellW, m.cellH, 255)
+		s.fillRect(xm, ym, m.cellW, m.cellH, 255)
 	}
 }
 
@@ -138,7 +138,7 @@ var boxBlockTable = [32]uint16{
 // left, or the same two edges stroked as a thin chevron. Reached only when
 // the font had no glyph (see boxMetricsFor), so this never overrides a
 // patched Nerd Font's own separators.
-func drawPowerline(dst []byte, m boxMetrics) {
+func drawPowerline(s boxSink, m boxMetrics) {
 	w, h := float32(m.cellW), float32(m.cellH)
 	var ax, ay, bx, by, cx, cy float32
 	switch m.cp {
@@ -151,32 +151,16 @@ func drawPowerline(dst []byte, m boxMetrics) {
 		bx, by = 0, h*0.5
 		cx, cy = w, h
 	}
-	filled := m.cp == 0xE0B0 || m.cp == 0xE0B2
-	half := float32(m.light) * 0.5
 
-	for y := range m.cellH {
-		for x := range m.cellW {
-			px := float32(x) + 0.5
-			py := float32(y) + 0.5
-			var d float32
-			if filled {
-				// Intersection of three half-planes: each edge distance is
-				// exact because the edges are straight, so the maximum is the
-				// signed distance to the triangle.
-				d = max(
-					halfPlane(px, py, ax, ay, bx, by, cx, cy),
-					halfPlane(px, py, bx, by, cx, cy, ax, ay),
-					halfPlane(px, py, cx, cy, ax, ay, bx, by))
-			} else {
-				d = min(
-					segDist(px, py, ax, ay, bx, by),
-					segDist(px, py, bx, by, cx, cy)) - half
-			}
-			if v := coverAt(d); v > dst[y*m.cellW+x] {
-				dst[y*m.cellW+x] = v
-			}
-		}
+	if m.cp == 0xE0B0 || m.cp == 0xE0B2 {
+		s.fillTri(ax, ay, bx, by, cx, cy)
+		return
 	}
+	// The two edges of the chevron are stroked independently, so the pixels
+	// at the point take the stronger of the two coverages rather than a
+	// joint one — see drawBoxDiagonal for why that is fine.
+	s.strokeSeg(ax, ay, bx, by, float32(m.light))
+	s.strokeSeg(bx, by, cx, cy, float32(m.light))
 }
 
 // ---------------------------------------------------------------------------

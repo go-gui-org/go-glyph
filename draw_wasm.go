@@ -2,7 +2,10 @@
 
 package glyph
 
-import "syscall/js"
+import (
+	"syscall/js"
+	"unicode/utf8"
+)
 
 // canvas2DProvider is implemented by backends that expose a
 // Canvas2D context for direct fillText rendering.
@@ -19,6 +22,37 @@ func (r *Renderer) getMainContext() (js.Value, bool) {
 		}
 	}
 	return js.Value{}, false
+}
+
+// drawBoxIfBuiltin draws g as a built-in box-drawing, block-element or
+// Powerline glyph at the given baseline pen position, in the color and
+// alpha the caller has already set on ctx2d, and reports whether it did.
+//
+// A false return means the caller should draw the glyph from the font as
+// usual: the codepoint is outside the built-in ranges, the style opted out,
+// the run is stroked, or the cell is unusable. Powerline is never
+// synthesized here — the gate in boxMetricsFor requires an authoritative
+// .notdef from the item's own face, which Canvas2D cannot report.
+//
+// Single-rune clusters only, matching the native path in getOrLoadGlyph: a
+// combining mark on a box character is vanishingly rare and the font
+// handles it correctly.
+func (r *Renderer) drawBoxIfBuiltin(ctx2d js.Value, text string, item Item,
+	g Glyph, penX, penY float32, alpha float64) bool {
+
+	ch := glyphText(text, g)
+	cp, n := utf8.DecodeRuneInString(ch)
+	if n != len(ch) || n == 0 {
+		return false
+	}
+	m, ok := boxMetricsFor(item, g, cp, r.scaleFactor)
+	if !ok {
+		return false
+	}
+	ox, oy := boxCellOrigin(penX, penY, r.scaleFactor, m)
+	r.boxSink.reset(ctx2d, m, ox, oy, r.scaleInv, alpha)
+	drawBoxGlyphTo(&r.boxSink, m)
+	return true
 }
 
 // drawLayoutImpl renders text using Canvas2D fillText directly,
@@ -123,10 +157,10 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 				ctx2d.Call("strokeText", ch,
 					float64(x+gx), float64(y+gy))
 			} else {
-				setCanvasTransform(ctx2d, transform, x, y)
+				setCanvasTransform(ctx2d, transform, x, y, r.scaleFactor)
 				ctx2d.Call("strokeText", ch,
 					float64(gx), float64(gy))
-				ctx2d.Call("setTransform", 1, 0, 0, 1, 0, 0)
+				resetCanvasTransform(ctx2d, r.scaleFactor)
 			}
 
 			cx += float32(g.XAdvance)
@@ -153,6 +187,10 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		ctx2d.Set("font", cssFont)
 		ctx2d.Set("textBaseline", "alphabetic")
 
+		// Tracks globalAlpha alongside every Set of it, so a built-in box
+		// glyph can modulate it for the shade blocks and put it back.
+		alpha := 1.0
+
 		// For vertical gradient, create a Canvas2D linear gradient
 		// that the browser composites per-pixel.
 		if hasGradient && gradient.Direction == GradientVertical {
@@ -167,7 +205,8 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 			ctx2d.Set("fillStyle", canvasGrad)
 			ctx2d.Set("globalAlpha", 1.0)
 		} else if !hasGradient {
-			ctx2d.Set("globalAlpha", float64(c.A)/255.0)
+			alpha = float64(c.A) / 255.0
+			ctx2d.Set("globalAlpha", alpha)
 			ctx2d.Set("fillStyle", cssColorString(c))
 		}
 
@@ -191,7 +230,8 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 				gc := gradientColorForGlyph(gradient, cx, cy,
 					float32(item.Ascent),
 					gradXOff, gradYOff, gradW, gradH)
-				ctx2d.Set("globalAlpha", float64(gc.A)/255.0)
+				alpha = float64(gc.A) / 255.0
+				ctx2d.Set("globalAlpha", alpha)
 				ctx2d.Set("fillStyle", cssColorString(gc))
 			}
 
@@ -199,14 +239,27 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 			gy := cy - float32(g.YOffset)
 			ch := glyphText(layout.Text, g)
 
+			// Box-drawing and block codepoints are drawn from the built-in
+			// cell geometry instead of the font, so a frame's stroke weight
+			// is uniform and neighbouring cells abut exactly (issue #101).
+			// Only under the identity transform: the snapping that buys
+			// those properties assumes the cell sits square on the pixel
+			// grid, which a rotation or skew breaks.
+			if isIdentity && r.drawBoxIfBuiltin(ctx2d, layout.Text, item, g,
+				x+gx, y+gy, alpha) {
+				cx += float32(g.XAdvance)
+				cy -= float32(g.YAdvance)
+				continue
+			}
+
 			if isIdentity {
 				ctx2d.Call("fillText", ch,
 					float64(x+gx), float64(y+gy))
 			} else {
-				setCanvasTransform(ctx2d, transform, x, y)
+				setCanvasTransform(ctx2d, transform, x, y, r.scaleFactor)
 				ctx2d.Call("fillText", ch,
 					float64(gx), float64(gy))
-				ctx2d.Call("setTransform", 1, 0, 0, 1, 0, 0)
+				resetCanvasTransform(ctx2d, r.scaleFactor)
 			}
 
 			cx += float32(g.XAdvance)
@@ -318,11 +371,25 @@ func jsItoa(i int) string {
 	return string(buf[n:])
 }
 
+// setCanvasTransform installs the layout transform. setTransform replaces
+// the whole matrix, so the backend's device-pixel-ratio scale has to be
+// folded in here rather than left standing: on a HiDPI canvas the base
+// transform is a uniform scale by the ratio, and dropping it would draw a
+// transformed run at half size in the top-left corner.
 func setCanvasTransform(ctx2d js.Value, t AffineTransform,
-	ox, oy float32) {
+	ox, oy, scale float32) {
+
+	s := float64(scale)
 	ctx2d.Call("setTransform",
-		float64(t.XX), float64(t.YX),
-		float64(t.XY), float64(t.YY),
-		float64(ox)+float64(t.X0),
-		float64(oy)+float64(t.Y0))
+		float64(t.XX)*s, float64(t.YX)*s,
+		float64(t.XY)*s, float64(t.YY)*s,
+		(float64(ox)+float64(t.X0))*s,
+		(float64(oy)+float64(t.Y0))*s)
+}
+
+// resetCanvasTransform restores the backend's base transform: the
+// device-pixel-ratio scale, which leaves callers drawing in logical units.
+func resetCanvasTransform(ctx2d js.Value, scale float32) {
+	s := float64(scale)
+	ctx2d.Call("setTransform", s, 0, 0, s, 0, 0)
 }

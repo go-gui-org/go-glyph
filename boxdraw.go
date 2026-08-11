@@ -209,21 +209,79 @@ func hashBoxGlyph(key uint64, m boxMetrics) uint64 {
 	return key
 }
 
+// boxSink receives one glyph's geometry in cell-local physical pixels,
+// origin at the cell's top-left corner. Splitting the geometry from the
+// pixels is what lets the same code serve both backends: the native path
+// writes an 8-bit coverage buffer for the atlas (covSink), and the WASM path
+// replays the identical primitives as Canvas2D calls, which needs no atlas
+// and no per-glyph image upload (issue #101).
+//
+// Rectangles carry a coverage byte because the shade blocks (U+2591-2593)
+// are a partial fill; every other primitive is opaque.
+type boxSink interface {
+	fillRect(x0, y0, x1, y1 int, v byte)
+	strokeSeg(ax, ay, bx, by, w float32)
+	// strokeArcQuad strokes the quarter of the circle (cx, cy, r) that lies
+	// on the named side of the center: xLow selects x <= cx, yLow y <= cy.
+	strokeArcQuad(cx, cy, r, w float32, xLow, yLow bool)
+	fillTri(ax, ay, bx, by, cx, cy float32)
+}
+
 // drawBoxGlyph renders m into dst, a dense 8-bit coverage buffer of exactly
 // cellW*cellH bytes that the caller has already cleared.
 func drawBoxGlyph(dst []byte, m boxMetrics) {
-	if len(dst) < m.cellW*m.cellH || m.cellW < 1 || m.cellH < 1 {
+	if len(dst) < m.cellW*m.cellH {
+		return
+	}
+	drawBoxGlyphTo(covSink{dst: dst, m: m}, m)
+}
+
+// drawBoxGlyphTo emits m's geometry into s.
+func drawBoxGlyphTo(s boxSink, m boxMetrics) {
+	if m.cellW < 1 || m.cellH < 1 {
 		return
 	}
 	switch m.kind {
 	case boxKindLine:
-		drawBoxLine(dst, m, boxLineTable[m.cp-boxLineLo])
+		drawBoxLine(s, m, boxLineTable[m.cp-boxLineLo])
 	case boxKindBlock:
-		drawBoxBlock(dst, m, boxBlockTable[m.cp-boxBlockLo])
+		drawBoxBlock(s, m, boxBlockTable[m.cp-boxBlockLo])
 	case boxKindPowerline:
-		drawPowerline(dst, m)
+		drawPowerline(s, m)
 	case boxKindNone:
 	}
+}
+
+// boxCellOrigin places a glyph's cell box from the pen position of its
+// baseline origin, in logical units, at the given scale.
+//
+// Rounding the origin to a whole physical pixel is half of the anti-banding
+// guarantee (centerSpan is the other half): the geometry inside the cell is
+// already phase-independent, so the run only stays aligned if every cell
+// starts on a pixel boundary. Subtracting top seats the cell bottom on
+// baseline+descent, the same seating loadBoxGlyphFT gets from its zero left
+// bearing and top bearing of m.top.
+func boxCellOrigin(x, y, scale float32, m boxMetrics) (int, int) {
+	return pxRoundOrigin(x * scale), pxRoundOrigin(y*scale) - m.top
+}
+
+// pxRoundOrigin rounds a pixel coordinate to an int. Unlike pxRound it keeps
+// the sign — a cell scrolled off the top or left of the viewport has a
+// negative origin, and clamping that to zero would drag it back into view.
+// The magnitude limit is far past any real canvas and only exists so a NaN
+// or absurd coordinate cannot make the conversion implementation-defined.
+func pxRoundOrigin(v float32) int {
+	const limit = 1 << 24
+	f := math.Round(float64(v))
+	switch {
+	case math.IsNaN(f):
+		return 0
+	case f > limit:
+		return limit
+	case f < -limit:
+		return -limit
+	}
+	return int(f)
 }
 
 // ---------------------------------------------------------------------------
@@ -303,20 +361,27 @@ func armSpan(extent int, w uint16, m boxMetrics) span {
 }
 
 // ---------------------------------------------------------------------------
-// Pixel fills
+// Coverage-buffer sink
 // ---------------------------------------------------------------------------
 
-// fillRect writes coverage v over [x0,x1) x [y0,y1), clamped to the cell.
-// Coverage is combined with max so an antialiased edge drawn earlier is
-// never dimmed by a later hard-edged fill.
-func fillRect(dst []byte, m boxMetrics, x0, y0, x1, y1 int, v byte) {
+// covSink writes a dense 8-bit coverage buffer of cellW*cellH bytes, which
+// is what the atlas path expands to RGBA. Every primitive combines with max,
+// so an antialiased edge drawn earlier is never dimmed by a later hard-edged
+// fill.
+type covSink struct {
+	dst []byte
+	m   boxMetrics
+}
+
+func (s covSink) fillRect(x0, y0, x1, y1 int, v byte) {
+	m := s.m
 	x0, y0 = max(x0, 0), max(y0, 0)
 	x1, y1 = min(x1, m.cellW), min(y1, m.cellH)
 	if x0 >= x1 || y0 >= y1 || v == 0 {
 		return
 	}
 	for y := y0; y < y1; y++ {
-		row := dst[y*m.cellW : y*m.cellW+m.cellW]
+		row := s.dst[y*m.cellW : y*m.cellW+m.cellW]
 		for x := x0; x < x1; x++ {
 			if v > row[x] {
 				row[x] = v
@@ -325,14 +390,75 @@ func fillRect(dst []byte, m boxMetrics, x0, y0, x1, y1 int, v byte) {
 	}
 }
 
+// strokeSeg walks the whole cell and shades by distance to the segment.
+// Scanning every pixel costs nothing worth optimizing at cell sizes and
+// keeps the antialiased ends exact.
+func (s covSink) strokeSeg(ax, ay, bx, by, w float32) {
+	m := s.m
+	half := w * 0.5
+	for y := range m.cellH {
+		py := float32(y) + 0.5
+		for x := range m.cellW {
+			px := float32(x) + 0.5
+			d := segDist(px, py, ax, ay, bx, by) - half
+			if v := coverAt(d); v > s.dst[y*m.cellW+x] {
+				s.dst[y*m.cellW+x] = v
+			}
+		}
+	}
+}
+
+// strokeArcQuad shades the quarter annulus. Painting only the one quadrant
+// keeps the ring out of the three quadrants the straight arms own.
+func (s covSink) strokeArcQuad(cx, cy, r, w float32, xLow, yLow bool) {
+	m := s.m
+	half := w * 0.5
+	for y := range m.cellH {
+		py := float32(y) + 0.5
+		if (py <= cy) != yLow {
+			continue
+		}
+		for x := range m.cellW {
+			px := float32(x) + 0.5
+			if (px <= cx) != xLow {
+				continue
+			}
+			d := absF32(hypotF32(px-cx, py-cy)-r) - half
+			if v := coverAt(d); v > s.dst[y*m.cellW+x] {
+				s.dst[y*m.cellW+x] = v
+			}
+		}
+	}
+}
+
+// fillTri shades the intersection of the triangle's three half-planes. Each
+// edge distance is exact because the edges are straight, so the maximum is
+// the signed distance to the triangle.
+func (s covSink) fillTri(ax, ay, bx, by, cx, cy float32) {
+	m := s.m
+	for y := range m.cellH {
+		py := float32(y) + 0.5
+		for x := range m.cellW {
+			px := float32(x) + 0.5
+			d := max(
+				halfPlane(px, py, ax, ay, bx, by, cx, cy),
+				halfPlane(px, py, bx, by, cx, cy, ax, ay),
+				halfPlane(px, py, cx, cy, ax, ay, bx, by))
+			if v := coverAt(d); v > s.dst[y*m.cellW+x] {
+				s.dst[y*m.cellW+x] = v
+			}
+		}
+	}
+}
+
 // fillSpans fills the rectangle formed by a longitudinal run and a
 // cross-section, oriented by horiz.
-func fillSpans(dst []byte, m boxMetrics, horiz bool, run, cross span, v byte) {
+func fillSpans(s boxSink, horiz bool, run, cross span, v byte) {
 	if horiz {
-		fillRect(dst, m, run.lo, cross.lo, run.hi, cross.hi, v)
+		s.fillRect(run.lo, cross.lo, run.hi, cross.hi, v)
 		return
 	}
-	fillRect(dst, m, cross.lo, run.lo, cross.hi, run.hi, v)
+	s.fillRect(cross.lo, run.lo, cross.hi, run.hi, v)
 }
 
 // ---------------------------------------------------------------------------
@@ -365,21 +491,21 @@ func boxOp(e uint16) uint16 { return (e >> 10) & 7 }
 func dashRuns(e uint16) int { return int((e>>8)&3) + 1 }
 
 // drawBoxLine renders one U+2500-257F codepoint.
-func drawBoxLine(dst []byte, m boxMetrics, e uint16) {
+func drawBoxLine(s boxSink, m boxMetrics, e uint16) {
 	switch op := boxOp(e); op {
 	case boxOpArc:
-		drawBoxArc(dst, m, e)
+		drawBoxArc(s, m, e)
 		return
 	case boxOpDiagUp, boxOpDiagDown, boxOpDiagCross:
-		drawBoxDiagonal(dst, m, op)
+		drawBoxDiagonal(s, m, op)
 		return
 	}
 	if armN(e) == armDouble || armE(e) == armDouble ||
 		armS(e) == armDouble || armW(e) == armDouble {
-		drawDoubleLine(dst, m, e)
+		drawDoubleLine(s, m, e)
 		return
 	}
-	drawSimpleLine(dst, m, e)
+	drawSimpleLine(s, m, e)
 }
 
 // drawSimpleLine handles every light/heavy combination, including the ones
@@ -387,44 +513,44 @@ func drawBoxLine(dst []byte, m boxMetrics, e uint16) {
 // rectangle from its own cell edge to the far side of the perpendicular
 // junction, so the corner fills as the union of the two arms and no
 // junction case needs enumerating.
-func drawSimpleLine(dst []byte, m boxMetrics, e uint16) {
+func drawSimpleLine(s boxSink, m boxMetrics, e uint16) {
 	an, ae, as, aw := armN(e), armE(e), armS(e), armW(e)
 
 	if (e>>8)&3 != 0 {
-		drawDashedLine(dst, m, e)
+		drawDashedLine(s, m, e)
 		return
 	}
 
 	// Each arm's cross-section: the vertical arms are measured across the
 	// cell width, the horizontal ones across the height. Empty for an absent
 	// arm, which spanUnion and fillRect both absorb.
-	sn := armSpan(m.cellW, an, m)
-	ss := armSpan(m.cellW, as, m)
-	se := armSpan(m.cellH, ae, m)
-	sw := armSpan(m.cellH, aw, m)
+	spN := armSpan(m.cellW, an, m)
+	spS := armSpan(m.cellW, as, m)
+	spE := armSpan(m.cellH, ae, m)
+	spW := armSpan(m.cellH, aw, m)
 
 	// Junction extents. With no arm on an axis the notional light stem
 	// position stands in, which is what makes the half lines (U+2574-257F)
 	// stop at the cell center.
 	cx := centerSpan(m.cellW, m.light)
 	if an != armNone || as != armNone {
-		cx = spanUnion(sn, ss)
+		cx = spanUnion(spN, spS)
 	}
 	cy := centerSpan(m.cellH, m.light)
 	if ae != armNone || aw != armNone {
-		cy = spanUnion(se, sw)
+		cy = spanUnion(spE, spW)
 	}
 
-	fillSpans(dst, m, true, span{0, cx.hi}, sw, 255)
-	fillSpans(dst, m, true, span{cx.lo, m.cellW}, se, 255)
-	fillSpans(dst, m, false, span{0, cy.hi}, sn, 255)
-	fillSpans(dst, m, false, span{cy.lo, m.cellH}, ss, 255)
+	fillSpans(s, true, span{0, cx.hi}, spW, 255)
+	fillSpans(s, true, span{cx.lo, m.cellW}, spE, 255)
+	fillSpans(s, false, span{0, cy.hi}, spN, 255)
+	fillSpans(s, false, span{cy.lo, m.cellH}, spS, 255)
 }
 
 // drawDashedLine renders U+2504-250B and U+254C-254F. The dash boundaries
 // are integer divisions of the cell extent, so they are identical in every
 // cell and a dashed run phase-aligns exactly like a solid one.
-func drawDashedLine(dst []byte, m boxMetrics, e uint16) {
+func drawDashedLine(s boxSink, m boxMetrics, e uint16) {
 	horiz := armW(e) != armNone || armE(e) != armNone
 	n := dashRuns(e)
 
@@ -448,7 +574,7 @@ func drawDashedLine(dst []byte, m boxMetrics, e uint16) {
 		if hi <= lo {
 			hi = min(lo+1, length)
 		}
-		fillSpans(dst, m, horiz, span{lo, hi}, cross, 255)
+		fillSpans(s, horiz, span{lo, hi}, cross, 255)
 	}
 }
 
@@ -470,7 +596,7 @@ func drawDashedLine(dst []byte, m boxMetrics, e uint16) {
 // that band's two rails when an arm is present on its own side. Both bands
 // must be double for the split to apply: a single stroke crossing a double
 // (U+256A, U+256B) passes through unbroken.
-func drawDoubleLine(dst []byte, m boxMetrics, e uint16) {
+func drawDoubleLine(s boxSink, m boxMetrics, e uint16) {
 	an, ae, as, aw := armN(e), armE(e), armS(e), armW(e)
 
 	hasV := an != armNone || as != armNone
@@ -518,7 +644,7 @@ func drawDoubleLine(dst []byte, m boxMetrics, e uint16) {
 			}
 			split := splittable &&
 				((j == 0 && an != armNone) || (j == 1 && as != armNone))
-			emitRail(dst, m, true, run, r, hGap, split)
+			emitRail(s, true, run, r, hGap, split)
 		}
 	}
 	if hasV {
@@ -533,7 +659,7 @@ func drawDoubleLine(dst []byte, m boxMetrics, e uint16) {
 			}
 			split := splittable &&
 				((i == 0 && aw != armNone) || (i == 1 && ae != armNone))
-			emitRail(dst, m, false, run, r, vGap, split)
+			emitRail(s, false, run, r, vGap, split)
 		}
 	}
 }
@@ -559,20 +685,18 @@ func partnerRail(idx, outerSelf, outerOther, otherN int, isCorner, low bool) int
 }
 
 // emitRail draws one rail, optionally interrupted over gap.
-func emitRail(dst []byte, m boxMetrics, horiz bool, run, cross, gap span,
-	split bool) {
-
+func emitRail(s boxSink, horiz bool, run, cross, gap span, split bool) {
 	if !split || gap.empty() {
-		fillSpans(dst, m, horiz, run, cross, 255)
+		fillSpans(s, horiz, run, cross, 255)
 		return
 	}
-	fillSpans(dst, m, horiz, span{run.lo, min(run.hi, gap.lo)}, cross, 255)
-	fillSpans(dst, m, horiz, span{max(run.lo, gap.hi), run.hi}, cross, 255)
+	fillSpans(s, horiz, span{run.lo, min(run.hi, gap.lo)}, cross, 255)
+	fillSpans(s, horiz, span{max(run.lo, gap.hi), run.hi}, cross, 255)
 }
 
 // drawBoxArc renders the rounded corners U+256D-2570 as two straight light
 // arms plus a quarter annulus joining them.
-func drawBoxArc(dst []byte, m boxMetrics, e uint16) {
+func drawBoxArc(s boxSink, m boxMetrics, e uint16) {
 	an, ae, as, aw := armN(e), armE(e), armS(e), armW(e)
 
 	vs := centerSpan(m.cellW, m.light)
@@ -611,64 +735,38 @@ func drawBoxArc(dst []byte, m boxMetrics, e uint16) {
 	// Straight runs are rounded outward so they overlap the arc's tangent
 	// pixel rather than leaving a hairline gap at the junction.
 	if aw != armNone {
-		fillSpans(dst, m, true, span{0, ceilInt(cx)}, hs, 255)
+		fillSpans(s, true, span{0, ceilInt(cx)}, hs, 255)
 	}
 	if ae != armNone {
-		fillSpans(dst, m, true, span{floorInt(cx), m.cellW}, hs, 255)
+		fillSpans(s, true, span{floorInt(cx), m.cellW}, hs, 255)
 	}
 	if an != armNone {
-		fillSpans(dst, m, false, span{0, ceilInt(cy)}, vs, 255)
+		fillSpans(s, false, span{0, ceilInt(cy)}, vs, 255)
 	}
 	if as != armNone {
-		fillSpans(dst, m, false, span{floorInt(cy), m.cellH}, vs, 255)
+		fillSpans(s, false, span{floorInt(cy), m.cellH}, vs, 255)
 	}
 
 	// The quarter the arc occupies lies on the side of the center away from
-	// the arms; painting only that quadrant keeps the annulus out of the
-	// three quadrants the straight runs own.
-	xLow := ae != armNone
-	yLow := as != armNone
-	half := float32(m.light) * 0.5
-	for y := range m.cellH {
-		py := float32(y) + 0.5
-		if (py <= cy) != yLow {
-			continue
-		}
-		for x := range m.cellW {
-			px := float32(x) + 0.5
-			if (px <= cx) != xLow {
-				continue
-			}
-			d := absF32(hypotF32(px-cx, py-cy)-r) - half
-			if v := coverAt(d); v > dst[y*m.cellW+x] {
-				dst[y*m.cellW+x] = v
-			}
-		}
-	}
+	// the arms.
+	s.strokeArcQuad(cx, cy, r, float32(m.light), ae != armNone, as != armNone)
 }
 
 func floorInt(v float32) int { return int(math.Floor(float64(v))) }
 func ceilInt(v float32) int  { return int(math.Ceil(float64(v))) }
 
-// drawBoxDiagonal renders U+2571-2573 corner to corner.
-func drawBoxDiagonal(dst []byte, m boxMetrics, op uint16) {
+// drawBoxDiagonal renders U+2571-2573 corner to corner. U+2573 is two
+// independent strokes rather than one distance field over both segments, so
+// the pixels either side of the crossing take the stronger of the two
+// coverages instead of a joint one — the same max-combining rule the arcs
+// already meet their arms with, and a difference of a fraction of a pixel.
+func drawBoxDiagonal(s boxSink, m boxMetrics, op uint16) {
 	w, h := float32(m.cellW), float32(m.cellH)
-	half := float32(m.light) * 0.5
-	for y := range m.cellH {
-		for x := range m.cellW {
-			px := float32(x) + 0.5
-			py := float32(y) + 0.5
-			d := float32(math.MaxFloat32)
-			if op == boxOpDiagUp || op == boxOpDiagCross {
-				d = min(d, segDist(px, py, 0, h, w, 0))
-			}
-			if op == boxOpDiagDown || op == boxOpDiagCross {
-				d = min(d, segDist(px, py, 0, 0, w, h))
-			}
-			if v := coverAt(d - half); v > dst[y*m.cellW+x] {
-				dst[y*m.cellW+x] = v
-			}
-		}
+	if op == boxOpDiagUp || op == boxOpDiagCross {
+		s.strokeSeg(0, h, w, 0, float32(m.light))
+	}
+	if op == boxOpDiagDown || op == boxOpDiagCross {
+		s.strokeSeg(0, 0, w, h, float32(m.light))
 	}
 }
 

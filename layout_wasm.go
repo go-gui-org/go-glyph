@@ -48,7 +48,8 @@ func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error) 
 	var fullText strings.Builder
 	type runRange struct {
 		start, end int
-		style      TextStyle
+		style      TextStyle // As given, for the "was it set" checks below.
+		merged     TextStyle // Over cfg.Style, which is what the item gets.
 		cssFont    string
 		yShift     float64
 		xPad       float64
@@ -87,7 +88,7 @@ func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error) 
 		fullText.WriteString(run.Text)
 		runs = append(runs, runRange{
 			start: idx, end: idx + len(run.Text),
-			style: run.Style, cssFont: css,
+			style: run.Style, merged: merged, cssFont: css,
 			yShift: yShift, xPad: xPad,
 		})
 		idx += len(run.Text)
@@ -146,6 +147,7 @@ func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error) 
 					item.ObjectID = r.style.Object.ID
 				}
 				item.CSSFont = r.cssFont
+				item.Style = r.merged
 				break
 			}
 		}
@@ -170,13 +172,18 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 	lineHeight := recommendedLineHeight(
 		fontAscent, fontDescent, 0, cssFontSize(cfg.Style))
 
-	pixelScale := 1.0 / float64(ctx.scaleFactor)
+	// Everything below is in logical units, which is also what measureText
+	// and the CSS font size are in: the canvas' base transform carries the
+	// device pixel ratio, so the browser rasterizes at device resolution
+	// without the layout knowing about it. Metrics used to be divided by
+	// the scale factor here, on the assumption that the measurements were
+	// physical — they never were, so any scale but 1.0 shrank every advance
+	// while leaving the drawn glyphs at full size.
 
 	// Vertical text: stack characters top-to-bottom.
 	if cfg.Orientation == OrientationVertical {
 		return ctx.buildVerticalLayout(clusters, text, cssFont, cfg,
-			overrides,
-			fontAscent, fontDescent, lineHeight, pixelScale)
+			overrides, fontAscent, fontDescent, lineHeight)
 	}
 
 	// Measure each grapheme cluster with per-char font overrides.
@@ -214,7 +221,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 		if overrides != nil {
 			if ov, ok := overrides[cl.byteI]; ok && ov.objWidth > 0 {
 				isObject = true
-				objWidth = ov.objWidth * pixelScale
+				objWidth = ov.objWidth
 			}
 		}
 		if isObject {
@@ -240,7 +247,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 	// Word-wrap into lines.
 	wrapWidth := float64(-1)
 	if cfg.Block.Width > 0 {
-		wrapWidth = float64(cfg.Block.Width) * float64(ctx.scaleFactor)
+		wrapWidth = float64(cfg.Block.Width)
 	}
 
 	type lineInfo struct {
@@ -339,7 +346,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 
 		indentPx := float64(0)
 		if lineIdx == 0 && cfg.Block.Indent != 0 {
-			indentPx = float64(cfg.Block.Indent) * float64(ctx.scaleFactor)
+			indentPx = float64(cfg.Block.Indent)
 		}
 
 		startByteIdx := 0
@@ -376,12 +383,19 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 				w += gl.XAdvance
 			}
 			items = append(items, Item{
+				// The style rides along because the renderer needs more
+				// than the CSS font string: the built-in box glyphs read
+				// CellWidth, CellHeight and NoBuiltinBoxGlyphs off it, and
+				// without it a grid caller's declared cell is invisible and
+				// the opt-out never takes (issue #101). LayoutRichText
+				// overwrites it per run below.
+				Style:                  cfg.Style,
 				CSSFont:                itemCSSFont,
 				Width:                  w,
-				X:                      itemX * pixelScale,
-				Y:                      (lineY + fontAscent) * pixelScale,
-				Ascent:                 fontAscent * pixelScale,
-				Descent:                fontDescent * pixelScale,
+				X:                      itemX,
+				Y:                      (lineY + fontAscent),
+				Ascent:                 fontAscent,
+				Descent:                fontDescent,
 				GlyphStart:             itemStart,
 				GlyphCount:             gc,
 				StartIndex:             itemStartByte,
@@ -389,7 +403,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 				Color:                  baseColor,
 				UnderlineOffset:        2.0,
 				UnderlineThickness:     1.0,
-				StrikethroughOffset:    fontAscent * 0.35 * pixelScale,
+				StrikethroughOffset:    fontAscent * 0.35,
 				StrikethroughThickness: 1.0,
 				HasUnderline:           cfg.Style.Underline,
 				HasStrikethrough:       cfg.Style.Strikethrough,
@@ -425,18 +439,18 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 			allGlyphs = append(allGlyphs, Glyph{
 				Index:     uint32(ch.byteI),
 				Codepoint: uint32(ch.byteL),
-				XOffset:   ch.xPad * pixelScale,
-				XAdvance:  ch.width * pixelScale,
-				YOffset:   ch.yShift * pixelScale,
+				XOffset:   ch.xPad,
+				XAdvance:  ch.width,
+				YOffset:   ch.yShift,
 			})
 
 			crIdx := len(charRects)
 			charRects = append(charRects, CharRect{
 				Rect: Rect{
-					X:      float32(cx * pixelScale),
-					Y:      float32(lineY * pixelScale),
-					Width:  float32(ch.width * pixelScale),
-					Height: float32(lineHeight * pixelScale),
+					X:      float32(cx),
+					Y:      float32(lineY),
+					Width:  float32(ch.width),
+					Height: float32(lineHeight),
 				},
 				Index: ch.byteI,
 			})
@@ -463,17 +477,17 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 			Length:           lineLen,
 			IsParagraphStart: lineIdx == 0 || (li.startChar > 0 && chars[li.startChar-1].text == "\n"),
 			Rect: Rect{
-				X:      float32(alignOffset * pixelScale),
-				Y:      float32(lineY * pixelScale),
-				Width:  float32(linePixelW * pixelScale),
-				Height: float32(lineHeight * pixelScale),
+				X:      float32(alignOffset),
+				Y:      float32(lineY),
+				Width:  float32(linePixelW),
+				Height: float32(lineHeight),
 			},
 		})
 
 		totalWidth = max(totalWidth, linePixelW)
 		lineY += lineHeight
 		if cfg.Block.LineSpacing > 0 && lineIdx < len(lines)-1 {
-			lineY += float64(cfg.Block.LineSpacing) * float64(ctx.scaleFactor)
+			lineY += float64(cfg.Block.LineSpacing)
 		}
 	}
 	totalHeight = lineY
@@ -507,10 +521,10 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 		Lines:           layoutLines,
 		LogAttrs:        logAttrs,
 		LogAttrByIndex:  logAttrByIndex,
-		Width:           float32(totalWidth * pixelScale),
-		Height:          float32(totalHeight * pixelScale),
-		VisualWidth:     float32(totalWidth * pixelScale),
-		VisualHeight:    float32(totalHeight * pixelScale),
+		Width:           float32(totalWidth),
+		Height:          float32(totalHeight),
+		VisualWidth:     float32(totalWidth),
+		VisualHeight:    float32(totalHeight),
 	}
 	result.buildPositionCaches()
 	return result
@@ -521,7 +535,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 	text, cssFont string,
 	cfg TextConfig, overrides map[int]charFontOverride,
-	fontAscent, fontDescent, lineHeight, pixelScale float64) Layout {
+	fontAscent, fontDescent, lineHeight float64) Layout {
 
 	ctx.ctx2d.Set("font", cssFont)
 
@@ -551,18 +565,18 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 		allGlyphs = append(allGlyphs, Glyph{
 			Index:     uint32(cl.byteI),
 			Codepoint: uint32(cl.byteL),
-			XOffset:   centerX * pixelScale,
+			XOffset:   centerX,
 			XAdvance:  0,
-			YAdvance:  -lineHeight * pixelScale,
+			YAdvance:  -lineHeight,
 		})
 
 		crIdx := len(charRects)
 		charRects = append(charRects, CharRect{
 			Rect: Rect{
 				X:      0,
-				Y:      float32((penY - fontAscent) * pixelScale),
-				Width:  float32(lineHeight * pixelScale),
-				Height: float32(lineHeight * pixelScale),
+				Y:      float32((penY - fontAscent)),
+				Width:  float32(lineHeight),
+				Height: float32(lineHeight),
 			},
 			Index: cl.byteI,
 		})
@@ -586,12 +600,13 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 	var items []Item
 	if glyphCount > 0 {
 		items = append(items, Item{
+			Style:      cfg.Style,
 			CSSFont:    cssFont,
-			Width:      lineHeight * pixelScale,
-			X:          fontAscent * pixelScale,
-			Y:          fontAscent * pixelScale,
-			Ascent:     fontAscent * pixelScale,
-			Descent:    fontDescent * pixelScale,
+			Width:      lineHeight,
+			X:          fontAscent,
+			Y:          fontAscent,
+			Ascent:     fontAscent,
+			Descent:    fontDescent,
 			GlyphStart: 0,
 			GlyphCount: glyphCount,
 			StartIndex: 0,
@@ -605,8 +620,8 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 		Length:     len(text),
 		Rect: Rect{
 			X: 0, Y: 0,
-			Width:  float32(lineHeight * pixelScale),
-			Height: float32(totalH * pixelScale),
+			Width:  float32(lineHeight),
+			Height: float32(totalH),
 		},
 		IsParagraphStart: true,
 	}}
@@ -620,10 +635,10 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 		Lines:           lines,
 		LogAttrs:        logAttrs,
 		LogAttrByIndex:  logAttrByIndex,
-		Width:           float32(lineHeight * pixelScale),
-		Height:          float32(totalH * pixelScale),
-		VisualWidth:     float32(lineHeight * pixelScale),
-		VisualHeight:    float32(totalH * pixelScale),
+		Width:           float32(lineHeight),
+		Height:          float32(totalH),
+		VisualWidth:     float32(lineHeight),
+		VisualHeight:    float32(totalH),
 	}
 	result.buildPositionCaches()
 	return result
