@@ -37,8 +37,11 @@ func (r *Renderer) getMainContext() (js.Value, bool) {
 // Single-rune clusters only, matching the native path in getOrLoadGlyph: a
 // combining mark on a box character is vanishingly rare and the font
 // handles it correctly.
+// baseX is the pen position the item's cell grid starts at, in the same
+// logical units as penX; it anchors the cell-slot snapping that makes a
+// coalesced run tile (issue #102).
 func (r *Renderer) drawBoxIfBuiltin(ctx2d js.Value, text string, item Item,
-	g Glyph, penX, penY float32, alpha float64) bool {
+	g Glyph, baseX, penX, penY float32, alpha float64) bool {
 
 	ch := glyphText(text, g)
 	cp, n := utf8.DecodeRuneInString(ch)
@@ -50,6 +53,12 @@ func (r *Renderer) drawBoxIfBuiltin(ctx2d js.Value, text string, item Item,
 		return false
 	}
 	ox, oy := boxCellOrigin(penX, penY, r.scaleFactor, m)
+	// Same reasoning as the atlas path: rounding each origin on its own is
+	// not enough inside a run, where the pen steps by the font's fractional
+	// advance while every cell bitmap is a constant m.cellW wide.
+	if item.Style.CellWidth > 0 {
+		ox = boxSnapOriginX(pxRoundOrigin(baseX*r.scaleFactor), ox, m.cellW)
+	}
 	r.boxSink.reset(ctx2d, m, ox, oy, r.scaleInv, alpha)
 	drawBoxGlyphTo(&r.boxSink, m)
 	return true
@@ -246,7 +255,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 			// those properties assumes the cell sits square on the pixel
 			// grid, which a rotation or skew breaks.
 			if isIdentity && r.drawBoxIfBuiltin(ctx2d, layout.Text, item, g,
-				x+gx, y+gy, alpha) {
+				x+float32(item.X), x+gx, y+gy, alpha) {
 				cx += float32(g.XAdvance)
 				cy -= float32(g.YAdvance)
 				continue
