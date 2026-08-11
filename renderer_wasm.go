@@ -142,8 +142,12 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 
 			// A rotated placement gets the font glyph: pixel snapping is
 			// meaningless once the cell no longer sits on the pixel grid.
+			// The cell grid base is the placement itself: a placed glyph
+			// carries an absolute caller-chosen position and is not part of
+			// a run, so there is no neighbour to tile with and the snapping
+			// resolves to the identity.
 			if p.Angle == 0 && r.drawBoxIfBuiltin(ctx2d, layout.Text, item,
-				g, p.X, p.Y, float64(c.A)/255.0) {
+				g, p.X, p.X, p.Y, float64(c.A)/255.0) {
 				continue
 			}
 

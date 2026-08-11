@@ -72,6 +72,25 @@ and this project adheres to
 
 ### Fixed
 
+- **Built-in box glyphs no longer gap inside a coalesced multi-cell run.** The
+  cell-abutment guarantee held only when the caller drew one cell per
+  `DrawText`, not when a terminal coalesces a span of same-styled cells into a
+  single draw call — an entire `────────` frame rule in one call. Inside a run
+  the pen steps by the font's fractional advance and each origin was floored to
+  a whole physical pixel independently, so consecutive origins stepped by
+  alternating floor and ceil of that advance while every bitmap stayed a
+  constant `round(cell × scale)` wide. Wherever the step exceeded the bitmap
+  width the cells failed to meet and a 1-pixel gap opened, on roughly a third of
+  the boundaries at 1x and 2x. When the item declares a cell
+  (`TextStyle.CellWidth`) and the glyph took the built-in path, its origin is
+  now quantized to the nearest whole cell slot measured from the item's origin,
+  using the same integer the bitmap width came from, so step and width agree by
+  construction. Nearest slot rather than a running count, so a run whose advance
+  and declared cell disagree slightly self-corrects instead of drifting, and no
+  cell moves more than half a cell from where the pen put it. Font glyphs in the
+  same run keep their existing placement, and both the atlas and Canvas2D paths
+  are covered (issue #102).
+
 - **WASM layout at a scale factor other than 1.0.** The Canvas2D layout divided
   every metric — advances, ascent, descent, item positions, wrap width — by the
   context's scale factor, on the assumption that `measureText` had returned

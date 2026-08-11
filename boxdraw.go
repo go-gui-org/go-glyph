@@ -265,6 +265,35 @@ func boxCellOrigin(x, y, scale float32, m boxMetrics) (int, int) {
 	return pxRoundOrigin(x * scale), pxRoundOrigin(y*scale) - m.top
 }
 
+// boxSnapOriginX snaps a cell's physical-pixel origin to the nearest whole
+// cell slot measured from baseX, the origin of the run the cell belongs to.
+//
+// Rounding each origin independently (boxCellOrigin, or computeDrawOrigin on
+// the atlas path) is only enough when the caller draws one cell per call.
+// Inside a coalesced run the pen steps by the font's *fractional* advance, so
+// consecutive rounded origins step by alternating floor and ceil of that
+// advance while the bitmap stays a constant cellW wide — wherever the step
+// exceeds the width the cells fail to meet and a 1px gap opens in the rule
+// (issue #102). Quantizing the origin to a multiple of cellW makes the step
+// and the bitmap width the same integer by construction, which is the same
+// argument that makes the bitmap itself uniform.
+//
+// Nearest slot rather than a running counter: the run's advance and the
+// caller's cell width need not agree exactly, and picking the nearest slot
+// is self-correcting instead of accumulating that disagreement. It also
+// bounds the displacement from the unsnapped origin at half a cell.
+func boxSnapOriginX(baseX, originX, cellW int) int {
+	if cellW <= 0 {
+		return originX
+	}
+	// Through float64 and back through the same clamp pxRoundOrigin uses: the
+	// atlas path derives originX from an unclamped float32 coordinate, and a
+	// NaN or absurd origin must not make the conversion back to int
+	// implementation-defined.
+	n := math.Round(float64(originX-baseX) / float64(cellW))
+	return pxRoundOrigin(float32(float64(baseX) + n*float64(cellW)))
+}
+
 // pxRoundOrigin rounds a pixel coordinate to an int. Unlike pxRound it keeps
 // the sign — a cell scrolled off the top or left of the viewport has a
 // negative origin, and clamping that to zero would drag it back into view.

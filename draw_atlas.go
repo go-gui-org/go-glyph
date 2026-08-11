@@ -2,6 +2,8 @@
 
 package glyph
 
+import "unicode/utf8"
+
 // drawLayoutImpl is the shared implementation for all DrawLayout*
 // variants on FreeType/CoreText platforms. Uses atlas-based rendering
 // like the native backend.
@@ -185,6 +187,18 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		cx := float32(item.X)
 		cy := float32(item.Y)
 
+		// Origin of this item's cell grid, in physical pixels. Only needed
+		// by the box-glyph snapping below, so it is derived once per item
+		// and only for items that declare a cell.
+		cellBaseX := 0
+		if item.Style.CellWidth > 0 {
+			baseX, _, _ := r.computeDrawOrigin(float32(item.X), 0)
+			// Through pxRoundOrigin, the same clamp boxCellOrigin applies to
+			// box origins: a NaN or absurd item.X must not fall into the
+			// implementation-defined float-to-int conversion.
+			cellBaseX = pxRoundOrigin(baseX)
+		}
+
 		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
 			if i < 0 || i >= len(layout.Glyphs) {
 				continue
@@ -199,6 +213,24 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 			targetX := cx + float32(g.XOffset)
 			drawOriginX, drawOriginY, _ := r.computeDrawOrigin(
 				targetX, cy-float32(g.YOffset))
+
+			// A built-in box bitmap is exactly one cell wide, so it only
+			// tiles if the placement steps by that same integer. Inside a
+			// coalesced run the pen steps by the font's fractional advance
+			// instead, which opens 1px gaps in a rule (issue #102). Snap
+			// this cell onto the item's cell grid, taking the width from
+			// the same boxMetrics the bitmap came from so the two cannot
+			// disagree. Font glyphs in the same run are untouched.
+			if item.Style.CellWidth > 0 {
+				ch := glyphText(layout.Text, g)
+				if cp, n := utf8.DecodeRuneInString(ch); n == len(ch) && n > 0 {
+					if m, ok := boxMetricsFor(item, g, cp,
+						r.scaleFactor); ok {
+						drawOriginX = float32(boxSnapOriginX(
+							cellBaseX, pxRoundOrigin(drawOriginX), m.cellW))
+					}
+				}
+			}
 
 			cg := fills[i]
 
