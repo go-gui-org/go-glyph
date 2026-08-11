@@ -28,6 +28,9 @@ type TextStyle struct {
 	// cells×cellWidth so emoji scale to fill their reserved cell box —
 	// preserving aspect, centered — instead of the font's narrower natural
 	// emoji advance. 0 keeps the default advance-clamped sizing.
+	//
+	// A rich-text run that leaves this at 0 inherits the value from
+	// TextConfig.Style, so the box is declared once for the whole layout.
 	EmojiBoxWidth float32
 
 	// CellWidth and CellHeight are the grid cell size in logical px. Grid
@@ -36,6 +39,9 @@ type TextStyle struct {
 	// 0 derives the cell from the glyph advance and the run's
 	// ascent+descent, which still gives a uniform stroke weight but leaves
 	// a sub-pixel overlap wherever the advance is fractional.
+	//
+	// A rich-text run that leaves either at 0 inherits it from
+	// TextConfig.Style, so the cell is declared once for the whole layout.
 	CellWidth  float32
 	CellHeight float32
 
@@ -61,6 +67,10 @@ type TextStyle struct {
 	// the cell to the pixel grid means nothing. U+E0B0–E0B3 (Powerline)
 	// are synthesized only when the font reports no glyph, which Canvas2D
 	// cannot do, so on WASM they always come from the font.
+	//
+	// The flag has no unset sentinel, so rich-text runs OR it with
+	// TextConfig.Style: setting it on the base style opts out every run, and
+	// a run cannot opt back in.
 	NoBuiltinBoxGlyphs bool
 }
 

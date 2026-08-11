@@ -107,6 +107,21 @@ and this project adheres to
   caller's declared cell was ignored and the box-glyph opt-out never took.
   `LayoutRichText` assigns the run's merged style per item.
 
+- **Rich-text runs inherit the grid geometry from the base style.**
+  `mergeStyles` copied the run style wholesale and fell back to
+  `TextConfig.Style` for only `FontName`, `Size` and `Color`, so every other
+  field was dropped — and `LayoutRichText` is what stamps that result onto
+  `Item.Style`. A grid caller that declared `CellWidth`/`CellHeight` once on the
+  base style therefore got advance-derived cells for rich text, with the
+  fractional-advance overlap the declared cell exists to remove, and a drawn box
+  that did not match its grid. `EmojiBoxWidth` was lost the same way, and
+  `NoBuiltinBoxGlyphs` on the base style never took effect at all, so a
+  proportional-text opt-out silently rendered built-in box art. The three
+  geometry fields now fall back to the base style when the run leaves them at 0.
+  `NoBuiltinBoxGlyphs` has no unset sentinel, so it is the OR of the two:
+  setting it on the base style opts out every run, and a run cannot opt back in
+  (issue #105).
+
 ## [v1.19.0] - 2026-08-06
 
 ### Added

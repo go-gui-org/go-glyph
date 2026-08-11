@@ -26,5 +26,19 @@ func mergeStyles(base, run TextStyle) TextStyle {
 	if result.Color.A == 0 {
 		result.Color = base.Color
 	}
+	// Grid geometry falls back to the base style so a grid caller declares the
+	// cell once on cfg.Style instead of repeating it on every run (#105).
+	if result.CellWidth <= 0 {
+		result.CellWidth = base.CellWidth
+	}
+	if result.CellHeight <= 0 {
+		result.CellHeight = base.CellHeight
+	}
+	if result.EmojiBoxWidth <= 0 {
+		result.EmojiBoxWidth = base.EmojiBoxWidth
+	}
+	// The bool has no unset sentinel, so the opt-out is sticky: a base opt-out
+	// applies to every run and a run cannot opt back in.
+	result.NoBuiltinBoxGlyphs = result.NoBuiltinBoxGlyphs || base.NoBuiltinBoxGlyphs
 	return result
 }
