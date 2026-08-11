@@ -348,6 +348,7 @@ func (ts *TextSystem) getCacheKey(text string, cfg TextConfig) uint64 {
 	// so leaving them out would silently pin the first call's values.
 	h = fnvHashF32(h, cfg.Style.CellWidth)
 	h = fnvHashF32(h, cfg.Style.CellHeight)
+	h = fnvHashF32(h, cfg.Style.EmojiBoxWidth)
 
 	// Pack scalar fields.
 	packed := uint64(cfg.Style.Typeface)
