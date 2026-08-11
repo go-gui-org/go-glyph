@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.20.0] - 2026-08-11
+
 ### Added
 
 - **Box-drawing and block-element characters are now drawn procedurally at cell
