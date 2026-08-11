@@ -30,6 +30,15 @@ type TextStyle struct {
 	// emoji advance. 0 keeps the default advance-clamped sizing.
 	EmojiBoxWidth float32
 
+	// CellWidth and CellHeight are the grid cell size in logical px. Grid
+	// callers (terminals) set their real cell so the built-in box-drawing
+	// and block-element glyphs fill it exactly and neighbouring cells abut.
+	// 0 derives the cell from the glyph advance and the run's
+	// ascent+descent, which still gives a uniform stroke weight but leaves
+	// a sub-pixel overlap wherever the advance is fractional.
+	CellWidth  float32
+	CellHeight float32
+
 	// StrokeWidth is outline width in points (0 = no stroke).
 	StrokeWidth float32
 	Color       Color
@@ -40,6 +49,14 @@ type TextStyle struct {
 
 	Underline     bool
 	Strikethrough bool
+
+	// NoBuiltinBoxGlyphs keeps the font's own glyph for U+2500–257F and
+	// U+2580–259F instead of the built-in cell-sized rasterization. Set it
+	// for proportional text, or when the font's box art is preferred. The
+	// built-in path is also skipped for stroked runs (StrokeWidth > 0) and,
+	// because the WASM backend redraws text with Canvas2D rather than
+	// rasterizing, on WASM entirely.
+	NoBuiltinBoxGlyphs bool
 }
 
 // BlockStyle defines paragraph-level layout properties.
