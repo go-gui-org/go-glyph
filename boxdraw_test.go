@@ -611,6 +611,7 @@ func TestBoxStyleFieldsReachTheRenderer(t *testing.T) {
 		"CellWidth":          {Style: TextStyle{FontName: "Monospace 12", CellWidth: 11}},
 		"CellHeight":         {Style: TextStyle{FontName: "Monospace 12", CellHeight: 23}},
 		"NoBuiltinBoxGlyphs": {Style: TextStyle{FontName: "Monospace 12", NoBuiltinBoxGlyphs: true}},
+		"EmojiBoxWidth":      {Style: TextStyle{FontName: "Monospace 12", EmojiBoxWidth: 24}},
 	}
 	seen := map[uint64]string{baseKey: "base"}
 	for name, cfg := range variants {
