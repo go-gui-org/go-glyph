@@ -29,7 +29,9 @@ type textureData struct {
 
 // New creates a Canvas2D backend from an HTML canvas element.
 func New(canvas js.Value, dpiScale float32) *Backend {
-	if dpiScale <= 0 {
+	// !(x > 0) also catches NaN, which a <= 0 guard lets through; a NaN
+	// base transform would blank every frame.
+	if !(dpiScale > 0) {
 		dpiScale = 1.0
 	}
 	ctx2d := canvas.Call("getContext", "2d")
@@ -62,6 +64,13 @@ func (b *Backend) BeginFrame(clearR, clearG, clearB, clearA float32) {
 	bl := int(clearB * 255)
 	b.ctx2d.Set("fillStyle", rgbaStyle(r, g, bl, 255))
 	b.ctx2d.Call("fillRect", 0, 0, b.width, b.height)
+
+	// Leave the frame's base transform at the device pixel ratio, so
+	// everything drawn afterwards — text, rects, built-in box glyphs —
+	// works in logical units while landing on the physical grid. On a 1x
+	// canvas this is the identity.
+	s := float64(b.dpiScale)
+	b.ctx2d.Call("setTransform", s, 0, 0, s, 0, 0)
 }
 
 // EndFrame is a no-op — Canvas2D is immediate mode.

@@ -52,10 +52,15 @@ type TextStyle struct {
 
 	// NoBuiltinBoxGlyphs keeps the font's own glyph for U+2500–257F and
 	// U+2580–259F instead of the built-in cell-sized rasterization. Set it
-	// for proportional text, or when the font's box art is preferred. The
-	// built-in path is also skipped for stroked runs (StrokeWidth > 0) and,
-	// because the WASM backend redraws text with Canvas2D rather than
-	// rasterizing, on WASM entirely.
+	// for proportional text, or when the font's box art is preferred.
+	//
+	// Every backend draws the same geometry: native backends rasterize it
+	// into the atlas, and WASM replays it as Canvas2D fills and paths. The
+	// built-in path is skipped for stroked runs (StrokeWidth > 0), and on
+	// WASM also for layouts drawn under a rotation or skew, where snapping
+	// the cell to the pixel grid means nothing. U+E0B0–E0B3 (Powerline)
+	// are synthesized only when the font reports no glyph, which Canvas2D
+	// cannot do, so on WASM they always come from the font.
 	NoBuiltinBoxGlyphs bool
 }
 

@@ -15,6 +15,9 @@ type Renderer struct {
 	maxCacheEntries int
 	scaleFactor     float32
 	scaleInv        float32
+	// boxSink is re-aimed per built-in box glyph rather than reallocated,
+	// so drawing a screen of box art allocates nothing.
+	boxSink canvasSink
 }
 
 // RendererConfig configures the Renderer.
@@ -136,6 +139,13 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 			}
 			p := placements[i]
 			ch := glyphText(layout.Text, g)
+
+			// A rotated placement gets the font glyph: pixel snapping is
+			// meaningless once the cell no longer sits on the pixel grid.
+			if p.Angle == 0 && r.drawBoxIfBuiltin(ctx2d, layout.Text, item,
+				g, p.X, p.Y, float64(c.A)/255.0) {
+				continue
+			}
 
 			if p.Angle != 0 {
 				ctx2d.Call("save")

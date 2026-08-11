@@ -5,6 +5,7 @@
 package main
 
 import (
+	"strconv"
 	"syscall/js"
 
 	"github.com/go-gui-org/go-glyph"
@@ -30,18 +31,41 @@ func main() {
 		return
 	}
 
-	// Match canvas to window logical size.
+	// Back the canvas at the device pixel ratio: the drawing buffer is
+	// physical pixels, the CSS box stays the window's logical size, and the
+	// backend installs the matching base transform each frame. Everything
+	// below keeps working in logical units, and the built-in box glyphs get
+	// a real pixel grid to snap to on a HiDPI display.
+	dpr := float32(js.Global().Get("devicePixelRatio").Float())
+	// !(dpr > 0) also catches NaN, so a broken read cannot poison the
+	// canvas transform.
+	if !(dpr > 0) {
+		dpr = 1
+	}
+	// ?dpr=N overrides it, so the same machine can compare 1x against 2x —
+	// which is the only way to see whether the built-in box glyphs really
+	// track the pixel grid rather than one particular display. Clamped: a
+	// wild value would size the backing store absurdly and the conversion
+	// to int is implementation-defined past float32's range.
+	if v := queryParam("dpr"); v != "" {
+		if f, err := strconv.ParseFloat(v, 32); err == nil && f > 0 {
+			dpr = float32(min(f, 8))
+		}
+	}
 	resizeCanvas := func() {
 		w := js.Global().Get("innerWidth").Int()
 		h := js.Global().Get("innerHeight").Int()
 		canvasW = w
 		canvasH = h
-		canvas.Set("width", w)
-		canvas.Set("height", h)
+		canvas.Set("width", int(float32(w)*dpr))
+		canvas.Set("height", int(float32(h)*dpr))
+		style := canvas.Get("style")
+		style.Set("width", strconv.Itoa(w)+"px")
+		style.Set("height", strconv.Itoa(h)+"px")
 	}
 	resizeCanvas()
 
-	be = web.New(canvas, 1.0)
+	be = web.New(canvas, dpr)
 
 	ts, err := glyph.NewTextSystem(be)
 	if err != nil {
@@ -94,6 +118,17 @@ func main() {
 
 	// Block forever.
 	select {}
+}
+
+// queryParam reads one search parameter from the page URL, or "" if absent.
+func queryParam(name string) string {
+	params := js.Global().Get("URLSearchParams").New(
+		js.Global().Get("location").Get("search"))
+	v := params.Call("get", name)
+	if v.IsNull() || v.IsUndefined() {
+		return ""
+	}
+	return v.String()
 }
 
 func handleKey(e js.Value) {
