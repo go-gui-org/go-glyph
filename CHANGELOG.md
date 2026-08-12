@@ -8,6 +8,20 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.20.1] - 2026-08-12
+
+### Fixed
+
+- **The face LRU is now byte-budgeted, not entry-budgeted.** A single
+  typeface with many faces (e.g. every box-drawing glyph as its own face at
+  multiple sizes) previously evicted only when the count of entries exceeded
+  the cap, so a large atlas-backed face could pin hundreds of megabytes while
+  the cache looked small. The cache now tracks total resident bytes against a
+  ceiling (default ~384 MB), evicting least-recently-used faces by byte weight,
+  with a per-entry floor so a single oversized face cannot starve the rest.
+  TUI-heavy workloads (terminals, editors) no longer balloon resident memory
+  when switching between many fonts or sizes.
+
 ## [v1.20.0] - 2026-08-11
 
 ### Added
