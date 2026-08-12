@@ -73,33 +73,44 @@ func (cf *cachedFace) putHB(f *harfbuzz.Font) { cf.hbPool.Put(f) }
 // glyph, and a Unicode-wide workload (e.g. ucs-detect, which pulls in ~180
 // distinct system fallback fonts across every script) then re-parses fonts
 // dozens of times, stalling the render thread for seconds. Sized well above
-// that working set so every touched font is parsed once and retained. Resident
-// memory is bounded by the fonts a session references, not by this cap —
-// normal use touches a handful; the pathological Unicode sweep tops out around
-// ~1.5GB (each parsed face holds its font's tables; see parseFace).
+// that working set so every touched font is parsed once and retained.
 const faceCacheCap = 512
 
-var faceCache = newFaceLRU(faceCacheCap)
+// faceCacheBudget bounds the resident face bytes instead. Each parsed face
+// holds its font's tables (see parseFace), so the count cap alone lets a
+// Unicode-wide session retain ~1.5GB; the budget evicts by bytes once the
+// realistic hot set (base + CJK + emoji + a few script faces) is resident.
+// Count cap and budget both apply; the budget is the one that tames the
+// pathological sweep. It is intentionally not sized to hold the full
+// ucs-detect working set — evicted faces re-parse on re-touch, which the
+// 8192-entry layout cache in front of the text path mostly absorbs.
+const faceCacheBudget = 384 << 20
+
+var faceCache = newFaceLRU(faceCacheCap, faceCacheBudget)
 
 // faceLRU is a bounded, concurrency-safe path→cachedFace cache. It caches
 // misses (nil) too, so a bad path is not re-read on every glyph.
 type faceLRU struct {
-	mu    sync.Mutex
-	cap   int
-	ll    *list.List // front = most recently used
-	items map[string]*list.Element
+	mu     sync.Mutex
+	cap    int
+	budget int64      // max sum of resident entry sizes; 0 disables the byte bound
+	used   int64      // sum of entry sizes currently resident
+	ll     *list.List // front = most recently used
+	items  map[string]*list.Element
 }
 
 type faceEntry struct {
 	path string
 	face *cachedFace // may be nil (negative cache)
+	size int64       // retained table bytes, for the budget
 }
 
-func newFaceLRU(capacity int) *faceLRU {
+func newFaceLRU(capacity int, budget int64) *faceLRU {
 	return &faceLRU{
-		cap:   capacity,
-		ll:    list.New(),
-		items: make(map[string]*list.Element, capacity),
+		cap:    capacity,
+		budget: budget,
+		ll:     list.New(),
+		items:  make(map[string]*list.Element, capacity),
 	}
 }
 
@@ -114,8 +125,8 @@ func loadCachedFace(path string) *cachedFace {
 	if cf, ok := faceCache.get(path); ok {
 		return cf // may be nil: negative cache
 	}
-	cf := parseFace(path)
-	faceCache.add(path, cf)
+	cf, size := parseFace(path)
+	faceCache.add(path, cf, size)
 	return cf
 }
 
@@ -132,55 +143,73 @@ func (c *faceLRU) get(path string) (*cachedFace, bool) {
 }
 
 // add inserts path→cf, evicting the least-recently-used entry when over
-// capacity. A concurrent add of the same path keeps the existing entry.
-func (c *faceLRU) add(path string, cf *cachedFace) {
+// capacity or over the byte budget. A concurrent add of the same path keeps
+// the existing entry. The newly added entry is never evicted by its own size:
+// a single face bigger than the whole budget (e.g. a multi-hundred-MB color
+// emoji TTC) must stay resident or every glyph would re-parse it.
+func (c *faceLRU) add(path string, cf *cachedFace, size int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if el, ok := c.items[path]; ok {
 		c.ll.MoveToFront(el)
 		return
 	}
-	c.items[path] = c.ll.PushFront(&faceEntry{path: path, face: cf})
-	for c.ll.Len() > c.cap {
+	c.items[path] = c.ll.PushFront(&faceEntry{path: path, face: cf, size: size})
+	c.used += size
+	// Over-budget eviction keeps the freshest entry even when it alone
+	// exceeds the budget; capacity eviction always applies.
+	for c.ll.Len() > c.cap ||
+		(c.budget > 0 && c.used > c.budget && c.ll.Len() > 1) {
 		oldest := c.ll.Back()
 		if oldest == nil {
 			break
 		}
 		c.ll.Remove(oldest)
-		delete(c.items, oldest.Value.(*faceEntry).path)
+		ent := oldest.Value.(*faceEntry)
+		delete(c.items, ent.path)
+		c.used -= ent.size
 	}
 }
 
-func parseFace(path string) (cf *cachedFace) {
+func parseFace(path string) (cf *cachedFace, size int64) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil
+		return nil, 0
 	}
 	defer f.Close()
+	// The face retains its font's tables (the loader's table buffers and the
+	// lazy per-table parses), so the file size is the closest cheap proxy for
+	// resident bytes. Slight overestimate for .ttc collections (face 0 only),
+	// which evicts earlier — the safe direction. On parse failure the entry
+	// is a negative cache hit; it costs nothing, so it gets size 0.
+	if st, err := f.Stat(); err == nil {
+		size = st.Size()
+	}
 	// Use the first loader so single fonts and collections (.ttc) both
 	// resolve to face index 0, matching FT_New_Face(path, 0).
 	loaders, err := ot.NewLoaders(f)
 	if err != nil || len(loaders) == 0 {
-		return nil
+		return nil, 0
 	}
 	ld := loaders[0]
 
 	defer func() {
 		if r := recover(); r != nil {
 			cf = nil // font parser panicked (e.g. malformed CFF2)
+			size = 0
 		}
 	}()
 
 	ft, err := font.NewFont(ld)
 	if err != nil {
-		return nil
+		return nil, 0
 	}
 	face := font.NewFace(ft)
 	return &cachedFace{
 		face:  face,
 		upem:  face.Upem(),
 		color: hasColorTable(ld),
-	}
+	}, size
 }
 
 // hasColorTable reports whether the font's table directory contains a
