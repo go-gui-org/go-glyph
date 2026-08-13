@@ -8,6 +8,21 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.20.2] - 2026-08-13
+
+### Fixed
+
+- **Font cache memory is now reclaimed without new face churn.** The byte
+  budget alone bounds retention only while new faces keep arriving; a session
+  that loaded a big working set (e.g. a full ucs-detect sweep) held the
+  budget's worth of faces forever. A background sweeper now evicts faces
+  untouched for a short idle age and releases the memory deterministically,
+  and the fallback resolution cache evicts FIFO instead of clearing the whole
+  map on overflow, so scrolling a large buffer does not re-probe every
+  cluster. Emoji fallback gets a fast path too: single-codepoint clusters are
+  decided by cmap coverage alone, skipping the face load and HarfBuzz shape
+  on a post-eviction re-probe.
+
 ## [v1.20.1] - 2026-08-12
 
 ### Fixed
