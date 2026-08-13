@@ -150,14 +150,32 @@ func (ctx *Context) probeFallback(text string, wantColor bool,
 		// Hold out for a color font; fallbackPaths lists color-emoji fonts
 		// ahead of CJK, so this succeeds when one is installed and otherwise
 		// leaves the base text glyph.
+		//
+		// A single-codepoint cluster (the overwhelmingly common emoji case) is
+		// decided by cmap coverage alone: shaping cannot produce a glyph for a
+		// codepoint the cmap lacks, and a ligature needs at least two
+		// codepoints. Skipping the face load + HarfBuzz shape keeps a
+		// post-eviction re-probe a resident-map lookup instead of a file
+		// parse; only multi-codepoint sequences (ZWJ families, flags) are
+		// shaped to confirm a real glyph. Ignorable-only clusters are not
+		// single (see singleCodepoint) and take the shape path, which finds
+		// no glyphs and reports no fallback — coverage would claim the first
+		// color font and hand the invisible character a full emoji cell.
+		single := singleCodepoint(text)
 		for _, path := range ctx.fallbackPaths {
 			cov := loadCoverage(path)
 			if cov == nil || !cov.color {
 				continue
 			}
-			fb := ensureFont(path)
-			if fb.face == nil || !fb.hasGlyphs(text) {
-				continue
+			if single {
+				if !cov.covers(text) {
+					continue
+				}
+			} else {
+				fb := ensureFont(path)
+				if fb.face == nil || !fb.hasGlyphs(text) {
+					continue
+				}
 			}
 			return path, true
 		}
@@ -180,6 +198,26 @@ func (ctx *Context) probeFallback(text string, wantColor bool,
 		return color[0], true
 	}
 	return "", false
+}
+
+// singleCodepoint reports whether text carries exactly one non-ignorable
+// codepoint, counting variation selectors, joiners and bidi marks as
+// ignorable. Such clusters are decidable by cmap coverage alone. A cluster of
+// only ignorables (a lone ZWJ or VS16) is NOT single: shaping it produces no
+// glyphs at all, so no font can "cover" it — coverage would claim the first
+// color font and hand the invisible character a full emoji cell.
+func singleCodepoint(text string) bool {
+	n := 0
+	for _, r := range text {
+		if isDefaultIgnorable(r) {
+			continue
+		}
+		n++
+		if n > 1 {
+			return false
+		}
+	}
+	return n == 1
 }
 
 // clusterIsEmoji reports whether a grapheme cluster should render with a

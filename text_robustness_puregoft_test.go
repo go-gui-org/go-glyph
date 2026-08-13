@@ -105,8 +105,10 @@ func TestGenericFallback(t *testing.T) {
 }
 
 // TestCacheFallbackBounded verifies the resolution cache lazily allocates,
-// stores results, and clears itself at the cap so a pathological stream of
-// distinct clusters cannot grow it without bound.
+// stores results, and evicts FIFO at the cap so a pathological stream of
+// distinct clusters cannot grow it without bound while the recently probed
+// hot set survives (a full clear would re-probe every cluster on the next
+// scroll through a large buffer).
 func TestCacheFallbackBounded(t *testing.T) {
 	ctx := &Context{}
 	if ctx.fallbackResolve != nil {
@@ -120,7 +122,8 @@ func TestCacheFallbackBounded(t *testing.T) {
 		t.Fatalf("stored resolution = %+v, want {/a.ttf true}", got)
 	}
 
-	// Fill exactly to the cap: no clear happens until an insert sees len==cap.
+	// Fill exactly to the cap: no eviction happens until an insert sees
+	// len==cap.
 	ctx2 := &Context{}
 	for i := 0; i < fallbackResolveCap; i++ {
 		ctx2.cacheFallback(strconv.Itoa(i), fbResolution{})
@@ -129,10 +132,77 @@ func TestCacheFallbackBounded(t *testing.T) {
 		t.Fatalf("len at cap = %d, want %d",
 			len(ctx2.fallbackResolve), fallbackResolveCap)
 	}
-	// The next distinct insert must clear first, leaving just the new entry.
+	// The next distinct insert evicts the oldest entry (FIFO), not the whole
+	// map: the new entry and the second-oldest survive, the first is gone.
 	ctx2.cacheFallback("overflow", fbResolution{})
-	if got := len(ctx2.fallbackResolve); got != 1 {
-		t.Fatalf("len after overflow = %d, want 1 (map cleared)", got)
+	if got := len(ctx2.fallbackResolve); got != fallbackResolveCap {
+		t.Fatalf("len after overflow = %d, want %d (FIFO eviction)",
+			got, fallbackResolveCap)
+	}
+	if _, ok := ctx2.fallbackResolve["0"]; ok {
+		t.Error("oldest entry retained after overflow (FIFO should evict it)")
+	}
+	if _, ok := ctx2.fallbackResolve["overflow"]; !ok {
+		t.Error("newest entry missing after overflow")
+	}
+	if len(ctx2.resolveOrder) != fallbackResolveCap {
+		t.Fatalf("resolveOrder len = %d, want %d", len(ctx2.resolveOrder), fallbackResolveCap)
+	}
+	if ctx2.resolveOrder[0] == "0" {
+		t.Error("resolveOrder still references the evicted oldest key")
+	}
+
+	// Re-storing an existing key updates the resolution without duplicating
+	// the key in the FIFO queue (a duplicate would let a later eviction
+	// delete a live entry).
+	ctx2.cacheFallback("overflow", fbResolution{path: "/b.ttf", isColor: true})
+	if got := ctx2.fallbackResolve["overflow"].path; got != "/b.ttf" {
+		t.Errorf("re-stored resolution = %q, want /b.ttf", got)
+	}
+	if len(ctx2.resolveOrder) != fallbackResolveCap {
+		t.Fatalf("resolveOrder len after re-store = %d, want %d",
+			len(ctx2.resolveOrder), fallbackResolveCap)
+	}
+	n := 0
+	for _, k := range ctx2.resolveOrder {
+		if k == "overflow" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("resolveOrder holds %d copies of a re-stored key, want 1", n)
+	}
+}
+
+// TestSingleCodepoint pins the classification that gates probeFallback's
+// coverage-only fast path: exactly one non-ignorable codepoint (with
+// variation selectors / joiners / bidi marks tolerated) is coverage-decidable,
+// while an ignorable-only cluster must take the shaping path — coverage says
+// "covered" for it (faceCovers skips ignorables), which would hand a lone ZWJ
+// or VS16 a full color-emoji cell instead of the zero-width nothing shaping
+// produces.
+func TestSingleCodepoint(t *testing.T) {
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{"", false},
+		{"a", true},
+		{"é", true},
+		{"a\uFE0F", true},                     // base + VS16
+		{"a\u200D", true},                     // base + ZWJ (dangling joiner)
+		{"\u200D", false},                     // lone ZWJ
+		{"\uFE0F", false},                     // lone VS16
+		{"\uFE0F\u200D", false},               // ignorables only
+		{"1\uFE0F\u20E3", false},              // keycap sequence (two bases)
+		{"\U0001F468\u200D\U0001F469", false}, // ZWJ family
+		{"\U0001F1FA\U0001F1F8", false},       // flag (two RIs)
+		{"a\u200Db", false},                   // two real codepoints
+	}
+	for _, tc := range cases {
+		if got := singleCodepoint(tc.text); got != tc.want {
+			t.Errorf("singleCodepoint(%q) = %v, want %v", tc.text, got, tc.want)
+		}
 	}
 }
 

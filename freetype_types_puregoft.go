@@ -6,8 +6,10 @@ import (
 	"container/list"
 	"math"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-text/typesetting/font"
 	ot "github.com/go-text/typesetting/font/opentype"
@@ -79,14 +81,75 @@ const faceCacheCap = 512
 // faceCacheBudget bounds the resident face bytes instead. Each parsed face
 // holds its font's tables (see parseFace), so the count cap alone lets a
 // Unicode-wide session retain ~1.5GB; the budget evicts by bytes once the
-// realistic hot set (base + CJK + emoji + a few script faces) is resident.
-// Count cap and budget both apply; the budget is the one that tames the
-// pathological sweep. It is intentionally not sized to hold the full
-// ucs-detect working set — evicted faces re-parse on re-touch, which the
-// 8192-entry layout cache in front of the text path mostly absorbs.
+// realistic hot set is resident. That hot set is larger than it looks: the
+// macOS Apple Color Emoji TTC alone is 192MB, a CJK TTC ~56MB, and the base
+// face plus a few script faces add tens of MB — roughly 260-320MB total. A
+// budget below that thrashes the render path: every emoji glyph in a
+// scrolled buffer then re-parses the 192MB TTC (tens of ms each, seconds
+// per frame), so the budget must hold the emoji+CJK hot set or the terminal
+// freezes while scrolling through mixed-script output. Count cap and budget
+// both apply; the budget tames the pathological sweep. It is intentionally
+// not sized to hold the full ucs-detect working set — evicted faces re-parse
+// on re-touch, which the 8192-entry layout cache in front of the text path
+// mostly absorbs. Post-session RSS is bounded separately by the embedder's
+// soft memory limit, and the idle sweeper (faceIdleAge) releases the whole
+// retained set once the terminal has been quiet for minutes, so a large
+// budget does not keep the long-term number high.
 const faceCacheBudget = 384 << 20
 
 var faceCache = newFaceLRU(faceCacheCap, faceCacheBudget)
+
+// faceIdleAge is how long a face may go untouched before the background
+// sweeper evicts it, and faceSweepInterval how often the sweeper runs. The
+// byte budget alone bounds retention only while new faces keep arriving; a
+// session that loaded a big working set (e.g. a full ucs-detect sweep) would
+// otherwise hold the budget's worth of faces forever, keeping RSS high long
+// after the work is done. Idle eviction returns that memory to the OS once
+// the terminal sits quiet; a re-touched face re-parses in tens of ms, so the
+// cost is a single frame after minutes of inactivity. Vars, not consts, so
+// tests can shorten them; the sweeper re-reads both every cycle.
+var (
+	faceIdleAge       = 5 * time.Minute
+	faceSweepInterval = time.Minute
+)
+
+// faceSweeperOnce starts the idle sweeper exactly once per process.
+var faceSweeperOnce sync.Once
+
+// startFaceSweeper launches a background goroutine that evicts faces the
+// render thread has not touched for faceIdleAge. The render thread alone
+// cannot drive this: an idle terminal performs no inserts, so a sweep
+// throttled to inserts would never fire. The LRU mutex makes the sweep safe
+// against concurrent loads and rasterization; an in-flight render holds its
+// own *cachedFace pointer, which the GC keeps alive regardless of eviction.
+//
+// After an eviction it forces a collection with debug.FreeOSMemory. Without
+// it the freed table buffers would sit in the heap until the next
+// allocation-driven GC — minutes away at idle — and the pooled HarfBuzz
+// fonts each face carried survive one extra GC via sync.Pool's victim list,
+// pinning the tables another cycle. FreeOSMemory makes the RSS decay
+// deterministic. It only runs when something was actually evicted, which by
+// definition means the terminal has been quiet for faceIdleAge, so the
+// stop-the-world pause cannot hit an active render.
+func startFaceSweeper() {
+	faceSweeperOnce.Do(func() {
+		go func() {
+			for {
+				time.Sleep(faceSweepInterval)
+				if faceCache.evictIdle() > 0 {
+					// One collection is not enough: the pooled HarfBuzz fonts
+					// each face carried survive a single GC via sync.Pool's
+					// victim list, pinning the face's table buffers one extra
+					// cycle (measured: ~200MB still inuse after one GC, ~6MB
+					// after two). FreeOSMemory forces a GC each call, so two
+					// calls release the tables and return the pages to the OS.
+					debug.FreeOSMemory()
+					debug.FreeOSMemory()
+				}
+			}
+		}()
+	})
+}
 
 // faceLRU is a bounded, concurrency-safe path→cachedFace cache. It caches
 // misses (nil) too, so a bad path is not re-read on every glyph.
@@ -100,9 +163,10 @@ type faceLRU struct {
 }
 
 type faceEntry struct {
-	path string
-	face *cachedFace // may be nil (negative cache)
-	size int64       // retained table bytes, for the budget
+	path      string
+	face      *cachedFace // may be nil (negative cache)
+	size      int64       // retained table bytes, for the budget
+	lastTouch int64       // UnixMilli of last get/add; drives idle eviction
 }
 
 func newFaceLRU(capacity int, budget int64) *faceLRU {
@@ -136,10 +200,17 @@ func (c *faceLRU) get(path string) (*cachedFace, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if el, ok := c.items[path]; ok {
-		c.ll.MoveToFront(el)
+		c.touch(el)
 		return el.Value.(*faceEntry).face, true
 	}
 	return nil, false
+}
+
+// touch marks an entry as used now, moving it to the front of the recency
+// list. Caller holds mu.
+func (c *faceLRU) touch(el *list.Element) {
+	c.ll.MoveToFront(el)
+	el.Value.(*faceEntry).lastTouch = time.Now().UnixMilli()
 }
 
 // add inserts path→cf, evicting the least-recently-used entry when over
@@ -151,10 +222,15 @@ func (c *faceLRU) add(path string, cf *cachedFace, size int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if el, ok := c.items[path]; ok {
-		c.ll.MoveToFront(el)
+		c.touch(el)
 		return
 	}
-	c.items[path] = c.ll.PushFront(&faceEntry{path: path, face: cf, size: size})
+	c.items[path] = c.ll.PushFront(&faceEntry{
+		path:      path,
+		face:      cf,
+		size:      size,
+		lastTouch: time.Now().UnixMilli(),
+	})
 	c.used += size
 	// Over-budget eviction keeps the freshest entry even when it alone
 	// exceeds the budget; capacity eviction always applies.
@@ -169,6 +245,30 @@ func (c *faceLRU) add(path string, cf *cachedFace, size int64) {
 		delete(c.items, ent.path)
 		c.used -= ent.size
 	}
+}
+
+// evictIdle removes every entry untouched for faceIdleAge and returns the
+// bytes freed. Unlike the budget-based eviction, this one is driven by
+// wall-clock time, so the retention a burst session built up decays once the
+// terminal sits quiet — the OS reclaims the freed face tables and RSS returns
+// to the pre-session baseline. A face still in active use is untouched by
+// definition.
+func (c *faceLRU) evictIdle() (freed int64) {
+	cutoff := time.Now().UnixMilli() - int64(faceIdleAge/time.Millisecond)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for el := c.ll.Front(); el != nil; {
+		next := el.Next()
+		if el.Value.(*faceEntry).lastTouch < cutoff {
+			c.ll.Remove(el)
+			ent := el.Value.(*faceEntry)
+			delete(c.items, ent.path)
+			c.used -= ent.size
+			freed += ent.size
+		}
+		el = next
+	}
+	return freed
 }
 
 func parseFace(path string) (cf *cachedFace, size int64) {
