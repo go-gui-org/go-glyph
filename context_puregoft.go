@@ -54,8 +54,10 @@ type Context struct {
 	// depends only on the fixed fallback set, so it is stable across the base
 	// font, size, and re-layouts. Caching the negative ("no font, render tofu")
 	// case is what removes the per-scroll rescan of every fallback font for
-	// unsupported scripts (Chakma, Javanese, …).
+	// unsupported scripts (Chakma, Javanese, …). resolveOrder is the FIFO key
+	// queue for bounded eviction (see fallbackResolveCap).
 	fallbackResolve map[string]fbResolution
+	resolveOrder    []string
 }
 
 // fbResolution is a cached script-fallback decision for one cluster.
@@ -64,20 +66,33 @@ type fbResolution struct {
 	isColor bool
 }
 
-// fallbackResolveCap bounds the resolution cache; clearing on overflow keeps
-// memory bounded for pathological streams of distinct clusters while costing
-// only an occasional rescan.
-const fallbackResolveCap = 1 << 16
+// fallbackResolveCap bounds the resolution cache. Overflow evicts the
+// oldest entries (FIFO) rather than clearing the whole map: a resolution
+// depends only on the fixed fallback set, so a full clear turns the next
+// scroll through a large buffer into a re-probe of every cluster it covered
+// (each probe shaping color candidates — see probeFallback). Sized to hold a
+// full Unicode sweep (~150k distinct clusters) with headroom; at ~24 bytes
+// per entry the bound costs a few tens of MB worst-case.
+const fallbackResolveCap = 1 << 18
 
 // cacheFallback stores a resolution, lazily allocating and bounding the map.
+// Eviction is FIFO by first-probe order, preserving the recently probed hot
+// set that scrolling re-layouts actually consult.
 func (ctx *Context) cacheFallback(text string, res fbResolution) {
 	if ctx.fallbackResolve == nil {
 		ctx.fallbackResolve = make(map[string]fbResolution)
 	}
+	if _, ok := ctx.fallbackResolve[text]; ok {
+		ctx.fallbackResolve[text] = res
+		return
+	}
 	if len(ctx.fallbackResolve) >= fallbackResolveCap {
-		clear(ctx.fallbackResolve)
+		oldest := ctx.resolveOrder[0]
+		ctx.resolveOrder = ctx.resolveOrder[1:]
+		delete(ctx.fallbackResolve, oldest)
 	}
 	ctx.fallbackResolve[text] = res
+	ctx.resolveOrder = append(ctx.resolveOrder, text)
 }
 
 // NewContext creates a text context backed by go-text/typesetting.
@@ -101,6 +116,10 @@ func NewContext(scaleFactor float32) (*Context, error) {
 	setFTFontPaths(ctx.fontPaths)
 	setFTScriptFallbacks(ctx.fallbackPaths)
 	setFTColorFallbacks(ctx.colorPaths)
+	// Idle eviction decays the face cache after a burst session (the render
+	// thread alone could never trigger it: an idle terminal performs no
+	// inserts). One goroutine per process, gated by sync.Once.
+	startFaceSweeper()
 	// Warm the fallback coverage cache off the layout path, once per
 	// process (see warmFallbackCoverageOnce). fallbackPaths is never
 	// mutated after discovery, so the goroutine reads a stable slice.

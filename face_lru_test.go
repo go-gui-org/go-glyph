@@ -2,7 +2,10 @@
 
 package glyph
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // fakeFace returns a cachedFace with no parsed font; the LRU only inspects
 // size and identity, so a bare struct is enough.
@@ -142,5 +145,62 @@ func TestFaceLRUBudgetZeroNoOp(t *testing.T) {
 	}
 	if lru.ll.Len() != 5 {
 		t.Errorf("Len = %d, want 5 (budget disabled)", lru.ll.Len())
+	}
+}
+
+// TestFaceLRUIdleEviction verifies evictIdle drops only entries untouched
+// for the idle age, and that get/add refresh the touch stamp so active use
+// survives a sweep.
+func TestFaceLRUIdleEviction(t *testing.T) {
+	lru := newFaceLRU(16, 1<<30)
+	lru.add("a", fakeFace(), 10)
+	lru.add("b", fakeFace(), 10)
+	// Age a past the idle threshold by rewriting its touch stamp (the
+	// alternative — sleeping faceIdleAge — would slow the suite by minutes).
+	old := time.Now().Add(-10 * time.Minute).UnixMilli()
+	lru.items["a"].Value.(*faceEntry).lastTouch = old
+	lru.items["b"].Value.(*faceEntry).lastTouch = old
+
+	lru.evictIdle()
+	if _, ok := lru.items["a"]; ok {
+		t.Error("a retained despite being idle")
+	}
+	if _, ok := lru.items["b"]; ok {
+		t.Error("b retained despite being idle")
+	}
+	if lru.used != 0 || lru.ll.Len() != 0 {
+		t.Errorf("after idle sweep: used=%d Len=%d, want 0/0", lru.used, lru.ll.Len())
+	}
+	// The sweep must report the freed bytes so the sweeper can decide
+	// whether a collection is warranted.
+	lru.add("c", fakeFace(), 7)
+	lru.items["c"].Value.(*faceEntry).lastTouch = old
+	if freed := lru.evictIdle(); freed != 7 {
+		t.Errorf("evictIdle freed = %d bytes, want 7", freed)
+	}
+
+	// Fresh entries survive, and get refreshes a stale entry's stamp.
+	lru.add("a", fakeFace(), 10)
+	lru.add("b", fakeFace(), 10)
+	lru.items["a"].Value.(*faceEntry).lastTouch = old
+	lru.items["b"].Value.(*faceEntry).lastTouch = old
+	lru.get("a") // touch: must now survive the sweep
+	lru.evictIdle()
+	if _, ok := lru.items["a"]; !ok {
+		t.Error("a evicted despite a fresh get")
+	}
+	if _, ok := lru.items["b"]; ok {
+		t.Error("b retained despite being idle")
+	}
+	if lru.used != 10 {
+		t.Errorf("used = %d, want 10 (a only)", lru.used)
+	}
+
+	// Re-add of the same path refreshes the stamp (duplicate parse race).
+	lru.items["a"].Value.(*faceEntry).lastTouch = old
+	lru.add("a", fakeFace(), 10)
+	lru.evictIdle()
+	if _, ok := lru.items["a"]; !ok {
+		t.Error("a evicted despite a re-add touch")
 	}
 }
