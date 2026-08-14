@@ -8,34 +8,47 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **Ink bounds: `(*TextSystem).InkBounds` and `(*Context).LayoutInkBounds`.**
+  Both report the box a run actually paints into, in layout coordinates. The
+  advance box a layout reports (`Width`/`Height`) spans the full ascent and
+  descent plus every glyph's side bearings, whether or not the glyph paints
+  there, so centring a single glyph on it — an icon, a check mark — leaves it
+  visibly high and off to one side. Callers that centre one glyph inside a drawn
+  frame centre on the ink box instead. The native path unions per-glyph outline
+  extents; the Canvas2D path measures each run through `actualBoundingBox*`.
+  Both report `ok=false` when a glyph cannot be measured (unloadable face,
+  bitmap-only colour glyph, vertical orientation), so callers fall back to the
+  advance box rather than mis-place the glyph.
+
 ## [v1.20.2] - 2026-08-13
 
 ### Fixed
 
-- **Font cache memory is now reclaimed without new face churn.** The byte
-  budget alone bounds retention only while new faces keep arriving; a session
-  that loaded a big working set (e.g. a full ucs-detect sweep) held the
-  budget's worth of faces forever. A background sweeper now evicts faces
-  untouched for a short idle age and releases the memory deterministically,
-  and the fallback resolution cache evicts FIFO instead of clearing the whole
-  map on overflow, so scrolling a large buffer does not re-probe every
-  cluster. Emoji fallback gets a fast path too: single-codepoint clusters are
-  decided by cmap coverage alone, skipping the face load and HarfBuzz shape
-  on a post-eviction re-probe.
+- **Font cache memory is now reclaimed without new face churn.** The byte budget
+  alone bounds retention only while new faces keep arriving; a session that
+  loaded a big working set (e.g. a full ucs-detect sweep) held the budget's
+  worth of faces forever. A background sweeper now evicts faces untouched for a
+  short idle age and releases the memory deterministically, and the fallback
+  resolution cache evicts FIFO instead of clearing the whole map on overflow, so
+  scrolling a large buffer does not re-probe every cluster. Emoji fallback gets
+  a fast path too: single-codepoint clusters are decided by cmap coverage alone,
+  skipping the face load and HarfBuzz shape on a post-eviction re-probe.
 
 ## [v1.20.1] - 2026-08-12
 
 ### Fixed
 
-- **The face LRU is now byte-budgeted, not entry-budgeted.** A single
-  typeface with many faces (e.g. every box-drawing glyph as its own face at
-  multiple sizes) previously evicted only when the count of entries exceeded
-  the cap, so a large atlas-backed face could pin hundreds of megabytes while
-  the cache looked small. The cache now tracks total resident bytes against a
-  ceiling (default ~384 MB), evicting least-recently-used faces by byte weight,
-  with a per-entry floor so a single oversized face cannot starve the rest.
-  TUI-heavy workloads (terminals, editors) no longer balloon resident memory
-  when switching between many fonts or sizes.
+- **The face LRU is now byte-budgeted, not entry-budgeted.** A single typeface
+  with many faces (e.g. every box-drawing glyph as its own face at multiple
+  sizes) previously evicted only when the count of entries exceeded the cap, so
+  a large atlas-backed face could pin hundreds of megabytes while the cache
+  looked small. The cache now tracks total resident bytes against a ceiling
+  (default ~384 MB), evicting least-recently-used faces by byte weight, with a
+  per-entry floor so a single oversized face cannot starve the rest. TUI-heavy
+  workloads (terminals, editors) no longer balloon resident memory when
+  switching between many fonts or sizes.
 
 ## [v1.20.0] - 2026-08-11
 
