@@ -36,12 +36,15 @@ jobs:
             fonts-noto-color-emoji \
             pkg-config
 
-      - name: Test root module (skip ebitengine — requires display)
+      - name: Test root module
         env:
           CGO_ENABLED: "1"
-        run: |
-          go test -coverprofile=coverage.out \
-            $(go list ./... | grep -v backend/ebitengine)
+        run: go test -coverprofile=coverage.out ./...
+
+      - name: Build ebitengine backend module (tests need a display)
+        env:
+          CGO_ENABLED: "1"
+        run: ( cd backend/ebitengine && go build ./... )
 
       - name: Vet root module
         env:
@@ -292,6 +295,9 @@ jobs:
       - name: Test root module
         run: go test ./...
 
+      - name: Test ebitengine backend module
+        run: ( cd backend/ebitengine && go test ./... )
+
       - name: Build root package
         run: go build ./...
 
@@ -311,6 +317,7 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: |
             go.sum
+            backend/ebitengine/go.sum
             examples/demo/go.sum
             examples/demo_gpu/go.sum
 
@@ -334,6 +341,12 @@ jobs:
           # set expands again; -p 1 keeps concurrent package binaries bounded.
           GOMEMLIMIT: "2GiB"
         run: go test -p 1 ./...
+
+      - name: Test ebitengine backend module
+        env:
+          CGO_ENABLED: "1"
+          GOMEMLIMIT: "2GiB"
+        run: ( cd backend/ebitengine && go test ./... )
 
       - name: Vet root module
         env:

@@ -176,7 +176,8 @@
 //
 // [DrawBackend] is the interface for plugging in a rendering framework.
 // Five backends are provided:
-//   - [github.com/go-gui-org/go-glyph/backend/ebitengine]: Ebitengine integration.
+//   - [github.com/go-gui-org/go-glyph/backend/ebitengine]: Ebitengine integration
+//     (separate Go module; import path unchanged).
 //   - [github.com/go-gui-org/go-glyph/backend/gpu]: raw OpenGL 3.3 / Metal.
 //   - [github.com/go-gui-org/go-glyph/backend/web]: HTML Canvas (WASM).
 //   - [github.com/go-gui-org/go-glyph/backend/android]: Android GPU.
