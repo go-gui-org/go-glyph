@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.22.0] - 2026-08-15
+
+### Changed
+
+- **`backend/ebitengine` is now its own module.** The root module previously
+  required `hajimehoshi/ebiten/v2` solely for `backend/ebitengine`, dragging in
+  the `oto/v3` audio stack and its transitive deps (gomobile, hideconsole, xgb,
+  purego) for every consumer of go-glyph. The submodule keeps the same import
+  path (`github.com/go-gui-org/go-glyph/backend/ebitengine`), so existing
+  imports compile unchanged; the root `go.mod` no longer requires ebiten.
+  `examples/demo` gains a require + replace for the submodule. CI builds the
+  module on Linux (headless, build only) and tests it on macOS/Windows.
+
+- **`make prepush` local validation gate.** New target running `test-race`,
+  `vet`, `lint` (the CI-faithful package scope), `nocgo`
+  (`CGO_ENABLED=0` build/vet/test of the root package), and `cross-build`.
+
 ## [v1.21.0] - 2026-08-14
 
 ### Added
