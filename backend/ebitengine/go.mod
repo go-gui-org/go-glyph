@@ -1,16 +1,11 @@
-module github.com/go-gui-org/go-glyph/examples/demo
+module github.com/go-gui-org/go-glyph/backend/ebitengine
 
 go 1.26
 
 require (
 	github.com/go-gui-org/go-glyph v1.4.1
-	github.com/go-gui-org/go-glyph/backend/ebitengine v0.0.0
 	github.com/hajimehoshi/ebiten/v2 v2.9.9
 )
-
-replace github.com/go-gui-org/go-glyph => ../..
-
-replace github.com/go-gui-org/go-glyph/backend/ebitengine => ../../backend/ebitengine
 
 require (
 	github.com/ebitengine/gomobile v0.0.0-20260211053922-3d992dae95d1 // indirect
@@ -24,3 +19,5 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 )
+
+replace github.com/go-gui-org/go-glyph => ../..
