@@ -457,12 +457,11 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 			charRectByIndex[ch.byteI] = crIdx
 
 			attrIdx := len(logAttrs)
-			isWS := ch.text == " " || ch.text == "\t"
-			prevWS := ci > 0 && (chars[ci-1].text == " " || chars[ci-1].text == "\t" || chars[ci-1].text == "\n")
+			// Word flags are not set here: this loop runs in visual
+			// (bidi) order, while word runs are a property of logical
+			// order. applyWordAttrs fills them in once, below.
 			logAttrs = append(logAttrs, LogAttr{
 				IsCursorPosition: true,
-				IsWordStart:      !isWS && prevWS,
-				IsWordEnd:        isWS && ci > 0 && chars[ci-1].text != " " && chars[ci-1].text != "\t",
 				IsLineBreak:      ch.text == "\n",
 			})
 			logAttrByIndex[ch.byteI] = attrIdx
@@ -511,6 +510,8 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 	endAttrIdx := len(logAttrs)
 	logAttrs = append(logAttrs, LogAttr{IsCursorPosition: true})
 	logAttrByIndex[len(text)] = endAttrIdx
+
+	applyWordAttrs(text, logAttrs, logAttrByIndex)
 
 	result := Layout{
 		Text:            text,
@@ -593,6 +594,8 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 	endIdx := len(logAttrs)
 	logAttrs = append(logAttrs, LogAttr{IsCursorPosition: true})
 	logAttrByIndex[len(text)] = endIdx
+
+	applyWordAttrs(text, logAttrs, logAttrByIndex)
 
 	glyphCount := len(allGlyphs)
 	totalH := penY
