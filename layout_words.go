@@ -53,6 +53,126 @@ func runeClass(r rune) int {
 	}
 }
 
+// wordRuns calls fn once for each maximal run of same-class runes in
+// text, passing the run's byte range [start, end) and whether the run is
+// whitespace. fn returns false to stop the walk early.
+//
+// This is the single traversal behind both the layout attribute pass and
+// the exported string helpers, so the two cannot disagree about where a
+// word begins or ends.
+func wordRuns(text string, fn func(start, end int, space bool) bool) {
+	for off := 0; off < len(text); {
+		r, size := utf8.DecodeRuneInString(text[off:])
+		c := runeClass(r)
+		end := off + size
+		for end < len(text) {
+			r2, size2 := utf8.DecodeRuneInString(text[end:])
+			if runeClass(r2) != c {
+				break
+			}
+			end += size2
+		}
+		if !fn(off, end, c == classSpace) {
+			return
+		}
+		off = end
+	}
+}
+
+// hasWordRun reports whether text contains at least one non-whitespace
+// run. Text made only of whitespace has no words, which the Layout word
+// API signals by returning the query index unchanged.
+func hasWordRun(text string) bool {
+	found := false
+	wordRuns(text, func(_, _ int, space bool) bool {
+		if !space {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// WordBoundsInString returns the [start, end) byte range of the class run
+// containing byteIdx. It is the string-only twin of
+// (*Layout).GetWordAtIndex: a punctuation run is a word of its own, and an
+// index inside a whitespace run returns that whole run.
+//
+// The one deliberate difference is grapheme clusters. GetWordAtIndex
+// consults LogAttrs and refuses to mark a boundary inside a cluster, so a
+// ZWJ stays attached to its base; this function has only the text, so a
+// ZWJ between word runes classifies as punctuation and splits them.
+// Callers with a Layout in hand should prefer the method.
+func WordBoundsInString(s string, byteIdx int) (int, int) {
+	// Whitespace-only (or empty) text has no words at all, and the
+	// Layout method reports that by returning an empty range at the
+	// query index. Mirror it before clamping, as the method does.
+	if !hasWordRun(s) {
+		return byteIdx, byteIdx
+	}
+	if byteIdx >= len(s) {
+		// The caret one past the end belongs to the last run, so a
+		// double-click there selects the final word. Run boundaries are
+		// rune-aligned, so a mid-rune index still resolves correctly.
+		byteIdx = len(s) - 1
+	}
+	byteIdx = max(byteIdx, 0)
+
+	start, end := byteIdx, byteIdx
+	wordRuns(s, func(rs, re int, _ bool) bool {
+		if byteIdx < re {
+			start, end = rs, re
+			return false
+		}
+		return true
+	})
+	return start, end
+}
+
+// WordStartLeft returns the byte index of the word start before byteIdx,
+// or 0 when there is none. It is the string-only twin of
+// (*Layout).MoveCursorWordLeft: the caret lands on word starts only,
+// never inside whitespace and never on a word end.
+func WordStartLeft(s string, byteIdx int) int {
+	if byteIdx <= 0 {
+		return 0
+	}
+	result := 0
+	wordRuns(s, func(rs, _ int, space bool) bool {
+		if space {
+			return true
+		}
+		if rs < byteIdx {
+			result = rs
+			return true
+		}
+		return false
+	})
+	return result
+}
+
+// WordStartRight returns the byte index of the word start after byteIdx,
+// or len(s) when there is none. It is the string-only twin of
+// (*Layout).MoveCursorWordRight.
+func WordStartRight(s string, byteIdx int) int {
+	result := -1
+	wordRuns(s, func(rs, _ int, space bool) bool {
+		if space {
+			return true
+		}
+		if rs > byteIdx {
+			result = rs
+			return false
+		}
+		return true
+	})
+	if result >= 0 {
+		return result
+	}
+	return len(s)
+}
+
 // applyWordAttrs sets IsWordStart and IsWordEnd on logAttrs from the class
 // runs of text. It runs as a post-pass over the finished attribute table
 // rather than inline in a layout loop, for three reasons: the per-char
@@ -89,27 +209,15 @@ func applyWordAttrs(text string, logAttrs []LogAttr, logAttrByIndex map[int]int)
 		}
 	}
 
-	prevClass := classSpace
-	for off := 0; off < len(text); {
-		r, size := utf8.DecodeRuneInString(text[off:])
-		c := runeClass(r)
-		if c != prevClass {
-			// Close the run that just ended, unless it was whitespace.
-			if prevClass != classSpace {
-				mark(off, false)
-			}
-			// Open the run starting here, unless it is whitespace.
-			if c != classSpace {
-				mark(off, true)
-			}
-			prevClass = c
+	// Every non-whitespace run is a word: it opens at its first byte and
+	// ends at the byte one past its last, which for a run reaching the
+	// end of the text is len(text) — the end-of-text attr every layout
+	// builder appends.
+	wordRuns(text, func(start, end int, space bool) bool {
+		if !space {
+			mark(start, true)
+			mark(end, false)
 		}
-		off += size
-	}
-
-	// A word that runs to the end of the text ends at len(text), which is
-	// the end-of-text attr appended by every layout builder.
-	if prevClass != classSpace {
-		mark(len(text), false)
-	}
+		return true
+	})
 }
