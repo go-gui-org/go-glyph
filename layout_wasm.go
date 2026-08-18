@@ -196,6 +196,15 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 		xPad     float64
 		isObject bool
 		objWidth float64
+		cssFont  string // font this cluster was measured with; splits runs
+		// Byte length of the text this cluster draws. Normally byteL; a
+		// cluster that owns a ligature draws the whole merged span, so the
+		// browser forms the ligature in one fillText call.
+		drawLen int
+		// Set on a cluster the browser folded into its predecessor's
+		// ligature: zero advance, nothing drawn, and not a caret stop.
+		// Mirrors charInfo.absorbed on the FreeType path (layout_ft.go).
+		absorbed bool
 	}
 	chars := make([]charInfo, 0, len(clusters))
 	currentFont := cssFont
@@ -236,7 +245,87 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 			text: cl.text, width: w + xPad, byteI: cl.byteI,
 			byteL: cl.byteL, yShift: yShift, xPad: xPad,
 			isObject: isObject, objWidth: objWidth,
+			cssFont: currentFont, drawLen: cl.byteL,
 		})
+	}
+
+	// Fold mandatory ligatures. Canvas2D shapes each fillText call on its
+	// own, and this backend draws one call per cluster, so a lam-alef would
+	// otherwise render as two isolated letters and offer a caret stop
+	// between them — a stop the FreeType path rejects (layout_ft.go, where
+	// HarfBuzz reports the alef as absorbed). measureText is the only
+	// shaping signal the canvas exposes, so the run pass below infers the
+	// merge from prefix widths, then makes it real: the owning cluster
+	// takes the ligature's measured width and its whole draw span, the
+	// absorbed clusters take zero width and lose their caret stop.
+	shapeable := func(c charInfo) bool {
+		return !c.isObject && c.text != "\n" && c.text != "\r"
+	}
+	for ri := 0; ri < len(chars); {
+		if !shapeable(chars[ri]) {
+			ri++
+			continue
+		}
+		// A run is a maximal span of consecutive text clusters sharing one
+		// font — the unit the browser would shape together.
+		rj := ri + 1
+		for rj < len(chars) && shapeable(chars[rj]) &&
+			chars[rj].cssFont == chars[ri].cssFont {
+			rj++
+		}
+		runStart := chars[ri].byteI
+		runEnd := chars[rj-1].byteI + chars[rj-1].byteL
+		// Gate on script: Latin text can ligate too ("fi"), but those
+		// ligatures still advance and browsers let the caret enter them.
+		// Skipping them keeps the common path at zero extra canvas calls.
+		if rj-ri < 2 || !hasComplexShaping(text[runStart:runEnd]) {
+			ri = rj
+			continue
+		}
+		if chars[ri].cssFont != currentFont {
+			ctx.ctx2d.Set("font", chars[ri].cssFont)
+			currentFont = chars[ri].cssFont
+		}
+		measureRun := func(byteEnd int) float64 {
+			m := ctx.ctx2d.Call("measureText", text[runStart:byteEnd])
+			return m.Get("width").Float()
+		}
+		absorbed := detectAbsorbed(rj-ri, func(prefixLen int) float64 {
+			last := chars[ri+prefixLen-1]
+			return measureRun(last.byteI + last.byteL)
+		}, ligatureEpsilon)
+		if absorbed == nil {
+			ri = rj
+			continue
+		}
+		// detectAbsorbed never marks the first cluster of a run, so every
+		// absorbed cluster has an owner to its left.
+		for k := ri; k < rj; k++ {
+			if absorbed[k-ri] {
+				continue
+			}
+			end := k + 1
+			for end < rj && absorbed[end-ri] {
+				end++
+			}
+			if end == k+1 {
+				continue
+			}
+			mergedEnd := chars[end-1].byteI + chars[end-1].byteL
+			// Measure the merged span directly rather than summing the
+			// prefix deltas: this is the exact string the renderer will
+			// pass to fillText, so the advance cannot drift from the ink.
+			m := ctx.ctx2d.Call("measureText",
+				text[chars[k].byteI:mergedEnd])
+			chars[k].width = m.Get("width").Float() + chars[k].xPad
+			chars[k].drawLen = mergedEnd - chars[k].byteI
+			for a := k + 1; a < end; a++ {
+				chars[a].width = 0
+				chars[a].drawLen = 0
+				chars[a].absorbed = true
+			}
+		}
+		ri = rj
 	}
 
 	// Restore base font.
@@ -436,9 +525,14 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 				itemX = cx
 			}
 
+			// drawLen, not byteL: the owner of a ligature draws the
+			// whole merged span in one fillText (so the browser actually
+			// forms the ligature), and an absorbed cluster draws nothing
+			// (drawLen 0 makes glyphText return "") while keeping its
+			// place in the glyph stream.
 			allGlyphs = append(allGlyphs, Glyph{
 				Index:     uint32(ch.byteI),
-				Codepoint: uint32(ch.byteL),
+				Codepoint: uint32(ch.drawLen),
 				XOffset:   ch.xPad,
 				XAdvance:  ch.width,
 				YOffset:   ch.yShift,
@@ -461,7 +555,10 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 			// (bidi) order, while word runs are a property of logical
 			// order. applyWordAttrs fills them in once, below.
 			logAttrs = append(logAttrs, LogAttr{
-				IsCursorPosition: true,
+				// A cluster the browser folded into a neighbouring
+				// ligature is not a caret stop: carets land only on
+				// ligature boundaries, same as the FreeType path.
+				IsCursorPosition: !ch.absorbed,
 				IsLineBreak:      ch.text == "\n",
 			})
 			logAttrByIndex[ch.byteI] = attrIdx

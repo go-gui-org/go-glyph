@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Wasm caret no longer stops inside a mandatory ligature (#120).** The
+  Canvas2D backend set `LogAttr.IsCursorPosition` to `true` for every grapheme
+  cluster, while the FreeType backend uses HarfBuzz cluster data and rejects
+  positions inside a ligature. The wasm layout now infers the merge from
+  `measureText` prefix widths on runs of joining scripts (Arabic, Syriac,
+  Indic), draws the merged span in a single `fillText` — so the ligature
+  actually forms, which per-cluster drawing never did — and marks the absorbed
+  clusters zero-width and non-caret-stops. Latin runs are untouched: they cost
+  no extra canvas calls, and the caret still stops inside an `fi`, as browsers
+  do.
+
 ## [v1.22.0] - 2026-08-15
 
 ### Changed
@@ -20,8 +35,8 @@ and this project adheres to
   module on Linux (headless, build only) and tests it on macOS/Windows.
 
 - **`make prepush` local validation gate.** New target running `test-race`,
-  `vet`, `lint` (the CI-faithful package scope), `nocgo`
-  (`CGO_ENABLED=0` build/vet/test of the root package), and `cross-build`.
+  `vet`, `lint` (the CI-faithful package scope), `nocgo` (`CGO_ENABLED=0`
+  build/vet/test of the root package), and `cross-build`.
 
 ## [v1.21.0] - 2026-08-14
 
