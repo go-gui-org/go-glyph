@@ -8,7 +8,32 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **Word segmentation is available without a `Layout` (#119).**
+  `WordBoundsInString`, `WordStartLeft`, and `WordStartRight` apply the same
+  class-run rules as `GetWordAtIndex` and `MoveCursorWordLeft`/`Right` to a
+  plain string, for callers that need word motion before a layout exists — a
+  text field with no measurer, or a headless test. The only difference is
+  grapheme clusters: with no `LogAttrs` to consult, a ZWJ between word runes
+  splits them, so callers holding a `Layout` should keep using the methods. A
+  test asserts the two agree at every index of a corpus covering every class
+  transition.
+
 ### Fixed
+
+- **Word boundaries are real segmentation, not a whitespace test (#119).**
+  `LogAttr.IsWordStart`/`IsWordEnd` came from a space-or-tab comparison, so
+  `foo.bar.baz` was one word, `a+b` was one word, and CJK text had no interior
+  boundaries at all — Ctrl+Left jumped a whole line of Japanese and double-click
+  selected it. Words are now maximal runs of one rune class (whitespace,
+  punctuation, word, Han, Hiragana, Katakana), so punctuation runs are words of
+  their own and Japanese script transitions end a word. The flags are filled by
+  one post-pass over the finished attribute table, shared by the FreeType and
+  wasm backends and by the vertical layout paths, which had no word flags
+  before. `GetWordAtIndex` is now total — every index yields a meaningful range,
+  and an index in a whitespace run returns the run, matching the platform
+  convention.
 
 - **Wasm caret no longer stops inside a mandatory ligature (#120).** The
   Canvas2D backend set `LogAttr.IsCursorPosition` to `true` for every grapheme

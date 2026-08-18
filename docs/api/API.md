@@ -224,6 +224,9 @@ See the sub\-package documentation for usage details.
 - [func ValidateFontPath\(path string, location string\) error](<#ValidateFontPath>)
 - [func ValidateSize\(size, minVal, maxVal float32, name, location string\) error](<#ValidateSize>)
 - [func ValidateTextInput\(text string, maxLen int, location string\) error](<#ValidateTextInput>)
+- [func WordBoundsInString\(s string, byteIdx int\) \(int, int\)](<#WordBoundsInString>)
+- [func WordStartLeft\(s string, byteIdx int\) int](<#WordStartLeft>)
+- [func WordStartRight\(s string, byteIdx int\) int](<#WordStartRight>)
 - [type AffineTransform](<#AffineTransform>)
   - [func AffineIdentity\(\) AffineTransform](<#AffineIdentity>)
   - [func AffineRotation\(angle float32\) AffineTransform](<#AffineRotation>)
@@ -623,6 +626,35 @@ func ValidateTextInput(text string, maxLen int, location string) error
 ```
 
 ValidateTextInput validates text for UTF\-8, non\-empty, and length.
+
+<a name="WordBoundsInString"></a>
+## func [WordBoundsInString](<https://github.com/go-gui-org/go-glyph/blob/main/layout_words.go#L107>)
+
+```go
+func WordBoundsInString(s string, byteIdx int) (int, int)
+```
+
+WordBoundsInString returns the \[start, end\) byte range of the class run containing byteIdx. It is the string\-only twin of \(\*Layout\).GetWordAtIndex: a punctuation run is a word of its own, and an index inside a whitespace run returns that whole run.
+
+The one deliberate difference is grapheme clusters. GetWordAtIndex has LogAttrs and so refuses to split a cluster, keeping an emoji ZWJ sequence whole; this function has only the text, so such a sequence splits at the ZWJ. Callers with a Layout in hand should prefer the method.
+
+<a name="WordStartLeft"></a>
+## func [WordStartLeft](<https://github.com/go-gui-org/go-glyph/blob/main/layout_words.go#L137>)
+
+```go
+func WordStartLeft(s string, byteIdx int) int
+```
+
+WordStartLeft returns the byte index of the word start before byteIdx, or 0 when there is none. It is the string\-only twin of \(\*Layout\).MoveCursorWordLeft: the caret lands on word starts only, never inside whitespace and never on a word end.
+
+<a name="WordStartRight"></a>
+## func [WordStartRight](<https://github.com/go-gui-org/go-glyph/blob/main/layout_words.go#L158>)
+
+```go
+func WordStartRight(s string, byteIdx int) int
+```
+
+WordStartRight returns the byte index of the word start after byteIdx, or len\(s\) when there is none. It is the string\-only twin of \(\*Layout\).MoveCursorWordRight.
 
 <a name="AffineTransform"></a>
 ## type [AffineTransform](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L10-L17>)
