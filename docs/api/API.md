@@ -1666,7 +1666,7 @@ func (l *Layout) GetCursorPos(byteIndex int) (CursorPosition, bool)
 GetCursorPos returns cursor geometry at byte\_index. Returns ok=false if not a valid cursor position.
 
 <a name="Layout.GetFontNameAtIndex"></a>
-### func \(\*Layout\) [GetFontNameAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L557>)
+### func \(\*Layout\) [GetFontNameAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L534>)
 
 ```go
 func (l *Layout) GetFontNameAtIndex(index int) string
@@ -1675,7 +1675,7 @@ func (l *Layout) GetFontNameAtIndex(index int) string
 GetFontNameAtIndex returns the font family name at byte index.
 
 <a name="Layout.GetParagraphAtIndex"></a>
-### func \(\*Layout\) [GetParagraphAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L530>)
+### func \(\*Layout\) [GetParagraphAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L507>)
 
 ```go
 func (l *Layout) GetParagraphAtIndex(byteIndex int, text string) (int, int)
@@ -1702,13 +1702,15 @@ func (l *Layout) GetValidCursorPositions() []int
 GetValidCursorPositions returns sorted byte indices that are valid cursor positions. Uses pre\-built cache.
 
 <a name="Layout.GetWordAtIndex"></a>
-### func \(\*Layout\) [GetWordAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L454>)
+### func \(\*Layout\) [GetWordAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L459>)
 
 ```go
 func (l *Layout) GetWordAtIndex(byteIndex int) (int, int)
 ```
 
-GetWordAtIndex returns \(start, end\) byte indices for word containing index. Returns \(index, index\) if not in a word.
+GetWordAtIndex returns the \[start, end\) byte range of the word containing byteIndex. Words are class runs — see layout\_words.go — so a punctuation run is a word of its own.
+
+An index that falls between two words is in a whitespace run, and the whitespace run itself is returned. That matches the platform convention \(double\-clicking a run of spaces selects the run\) and keeps the function total: every index yields a meaningful range.
 
 <a name="Layout.GlyphPositions"></a>
 ### func \(\*Layout\) [GlyphPositions](<https://github.com/go-gui-org/go-glyph/blob/main/layout_types.go#L151>)
@@ -1738,7 +1740,7 @@ func (l *Layout) HitTestRect(x, y float32) (Rect, bool)
 HitTestRect returns the bounding box of the character at \(x, y\) relative to the layout origin. Returns ok=false if no character is found.
 
 <a name="Layout.MoveCursorDown"></a>
-### func \(\*Layout\) [MoveCursorDown](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L421>)
+### func \(\*Layout\) [MoveCursorDown](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L420>)
 
 ```go
 func (l *Layout) MoveCursorDown(byteIndex int, preferredX float32) int
@@ -1756,7 +1758,7 @@ func (l *Layout) MoveCursorLeft(byteIndex int) int
 MoveCursorLeft returns the previous valid cursor position.
 
 <a name="Layout.MoveCursorLineEnd"></a>
-### func \(\*Layout\) [MoveCursorLineEnd](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L372>)
+### func \(\*Layout\) [MoveCursorLineEnd](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L371>)
 
 ```go
 func (l *Layout) MoveCursorLineEnd(byteIndex int) int
@@ -1765,7 +1767,7 @@ func (l *Layout) MoveCursorLineEnd(byteIndex int) int
 MoveCursorLineEnd returns the end of the current line. At a soft\-wrap boundary the later line is preferred.
 
 <a name="Layout.MoveCursorLineStart"></a>
-### func \(\*Layout\) [MoveCursorLineStart](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L355>)
+### func \(\*Layout\) [MoveCursorLineStart](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L354>)
 
 ```go
 func (l *Layout) MoveCursorLineStart(byteIndex int) int
@@ -1783,7 +1785,7 @@ func (l *Layout) MoveCursorRight(byteIndex int) int
 MoveCursorRight returns the next valid cursor position.
 
 <a name="Layout.MoveCursorUp"></a>
-### func \(\*Layout\) [MoveCursorUp](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L389>)
+### func \(\*Layout\) [MoveCursorUp](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L388>)
 
 ```go
 func (l *Layout) MoveCursorUp(byteIndex int, preferredX float32) int

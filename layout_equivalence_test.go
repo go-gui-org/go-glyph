@@ -1,6 +1,9 @@
 package glyph
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 // layoutEquivCase is a shared table-driven layout invariant test.
 // The check function receives the Layout result and asserts invariants
@@ -95,6 +98,38 @@ func LayoutEquivCases() []layoutEquivCase {
 				if len(l.LogAttrByIndex) != len(l.Text)+1 {
 					t.Errorf("LogAttrByIndex len = %d, want %d",
 						len(l.LogAttrByIndex), len(l.Text)+1)
+				}
+			},
+		},
+		{
+			// Both backends fill word flags from the same
+			// applyWordAttrs pass, so a real layout must agree with the
+			// reference segmentation of the same text. This is what
+			// keeps FreeType and wasm word motion identical.
+			name: "word_boundaries_match_reference",
+			text: "foo.bar baz",
+			cfg:  TextConfig{Style: TextStyle{FontName: "Sans 20"}},
+			check: func(t *testing.T, l Layout) {
+				wantStarts, wantEnds := wordAttrsFor(l.Text)
+				var starts, ends []int
+				for byteIdx, attrIdx := range l.LogAttrByIndex {
+					if attrIdx < 0 || attrIdx >= len(l.LogAttrs) {
+						continue
+					}
+					if l.LogAttrs[attrIdx].IsWordStart {
+						starts = append(starts, byteIdx)
+					}
+					if l.LogAttrs[attrIdx].IsWordEnd {
+						ends = append(ends, byteIdx)
+					}
+				}
+				slices.Sort(starts)
+				slices.Sort(ends)
+				if !slices.Equal(starts, wantStarts) {
+					t.Errorf("word starts = %v, want %v", starts, wantStarts)
+				}
+				if !slices.Equal(ends, wantEnds) {
+					t.Errorf("word ends = %v, want %v", ends, wantEnds)
 				}
 			},
 		},

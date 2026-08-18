@@ -324,10 +324,10 @@ func (l *Layout) MoveCursorWordLeft(byteIndex int) int {
 		return 0
 	}
 	starts := l.getWordStarts()
-	for i := len(starts) - 1; i >= 0; i-- {
-		if starts[i] < byteIndex {
-			return starts[i]
-		}
+	// Largest start strictly below byteIndex. BinarySearch returns the
+	// insertion point, so an exact hit must step back one as well.
+	if i, _ := slices.BinarySearch(starts, byteIndex); i > 0 {
+		return starts[i-1]
 	}
 	return 0
 }
@@ -338,10 +338,9 @@ func (l *Layout) MoveCursorWordRight(byteIndex int) int {
 		return byteIndex
 	}
 	starts := l.getWordStarts()
-	for _, s := range starts {
-		if s > byteIndex {
-			return s
-		}
+	// Smallest start strictly above byteIndex.
+	if i, _ := slices.BinarySearch(starts, byteIndex+1); i < len(starts) {
+		return starts[i]
 	}
 	positions := l.GetValidCursorPositions()
 	if len(positions) > 0 {
@@ -449,80 +448,58 @@ func (l *Layout) MoveCursorDown(byteIndex int, preferredX float32) int {
 	return l.findClosestIndexInLine(l.Lines[currentLineIdx+1], targetX)
 }
 
-// GetWordAtIndex returns (start, end) byte indices for word
-// containing index. Returns (index, index) if not in a word.
+// GetWordAtIndex returns the [start, end) byte range of the word
+// containing byteIndex. Words are class runs — see layout_words.go — so a
+// punctuation run is a word of its own.
+//
+// An index that falls between two words is in a whitespace run, and the
+// whitespace run itself is returned. That matches the platform convention
+// (double-clicking a run of spaces selects the run) and keeps the function
+// total: every index yields a meaningful range.
 func (l *Layout) GetWordAtIndex(byteIndex int) (int, int) {
 	if len(l.LogAttrs) == 0 {
 		return byteIndex, byteIndex
 	}
 	wordStarts := l.getWordStarts()
 	wordEnds := l.getWordEnds()
-
-	// Find word start: largest <= byteIndex.
-	start := byteIndex
-	for i := len(wordStarts) - 1; i >= 0; i-- {
-		if wordStarts[i] <= byteIndex {
-			start = wordStarts[i]
-			break
-		}
-	}
-
-	// Find word end: smallest >= byteIndex.
-	end := byteIndex
-	for _, we := range wordEnds {
-		if we >= byteIndex {
-			end = we
-			break
-		}
-	}
-
-	// If start > end (whitespace), snap to nearest word.
-	if start > end {
-		nearestStart := -1
-		for _, ws := range wordStarts {
-			if ws > byteIndex {
-				nearestStart = ws
-				break
-			}
-		}
-		nearestEnd := -1
-		for i := len(wordEnds) - 1; i >= 0; i-- {
-			if wordEnds[i] < byteIndex {
-				nearestEnd = wordEnds[i]
-				break
-			}
-		}
-		distToStart := int(maxDistance)
-		if nearestStart >= 0 {
-			distToStart = nearestStart - byteIndex
-		}
-		distToEnd := int(maxDistance)
-		if nearestEnd >= 0 {
-			distToEnd = byteIndex - nearestEnd
-		}
-		if distToStart < distToEnd && nearestStart >= 0 {
-			start = nearestStart
-			for _, we := range wordEnds {
-				if we >= start {
-					end = we
-					break
-				}
-			}
-		} else if nearestEnd >= 0 {
-			end = nearestEnd
-			for i := len(wordStarts) - 1; i >= 0; i-- {
-				if wordStarts[i] <= end {
-					start = wordStarts[i]
-					break
-				}
-			}
-		}
-	}
-
-	if start > end {
+	if len(wordStarts) == 0 || len(wordStarts) != len(wordEnds) {
 		return byteIndex, byteIndex
 	}
-	return start, end
+
+	// The caret position one past the end of the text belongs to the last
+	// run, so that double-clicking there selects the final word instead of
+	// an empty range. Word boundaries are rune-aligned, so comparing
+	// against len-1 is safe even mid-rune.
+	if byteIndex >= len(l.Text) && len(l.Text) > 0 {
+		byteIndex = len(l.Text) - 1
+	}
+
+	// Starts and ends strictly alternate, so word k is
+	// [wordStarts[k], wordEnds[k]). Find the last word that begins at or
+	// before byteIndex; byteIndex is inside it when it also ends after.
+	si, ok := slices.BinarySearch(wordStarts, byteIndex)
+	if !ok {
+		si--
+	}
+	if si >= 0 && byteIndex < wordEnds[si] {
+		return wordStarts[si], wordEnds[si]
+	}
+
+	// Not inside a word: byteIndex sits in the gap between word si and
+	// word si+1, which is exactly the whitespace run. A missing neighbour
+	// means the gap runs to the edge of the text.
+	gapStart := 0
+	if si >= 0 {
+		gapStart = wordEnds[si]
+	}
+	gapEnd := len(l.Text)
+	if si+1 < len(wordStarts) {
+		gapEnd = wordStarts[si+1]
+	}
+	if gapStart > gapEnd {
+		return byteIndex, byteIndex
+	}
+	return gapStart, gapEnd
 }
 
 // GetParagraphAtIndex returns (start, end) byte indices for
