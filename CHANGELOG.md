@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.24.0] - 2026-08-30
+
+### Added
+
+- **`RectTextureUpdater`, an optional `DrawBackend` extension for
+  sub-rectangle texture uploads (#125).** Implement it on a backend whose
+  draw calls sample a texture at the moment they are issued, and the renderer
+  will push newly rasterized glyphs to the GPU mid-frame at a cost
+  proportional to the new glyphs rather than to the whole page. Purely
+  additive — a backend that does not implement it compiles and behaves
+  exactly as before, batching to `(*Renderer).Commit` at the frame boundary.
+
+### Fixed
+
+- **Text no longer renders blank on its first appearance under OpenGL
+  (#125).** The atlas rasterizes a glyph into CPU staging on first use and
+  deferred the GPU upload to `Commit`, on the documented assumption that
+  hosts commit before the render pass samples the textures. True for Metal
+  and for software renderers, which record commands and rasterize at present
+  time; false for OpenGL, where `glDrawArrays` samples the texture as it
+  stands at that point in the command stream. A quad emitted in the same pass
+  that rasterized its glyph therefore sampled empty texels, and the text
+  appeared only on the next frame — which, in an app that draws on demand,
+  could mean whenever the user next moved the mouse. Each page now tracks the
+  region rasterized into since its last upload and sends it between the
+  resolve pass and the emit passes, gated on `RectTextureUpdater` so backends
+  that do not need it do not pay whole-page transfers per draw call.
+
 ## [v1.23.0] - 2026-08-18
 
 ### Added
