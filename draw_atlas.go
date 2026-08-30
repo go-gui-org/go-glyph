@@ -111,15 +111,21 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		}
 	}
 
-	// Dirty pages are uploaded once per frame by Commit, never here: a
-	// per-call upload would transfer the whole page for every draw call
-	// that inserted a glyph (see the Pass 1 comment). Known edge
-	// (pre-existing): when the atlas exhausts its pages, a resolve can
-	// reset the oldest page, evicting glyphs resolved earlier in this
-	// pass that lived on it — their quads sample cleared texels and
-	// render blank for one frame until the next pass re-rasterizes
+	// Push whatever Pass 1 rasterized to the GPU before any quad below
+	// samples it. On a backend that samples textures at draw time (GL)
+	// this is what keeps a glyph's first appearance from rendering blank
+	// for a frame; the upload is bounded by the new glyphs, not the page.
+	// It is a no-op on backends without RectTextureUpdater, which are the
+	// ones that do not need it — see UploadDirtyRects. Either way Commit
+	// still runs at the frame boundary and covers anything left pending.
+	//
+	// Known edge (pre-existing): when the atlas exhausts its pages, a
+	// resolve can reset the oldest page, evicting glyphs resolved earlier
+	// in this pass that lived on it — their quads sample cleared texels
+	// and render blank for one frame until the next pass re-rasterizes
 	// them (ResetOccurred drops their cache entries). Self-healing, and
 	// only reachable under full-atlas thrash (> ~4k distinct glyphs).
+	r.atlas.UploadDirtyRects()
 
 	// 1. Backgrounds.
 	for _, item := range layout.Items {

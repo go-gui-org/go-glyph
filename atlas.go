@@ -20,12 +20,52 @@ type AtlasPage struct {
 	Shelves      []Shelf
 	StagingFront []byte // GPU upload source.
 	StagingBack  []byte // CPU rasterization target.
-	TextureID    TextureID
-	Width        int
-	Height       int
-	Age          uint64 // Frame counter when last used.
-	UsedPixels   int64
-	Dirty        bool
+	// DirtyRect is the half-open pixel box rasterized into since the last
+	// upload, in page coordinates. Meaningful only while Dirty is set; an
+	// empty rect alongside Dirty is read as "all of it", so a caller that
+	// only flips Dirty still gets a correct (if whole-page) upload.
+	DirtyRect  image.Rectangle
+	TextureID  TextureID
+	Width      int
+	Height     int
+	Age        uint64 // Frame counter when last used.
+	UsedPixels int64
+	Dirty      bool
+}
+
+// markDirty unions the half-open box (x, y, w, h) into the page's pending
+// upload region.
+func (page *AtlasPage) markDirty(x, y, w, h int) {
+	page.Dirty = true
+	page.DirtyRect = page.DirtyRect.Union(image.Rect(x, y, x+w, y+h))
+}
+
+// pendingUpload returns the region to upload, clamped both to the page's
+// declared bounds and to the rows the staging buffers actually hold. An
+// empty DirtyRect means the whole page (see the field comment).
+//
+// The clamp is not paranoia about our own writers: AtlasPage's fields are
+// exported, so Width/Height/DirtyRect/staging can be set independently by
+// embedding code. Trusting them would turn a caller's mistake into an
+// out-of-range slice in uploadPage or a zero-extent UpdateTextureRect
+// call, so the region is reconciled with the buffers here instead.
+func (page *AtlasPage) pendingUpload() image.Rectangle {
+	rowBytes := page.Width * 4
+	rows := page.Height
+	if rowBytes <= 0 || rows <= 0 {
+		return image.Rectangle{}
+	}
+	// A short buffer caps the region at whole rows we can address in
+	// both buffers; the shorter of the two governs, since uploadPage
+	// touches each of them over the same span.
+	if n := min(len(page.StagingFront), len(page.StagingBack)) / rowBytes; n < rows {
+		rows = n
+	}
+	full := image.Rect(0, 0, page.Width, rows)
+	if page.DirtyRect.Empty() {
+		return full
+	}
+	return page.DirtyRect.Intersect(full)
 }
 
 // Shelf is a horizontal strip within an atlas page.
@@ -223,7 +263,10 @@ func (atlas *GlyphAtlas) InsertBitmap(bmp Bitmap, left, top int) (CachedGlyph, b
 	); err != nil {
 		return CachedGlyph{}, false, 0, err
 	}
-	page.Dirty = true
+	// Mark the padded box, not just the glyph: the transparent border is
+	// part of what this insert reserved, and uploading it keeps the ring
+	// on the GPU consistent with staging.
+	page.markDirty(x, y, paddedW, paddedH)
 	page.UsedPixels = page.calculateShelfUsedPixels()
 
 	cached := CachedGlyph{
@@ -238,23 +281,83 @@ func (atlas *GlyphAtlas) InsertBitmap(bmp Bitmap, left, top int) (CachedGlyph, b
 	return cached, resetOccurred, resetPageIdx, nil
 }
 
-// SwapAndUpload swaps staging buffers and uploads dirty pages
-// to the GPU.
+// rectUpdater reports the backend's optional sub-rectangle upload
+// support, or nil. Resolved per call rather than cached at construction
+// so that reassigning the exported Backend field cannot leave a stale
+// answer behind; an interface type assertion costs no allocation.
+func (atlas *GlyphAtlas) rectUpdater() RectTextureUpdater {
+	ru, _ := atlas.Backend.(RectTextureUpdater)
+	return ru
+}
+
+// SwapAndUpload swaps staging buffers and uploads dirty pages to the GPU.
+// Called at the frame boundary by (*Renderer).Commit, which is what makes
+// it the backstop: whatever a mid-frame UploadDirtyRects left pending — or
+// everything, on a backend without RectTextureUpdater — is sent here.
+//
+// On a backend that does implement RectTextureUpdater each page sends only
+// its pending region rather than its full extent, so the cost tracks what
+// was rasterized. Backends without it still receive whole pages.
 func (atlas *GlyphAtlas) SwapAndUpload() {
 	for i := range atlas.Pages {
-		page := &atlas.Pages[i]
-		if !page.Dirty {
-			continue
+		if page := &atlas.Pages[i]; page.Dirty {
+			atlas.uploadPage(page)
 		}
-		// Swap front/back.
-		page.StagingFront, page.StagingBack = page.StagingBack, page.StagingFront
-		// Copy front→back to preserve accumulated data.
-		copy(page.StagingBack, page.StagingFront)
-
-		atlas.Backend.UpdateTexture(page.TextureID, page.StagingFront)
-		page.Dirty = false
-		page.Age = atlas.FrameCounter
 	}
+}
+
+// UploadDirtyRects uploads pending glyph rasterization mid-frame, so
+// quads emitted after it sample texels that are already on the GPU.
+//
+// It is deliberately a no-op unless the backend implements
+// RectTextureUpdater. Without sub-rectangle support the only available
+// upload is the whole page, and doing that per draw call would turn every
+// frame that introduces a glyph into one multi-megabyte page transfer per
+// call — a terminal frame issues hundreds. Such backends keep batching to
+// SwapAndUpload at the frame boundary, which is correct for them because
+// their draw calls do not sample the texture until present time.
+func (atlas *GlyphAtlas) UploadDirtyRects() {
+	if atlas.rectUpdater() == nil {
+		return
+	}
+	atlas.SwapAndUpload()
+}
+
+// uploadPage uploads one dirty page's pending region and clears its
+// dirty state.
+func (atlas *GlyphAtlas) uploadPage(page *AtlasPage) {
+	region := page.pendingUpload()
+	if region.Empty() {
+		// Nothing addressable to send — a DirtyRect entirely outside the
+		// page, or a degenerate page. Clear the flag so the page does not
+		// re-enter this path every frame.
+		page.Dirty = false
+		page.DirtyRect = image.Rectangle{}
+		return
+	}
+
+	// Swap front/back so the upload source is the buffer just rasterized
+	// into, then restore the invariant that both buffers hold identical
+	// pixels. The two can only differ inside the pending region, so the
+	// copy-back is bounded by what changed rather than by page size —
+	// which is what makes a mid-frame upload affordable. Rows are copied
+	// whole; a glyph-tall band is negligible beside a 1024-row page.
+	page.StagingFront, page.StagingBack = page.StagingBack, page.StagingFront
+	rowBytes := page.Width * 4
+	lo := region.Min.Y * rowBytes
+	hi := region.Max.Y * rowBytes
+	copy(page.StagingBack[lo:hi], page.StagingFront[lo:hi])
+
+	if ru := atlas.rectUpdater(); ru != nil {
+		ru.UpdateTextureRect(page.TextureID, page.StagingFront, rowBytes,
+			region.Min.X, region.Min.Y, region.Dx(), region.Dy())
+	} else {
+		atlas.Backend.UpdateTexture(page.TextureID, page.StagingFront)
+	}
+
+	page.Dirty = false
+	page.DirtyRect = image.Rectangle{}
+	page.Age = atlas.FrameCounter
 }
 
 // --- internal helpers ---
@@ -343,10 +446,12 @@ func (atlas *GlyphAtlas) resetPage(pageIdx int) {
 	page.UsedPixels = 0
 	page.Age = atlas.FrameCounter
 
-	// Zero out staging buffers.
+	// Zero out staging buffers. The whole page is now dirty: the GPU copy
+	// still holds the evicted glyphs and must be cleared with it.
 	clear(page.StagingFront)
 	clear(page.StagingBack)
-	page.Dirty = true
+	page.DirtyRect = image.Rectangle{}
+	page.markDirty(0, 0, page.Width, page.Height)
 }
 
 func (atlas *GlyphAtlas) growPage(pageIdx, newHeight int) error {
@@ -372,7 +477,12 @@ func (atlas *GlyphAtlas) growPage(pageIdx, newHeight int) error {
 	// Replace texture (old one goes to garbage for deferred deletion).
 	atlas.Garbage = append(atlas.Garbage, page.TextureID)
 	page.TextureID = atlas.Backend.NewTexture(page.Width, newHeight)
-	page.Dirty = true
+	// The whole (larger) page is dirty: the replacement texture is
+	// untouched, and StagingFront was reallocated to zeros, so only a
+	// full-page region restores the front/back equality that uploadPage
+	// relies on.
+	page.DirtyRect = image.Rectangle{}
+	page.markDirty(0, 0, page.Width, newHeight)
 	return nil
 }
 
