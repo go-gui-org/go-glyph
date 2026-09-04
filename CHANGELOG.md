@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`(*TextSystem).SetDPIScale` and `DPIScale`, so a window that moves to
+  a display with a different scale factor can re-shape and re-rasterize
+  at the new density.** A `TextSystem` took its scale from the backend
+  once, at construction, and neither `Context` nor `Renderer` could be
+  re-pointed afterwards: text stayed at the density of the display the
+  window was created on while the host's own geometry followed the new
+  one. `SetDPIScale` updates both and purges the layout and glyph
+  caches, whose keys do not carry the scale. An unchanged or
+  non-positive value is a no-op, so a resize handler may call it every
+  frame.
+- **`SetDPIScale` on the bundled backends** (`ebitengine`, `android`,
+  `ios`, `web`, `gpu`), which own the logical-to-physical placement
+  scale. Pair it with `(*TextSystem).SetDPIScale`: one moves the glyphs,
+  the other moves the quads they are drawn into.
+
 ## [v1.24.0] - 2026-08-30
 
 ### Added

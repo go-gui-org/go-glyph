@@ -2,6 +2,7 @@ package gpu
 
 import (
 	"fmt"
+	"math"
 	"unsafe"
 
 	"github.com/go-gui-org/go-glyph"
@@ -148,6 +149,19 @@ func (b *Backend) DrawTexturedQuadTransformed(
 
 // DPIScale returns the display DPI scale factor.
 func (b *Backend) DPIScale() float32 { return b.dpiScale }
+
+// SetDPIScale updates the display scale factor, which the backend applies
+// when it converts glyph's logical coordinates to physical pixels. Call it
+// when the window moves to a display with a different scale factor, paired
+// with (*glyph.TextSystem).SetDPIScale so shaping and rasterization follow.
+// Values of zero or less (NaN included) and non-finite or >10× values are ignored,
+// as in New.
+func (b *Backend) SetDPIScale(dpiScale float32) {
+	if !(dpiScale > 0) || math.IsInf(float64(dpiScale), 0) || dpiScale > 10 {
+		return
+	}
+	b.dpiScale = dpiScale
+}
 
 // BeginFrame resets vertex/command buffers for a new frame.
 func (b *Backend) BeginFrame() {
