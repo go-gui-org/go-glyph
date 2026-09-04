@@ -4,6 +4,7 @@
 package ebitengine
 
 import (
+	"math"
 	"testing"
 
 	"github.com/go-gui-org/go-glyph"
@@ -77,6 +78,25 @@ func TestBackend_DPIScale(t *testing.T) {
 	b := New(nil, 2.5)
 	if got := b.DPIScale(); got != 2.5 {
 		t.Errorf("DPIScale = %f, want 2.5", got)
+	}
+}
+
+func TestBackend_SetDPIScale(t *testing.T) {
+	b := New(nil, 1.0)
+	b.SetDPIScale(2.0)
+	if got := b.DPIScale(); got != 2.0 {
+		t.Errorf("DPIScale = %f, want 2.0", got)
+	}
+	// Rejected values leave the last good scale in place.
+	b.SetDPIScale(0)
+	b.SetDPIScale(-1)
+	b.SetDPIScale(float32(math.NaN()))
+	b.SetDPIScale(float32(math.Inf(1)))
+	b.SetDPIScale(float32(math.Inf(-1)))
+	b.SetDPIScale(11)
+	b.SetDPIScale(100)
+	if got := b.DPIScale(); got != 2.0 {
+		t.Errorf("DPIScale after rejected values = %f, want 2.0", got)
 	}
 }
 

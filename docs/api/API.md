@@ -302,6 +302,7 @@ See the sub\-package documentation for usage details.
   - [func \(atlas \*GlyphAtlas\) InsertBitmap\(bmp Bitmap, left, top int\) \(CachedGlyph, bool, int, error\)](<#GlyphAtlas.InsertBitmap>)
   - [func \(atlas \*GlyphAtlas\) Reset\(\)](<#GlyphAtlas.Reset>)
   - [func \(atlas \*GlyphAtlas\) SwapAndUpload\(\)](<#GlyphAtlas.SwapAndUpload>)
+  - [func \(atlas \*GlyphAtlas\) UploadDirtyRects\(\)](<#GlyphAtlas.UploadDirtyRects>)
 - [type GlyphInfo](<#GlyphInfo>)
 - [type GlyphPlacement](<#GlyphPlacement>)
 - [type GradientConfig](<#GradientConfig>)
@@ -375,6 +376,7 @@ See the sub\-package documentation for usage details.
   - [func \(t \*PangoTabArrayW\) Close\(\)](<#PangoTabArrayW.Close>)
   - [func \(t PangoTabArrayW\) SetTab\(\_, \_ int\)](<#PangoTabArrayW.SetTab>)
 - [type Rect](<#Rect>)
+- [type RectTextureUpdater](<#RectTextureUpdater>)
 - [type Renderer](<#Renderer>)
   - [func NewRenderer\(backend DrawBackend, scaleFactor float32\) \(\*Renderer, error\)](<#NewRenderer>)
   - [func NewRendererWithConfig\(backend DrawBackend, scaleFactor float32, atlasW, atlasH int, cfg RendererConfig\) \(\*Renderer, error\)](<#NewRendererWithConfig>)
@@ -406,6 +408,7 @@ See the sub\-package documentation for usage details.
   - [func \(ts \*TextSystem\) AddFontFile\(path string\) error](<#TextSystem.AddFontFile>)
   - [func \(ts \*TextSystem\) Commit\(\)](<#TextSystem.Commit>)
   - [func \(ts \*TextSystem\) Context\(\) \*Context](<#TextSystem.Context>)
+  - [func \(ts \*TextSystem\) DPIScale\(\) float32](<#TextSystem.DPIScale>)
   - [func \(ts \*TextSystem\) DrawLayout\(l Layout, x, y float32\)](<#TextSystem.DrawLayout>)
   - [func \(ts \*TextSystem\) DrawLayoutPlaced\(l Layout, placements \[\]GlyphPlacement\)](<#TextSystem.DrawLayoutPlaced>)
   - [func \(ts \*TextSystem\) DrawLayoutRotated\(l Layout, x, y, angle float32\)](<#TextSystem.DrawLayoutRotated>)
@@ -424,6 +427,7 @@ See the sub\-package documentation for usage details.
   - [func \(ts \*TextSystem\) Purge\(\)](<#TextSystem.Purge>)
   - [func \(ts \*TextSystem\) Renderer\(\) \*Renderer](<#TextSystem.Renderer>)
   - [func \(ts \*TextSystem\) ResolveFontName\(name string\) \(string, error\)](<#TextSystem.ResolveFontName>)
+  - [func \(ts \*TextSystem\) SetDPIScale\(s float32\)](<#TextSystem.SetDPIScale>)
   - [func \(ts \*TextSystem\) TextHeight\(text string, cfg TextConfig\) \(float32, error\)](<#TextSystem.TextHeight>)
   - [func \(ts \*TextSystem\) TextWidth\(text string, cfg TextConfig\) \(float32, error\)](<#TextSystem.TextWidth>)
 - [type TextureID](<#TextureID>)
@@ -636,7 +640,7 @@ func WordBoundsInString(s string, byteIdx int) (int, int)
 
 WordBoundsInString returns the \[start, end\) byte range of the class run containing byteIdx. It is the string\-only twin of \(\*Layout\).GetWordAtIndex: a punctuation run is a word of its own, and an index inside a whitespace run returns that whole run.
 
-The one deliberate difference is grapheme clusters. GetWordAtIndex has LogAttrs and so refuses to split a cluster, keeping an emoji ZWJ sequence whole; this function has only the text, so such a sequence splits at the ZWJ. Callers with a Layout in hand should prefer the method.
+The one deliberate difference is grapheme clusters. GetWordAtIndex consults LogAttrs and refuses to mark a boundary inside a cluster, so a ZWJ stays attached to its base; this function has only the text, so a ZWJ between word runes classifies as punctuation and splits them. Callers with a Layout in hand should prefer the method.
 
 <a name="WordStartLeft"></a>
 ## func [WordStartLeft](<https://github.com/go-gui-org/go-glyph/blob/main/layout_words.go#L137>)
@@ -752,7 +756,7 @@ const (
 ```
 
 <a name="AtlasPage"></a>
-## type [AtlasPage](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L19-L29>)
+## type [AtlasPage](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L19-L34>)
 
 AtlasPage is a single texture page in a multi\-page glyph atlas.
 
@@ -761,12 +765,17 @@ type AtlasPage struct {
     Shelves      []Shelf
     StagingFront []byte // GPU upload source.
     StagingBack  []byte // CPU rasterization target.
-    TextureID    TextureID
-    Width        int
-    Height       int
-    Age          uint64 // Frame counter when last used.
-    UsedPixels   int64
-    Dirty        bool
+    // DirtyRect is the half-open pixel box rasterized into since the last
+    // upload, in page coordinates. Meaningful only while Dirty is set; an
+    // empty rect alongside Dirty is read as "all of it", so a caller that
+    // only flips Dirty still gets a correct (if whole-page) upload.
+    DirtyRect  image.Rectangle
+    TextureID  TextureID
+    Width      int
+    Height     int
+    Age        uint64 // Frame counter when last used.
+    UsedPixels int64
+    Dirty      bool
 }
 ```
 
@@ -813,7 +822,7 @@ func DefaultBlockStyle() BlockStyle
 DefaultBlockStyle returns a BlockStyle with standard defaults.
 
 <a name="CachedGlyph"></a>
-## type [CachedGlyph](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L62-L70>)
+## type [CachedGlyph](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L102-L110>)
 
 CachedGlyph stores atlas coordinates and bearing info for a rasterized glyph.
 
@@ -1428,7 +1437,7 @@ type Glyph struct {
 ```
 
 <a name="GlyphAtlas"></a>
-## type [GlyphAtlas](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L42-L58>)
+## type [GlyphAtlas](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L82-L98>)
 
 GlyphAtlas manages a multi\-page texture atlas for glyph bitmaps.
 
@@ -1449,7 +1458,7 @@ type GlyphAtlas struct {
 ```
 
 <a name="NewGlyphAtlas"></a>
-### func [NewGlyphAtlas](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L93>)
+### func [NewGlyphAtlas](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L133>)
 
 ```go
 func NewGlyphAtlas(backend DrawBackend, w, h int) (*GlyphAtlas, error)
@@ -1458,7 +1467,7 @@ func NewGlyphAtlas(backend DrawBackend, w, h int) (*GlyphAtlas, error)
 NewGlyphAtlas creates a new glyph atlas with one initial page. Dimensions are rounded up to the next power of two to satisfy GPU texture alignment requirements \(most drivers silently round up non\-power\-of\-two textures, wasting VRAM\). Dimensions below 64 are clamped to 64.
 
 <a name="GlyphAtlas.Cleanup"></a>
-### func \(\*GlyphAtlas\) [Cleanup](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L132>)
+### func \(\*GlyphAtlas\) [Cleanup](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L172>)
 
 ```go
 func (atlas *GlyphAtlas) Cleanup(frame uint64)
@@ -1467,7 +1476,7 @@ func (atlas *GlyphAtlas) Cleanup(frame uint64)
 Cleanup removes stale textures from previous frames.
 
 <a name="GlyphAtlas.Free"></a>
-### func \(\*GlyphAtlas\) [Free](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L120>)
+### func \(\*GlyphAtlas\) [Free](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L160>)
 
 ```go
 func (atlas *GlyphAtlas) Free()
@@ -1476,7 +1485,7 @@ func (atlas *GlyphAtlas) Free()
 Free releases all atlas textures.
 
 <a name="GlyphAtlas.InsertBitmap"></a>
-### func \(\*GlyphAtlas\) [InsertBitmap](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L146>)
+### func \(\*GlyphAtlas\) [InsertBitmap](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L186>)
 
 ```go
 func (atlas *GlyphAtlas) InsertBitmap(bmp Bitmap, left, top int) (CachedGlyph, bool, int, error)
@@ -1485,7 +1494,7 @@ func (atlas *GlyphAtlas) InsertBitmap(bmp Bitmap, left, top int) (CachedGlyph, b
 InsertBitmap places a bitmap into the atlas using shelf\-based best\-height\-fit with multi\-page support. Returns the CachedGlyph, whether a page reset occurred, and the index of the reset page.
 
 <a name="GlyphAtlas.Reset"></a>
-### func \(\*GlyphAtlas\) [Reset](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L112>)
+### func \(\*GlyphAtlas\) [Reset](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L152>)
 
 ```go
 func (atlas *GlyphAtlas) Reset()
@@ -1494,13 +1503,26 @@ func (atlas *GlyphAtlas) Reset()
 Reset clears all atlas pages \(shelves, staging buffers\) without deleting GPU textures. Use to reclaim atlas space mid\-session while keeping the TextSystem alive.
 
 <a name="GlyphAtlas.SwapAndUpload"></a>
-### func \(\*GlyphAtlas\) [SwapAndUpload](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L243>)
+### func \(\*GlyphAtlas\) [SwapAndUpload](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L301>)
 
 ```go
 func (atlas *GlyphAtlas) SwapAndUpload()
 ```
 
-SwapAndUpload swaps staging buffers and uploads dirty pages to the GPU.
+SwapAndUpload swaps staging buffers and uploads dirty pages to the GPU. Called at the frame boundary by \(\*Renderer\).Commit, which is what makes it the backstop: whatever a mid\-frame UploadDirtyRects left pending — or everything, on a backend without RectTextureUpdater — is sent here.
+
+On a backend that does implement RectTextureUpdater each page sends only its pending region rather than its full extent, so the cost tracks what was rasterized. Backends without it still receive whole pages.
+
+<a name="GlyphAtlas.UploadDirtyRects"></a>
+### func \(\*GlyphAtlas\) [UploadDirtyRects](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L319>)
+
+```go
+func (atlas *GlyphAtlas) UploadDirtyRects()
+```
+
+UploadDirtyRects uploads pending glyph rasterization mid\-frame, so quads emitted after it sample texels that are already on the GPU.
+
+It is deliberately a no\-op unless the backend implements RectTextureUpdater. Without sub\-rectangle support the only available upload is the whole page, and doing that per draw call would turn every frame that introduces a glyph into one multi\-megabyte page transfer per call — a terminal frame issues hundreds. Such backends keep batching to SwapAndUpload at the frame boundary, which is correct for them because their draw calls do not sample the texture until present time.
 
 <a name="GlyphInfo"></a>
 ## type [GlyphInfo](<https://github.com/go-gui-org/go-glyph/blob/main/layout_types.go#L142-L147>)
@@ -2294,6 +2316,31 @@ type Rect struct {
 }
 ```
 
+<a name="RectTextureUpdater"></a>
+## type [RectTextureUpdater](<https://github.com/go-gui-org/go-glyph/blob/main/backend.go#L51-L63>)
+
+RectTextureUpdater is an optional DrawBackend extension for uploading just the changed sub\-rectangle of a texture.
+
+Implement it on any backend whose draw calls sample a texture at the moment they are issued. OpenGL is the motivating case: glDrawArrays reads the texture as it stands at that point in the command stream, so a glyph rasterized during a frame but uploaded at the end of it renders blank for one frame — the quads were already issued against an atlas page that did not yet contain the glyph. Backends that merely record commands and rasterize at present time \(Metal, the software renderer\) do not have the problem, which is why it shows up only on GL.
+
+A backend that implements this lets the Renderer upload newly rasterized glyphs mid\-frame, immediately after it resolves a layout and before it emits that layout's quads, at a cost proportional to the new glyphs instead of to the whole page. Backends that do not implement it keep the previous behavior: uploads batch to \(\*Renderer\).Commit.
+
+```go
+type RectTextureUpdater interface {
+    // UpdateTextureRect uploads the pixel rectangle (x, y, w, h) of a
+    // texture.
+    //
+    // data holds the *entire* page, not just the rectangle: source pixels
+    // begin at y*srcStride + x*4 and each subsequent row advances by
+    // srcStride bytes. This matches glPixelStorei(GL_UNPACK_ROW_LENGTH)
+    // plus glTexSubImage2D, and Metal's replaceRegion:bytesPerRow:, so no
+    // implementation has to compact the rows first.
+    //
+    // The rectangle is always non-empty and within the texture bounds.
+    UpdateTextureRect(id TextureID, data []byte, srcStride, x, y, w, h int)
+}
+```
+
 <a name="Renderer"></a>
 ## type [Renderer](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L12-L27>)
 
@@ -2456,7 +2503,7 @@ type RichText struct {
 ```
 
 <a name="Shelf"></a>
-## type [Shelf](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L32-L37>)
+## type [Shelf](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L72-L77>)
 
 Shelf is a horizontal strip within an atlas page.
 
@@ -2685,6 +2732,15 @@ func (ts *TextSystem) Context() *Context
 
 Context returns the underlying Context for advanced usage.
 
+<a name="TextSystem.DPIScale"></a>
+### func \(\*TextSystem\) [DPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/scale.go#L55>)
+
+```go
+func (ts *TextSystem) DPIScale() float32
+```
+
+DPIScale returns the device scale factor currently in effect.
+
 <a name="TextSystem.DrawLayout"></a>
 ### func \(\*TextSystem\) [DrawLayout](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L241>)
 
@@ -2850,6 +2906,17 @@ func (ts *TextSystem) ResolveFontName(name string) (string, error)
 ```
 
 ResolveFontName returns the actual font family name that Pango resolves for the given description string.
+
+<a name="TextSystem.SetDPIScale"></a>
+### func \(\*TextSystem\) [SetDPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/scale.go#L37>)
+
+```go
+func (ts *TextSystem) SetDPIScale(s float32)
+```
+
+SetDPIScale updates the device scale factor for shaping, rasterization and placement, and drops the caches keyed at the old one. Call it when the window moves to a display with a different scale factor, together with the matching setter on the DrawBackend.
+
+Values of zero or less \(NaN included\) are rejected, and a scale equal to the current one is a no\-op — so calling this on every resize costs nothing.
 
 <a name="TextSystem.TextHeight"></a>
 ### func \(\*TextSystem\) [TextHeight](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L121>)
@@ -3561,6 +3628,7 @@ Package ebitengine provides an Ebitengine DrawBackend for the glyph text renderi
   - [func \(b \*Backend\) DrawTexturedQuad\(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color\)](<#Backend.DrawTexturedQuad>)
   - [func \(b \*Backend\) DrawTexturedQuadTransformed\(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color, t glyph.AffineTransform\)](<#Backend.DrawTexturedQuadTransformed>)
   - [func \(b \*Backend\) NewTexture\(width, height int\) glyph.TextureID](<#Backend.NewTexture>)
+  - [func \(b \*Backend\) SetDPIScale\(dpiScale float32\)](<#Backend.SetDPIScale>)
   - [func \(b \*Backend\) SetTarget\(target \*ebiten.Image\)](<#Backend.SetTarget>)
   - [func \(b \*Backend\) UpdateTexture\(id glyph.TextureID, data \[\]byte\)](<#Backend.UpdateTexture>)
 
@@ -3639,6 +3707,15 @@ func (b *Backend) NewTexture(width, height int) glyph.TextureID
 
 NewTexture allocates a new RGBA texture.
 
+<a name="Backend.SetDPIScale"></a>
+### func \(\*Backend\) [SetDPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L209>)
+
+```go
+func (b *Backend) SetDPIScale(dpiScale float32)
+```
+
+SetDPIScale updates the display scale factor, which the backend applies when it converts glyph's logical coordinates to physical pixels. Call it when the window moves to a display with a different scale factor, paired with \(\*glyph.TextSystem\).SetDPIScale so shaping and rasterization follow. Values of zero or less \(NaN included\) are ignored, as in New.
+
 <a name="Backend.SetTarget"></a>
 ### func \(\*Backend\) [SetTarget](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L41>)
 
@@ -3699,6 +3776,7 @@ b.EndFrame(0, 0, 0, 1, logW, logH)
   - [func \(b \*Backend\) DrawableSize\(\) \(int, int\)](<#Backend.DrawableSize>)
   - [func \(b \*Backend\) EndFrame\(clearR, clearG, clearB, clearA float32, logicalW, logicalH int\) error](<#Backend.EndFrame>)
   - [func \(b \*Backend\) NewTexture\(width, height int\) glyph.TextureID](<#Backend.NewTexture>)
+  - [func \(b \*Backend\) SetDPIScale\(dpiScale float32\)](<#Backend.SetDPIScale>)
   - [func \(b \*Backend\) UpdateTexture\(id glyph.TextureID, data \[\]byte\)](<#Backend.UpdateTexture>)
 - [type Vertex](<#Vertex>)
 
@@ -3734,7 +3812,7 @@ nativeWindow is platform\-dependent:
 dpiScale is physical pixels / logical pixels.
 
 <a name="Backend.BeginFrame"></a>
-### func \(\*Backend\) [BeginFrame](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L153>)
+### func \(\*Backend\) [BeginFrame](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L165>)
 
 ```go
 func (b *Backend) BeginFrame()
@@ -3761,7 +3839,7 @@ func (b *Backend) DeleteTexture(id glyph.TextureID)
 DeleteTexture releases a texture.
 
 <a name="Backend.Destroy"></a>
-### func \(\*Backend\) [Destroy](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L171>)
+### func \(\*Backend\) [Destroy](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L183>)
 
 ```go
 func (b *Backend) Destroy()
@@ -3797,7 +3875,7 @@ func (b *Backend) DrawTexturedQuadTransformed(id glyph.TextureID, src, dst glyph
 DrawTexturedQuadTransformed draws a textured quad with an affine transform applied CPU\-side.
 
 <a name="Backend.DrawableSize"></a>
-### func \(\*Backend\) [DrawableSize](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L166>)
+### func \(\*Backend\) [DrawableSize](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L178>)
 
 ```go
 func (b *Backend) DrawableSize() (int, int)
@@ -3806,7 +3884,7 @@ func (b *Backend) DrawableSize() (int, int)
 DrawableSize returns the physical drawable size in pixels.
 
 <a name="Backend.EndFrame"></a>
-### func \(\*Backend\) [EndFrame](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L158-L159>)
+### func \(\*Backend\) [EndFrame](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L170-L171>)
 
 ```go
 func (b *Backend) EndFrame(clearR, clearG, clearB, clearA float32, logicalW, logicalH int) error
@@ -3822,6 +3900,15 @@ func (b *Backend) NewTexture(width, height int) glyph.TextureID
 ```
 
 NewTexture allocates a new RGBA texture.
+
+<a name="Backend.SetDPIScale"></a>
+### func \(\*Backend\) [SetDPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L157>)
+
+```go
+func (b *Backend) SetDPIScale(dpiScale float32)
+```
+
+SetDPIScale updates the display scale factor, which the backend applies when it converts glyph's logical coordinates to physical pixels. Call it when the window moves to a display with a different scale factor, paired with \(\*glyph.TextSystem\).SetDPIScale so shaping and rasterization follow. Values of zero or less \(NaN included\) are ignored, as in New.
 
 <a name="Backend.UpdateTexture"></a>
 ### func \(\*Backend\) [UpdateTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L62>)
