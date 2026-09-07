@@ -6,6 +6,18 @@ on:
       - main
   pull_request:
 
+# Read-only. Nothing here publishes, comments or tags, so the job token
+# needs no more than the checkout.
+permissions:
+  contents: read
+
+# Unlike the sibling repos, go-glyph's native dependencies are real and
+# must stay. backend/gpu/gl_linux.go declares `#cgo pkg-config: gl x11`,
+# gl_windows.go links -lopengl32 -lgdi32, and examples/demo_gpu and
+# examples/showcase_gpu are separate modules that bind SDL2 directly. So
+# libgl1-mesa-dev, libx11-dev, libsdl2-dev, pkg-config, the MSYS2
+# toolchain and `brew install sdl2` all have callers. The Noto font
+# packages back the fallback and emoji tests.
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -30,7 +42,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libgl1-mesa-dev \
-            libpng-dev \
             libsdl2-dev \
             fonts-noto-cjk \
             fonts-noto-color-emoji \
