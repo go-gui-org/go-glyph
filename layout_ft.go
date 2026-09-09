@@ -895,7 +895,12 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 					lastCJKBreak = -1
 					continue
 				}
-				if lastCJKBreak >= lineStart {
+				// Strictly greater: a break opportunity at the line's
+				// own start (uniseg reports one after a hard newline)
+				// would emit a zero-length line whose StartIndex
+				// duplicates the next line's, and vertical caret motion
+				// then has a fixed point it cannot move out of.
+				if lastCJKBreak > lineStart {
 					lines = append(lines, lineInfo{
 						lineStart, lastCJKBreak, lastCJKBreakW,
 					})

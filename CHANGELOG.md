@@ -6,52 +6,72 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Word wrap no longer emits a zero-length line before a word that is wider
+  than the wrap width.** uniseg reports a line-break opportunity directly after
+  a hard newline. When the next word overflowed, the wrap pass took that
+  opportunity even though it sat at the line's own start, and produced an empty
+  line whose `StartIndex` duplicated the following line's. `MoveCursorUp`
+  skipped that line during its line search, then landed back on it, so a caret
+  below an overlong unbroken line could not be moved up past the line above it.
+  Vertical caret motion now walks the full text.
+- **`GetCursorPos` answers for the byte a soft wrap consumed.** A wrap breaks at
+  a space, and that space belongs to no line, so it carries no log attribute —
+  yet it is the index `MoveCursorUp`, `MoveCursorDown` and a click past a line's
+  right edge all return for the end of that line. `GetCursorPos` refused it, so
+  a caller was handed a caret index it could not draw: moving up or down through
+  a wrapped paragraph with a preferred x beyond the lines (which an overlong
+  unbreakable line sets) made the caret disappear on every line but the first
+  and the last. It now returns the line's end geometry for such an index.
+
 ## [v1.25.0] - 2026-09-04
 
 ### Added
 
-- **`(*TextSystem).SetDPIScale` and `DPIScale`, so a window that moves to
-  a display with a different scale factor can re-shape and re-rasterize
-  at the new density.** A `TextSystem` took its scale from the backend
-  once, at construction, and neither `Context` nor `Renderer` could be
-  re-pointed afterwards: text stayed at the density of the display the
-  window was created on while the host's own geometry followed the new
-  one. `SetDPIScale` updates both and purges the layout and glyph
-  caches, whose keys do not carry the scale. An unchanged or
-  non-positive value is a no-op, so a resize handler may call it every
-  frame.
-- **`SetDPIScale` on the bundled backends** (`ebitengine`, `android`,
-  `ios`, `web`, `gpu`), which own the logical-to-physical placement
-  scale. Pair it with `(*TextSystem).SetDPIScale`: one moves the glyphs,
-  the other moves the quads they are drawn into.
+- **`(*TextSystem).SetDPIScale` and `DPIScale`, so a window that moves to a
+  display with a different scale factor can re-shape and re-rasterize at the new
+  density.** A `TextSystem` took its scale from the backend once, at
+  construction, and neither `Context` nor `Renderer` could be re-pointed
+  afterwards: text stayed at the density of the display the window was created
+  on while the host's own geometry followed the new one. `SetDPIScale` updates
+  both and purges the layout and glyph caches, whose keys do not carry the
+  scale. An unchanged or non-positive value is a no-op, so a resize handler may
+  call it every frame.
+- **`SetDPIScale` on the bundled backends** (`ebitengine`, `android`, `ios`,
+  `web`, `gpu`), which own the logical-to-physical placement scale. Pair it with
+  `(*TextSystem).SetDPIScale`: one moves the glyphs, the other moves the quads
+  they are drawn into.
 
 ## [v1.24.0] - 2026-08-30
 
 ### Added
 
-- **`RectTextureUpdater`, an optional `DrawBackend` extension for
-  sub-rectangle texture uploads (#125).** Implement it on a backend whose
-  draw calls sample a texture at the moment they are issued, and the renderer
-  will push newly rasterized glyphs to the GPU mid-frame at a cost
-  proportional to the new glyphs rather than to the whole page. Purely
-  additive — a backend that does not implement it compiles and behaves
-  exactly as before, batching to `(*Renderer).Commit` at the frame boundary.
+- **`RectTextureUpdater`, an optional `DrawBackend` extension for sub-rectangle
+  texture uploads (#125).** Implement it on a backend whose draw calls sample a
+  texture at the moment they are issued, and the renderer will push newly
+  rasterized glyphs to the GPU mid-frame at a cost proportional to the new
+  glyphs rather than to the whole page. Purely additive — a backend that does
+  not implement it compiles and behaves exactly as before, batching to
+  `(*Renderer).Commit` at the frame boundary.
 
 ### Fixed
 
-- **Text no longer renders blank on its first appearance under OpenGL
-  (#125).** The atlas rasterizes a glyph into CPU staging on first use and
-  deferred the GPU upload to `Commit`, on the documented assumption that
-  hosts commit before the render pass samples the textures. True for Metal
-  and for software renderers, which record commands and rasterize at present
-  time; false for OpenGL, where `glDrawArrays` samples the texture as it
-  stands at that point in the command stream. A quad emitted in the same pass
-  that rasterized its glyph therefore sampled empty texels, and the text
-  appeared only on the next frame — which, in an app that draws on demand,
-  could mean whenever the user next moved the mouse. Each page now tracks the
-  region rasterized into since its last upload and sends it between the
-  resolve pass and the emit passes, gated on `RectTextureUpdater` so backends
-  that do not need it do not pay whole-page transfers per draw call.
+- **Text no longer renders blank on its first appearance under OpenGL (#125).**
+  The atlas rasterizes a glyph into CPU staging on first use and deferred the
+  GPU upload to `Commit`, on the documented assumption that hosts commit before
+  the render pass samples the textures. True for Metal and for software
+  renderers, which record commands and rasterize at present time; false for
+  OpenGL, where `glDrawArrays` samples the texture as it stands at that point in
+  the command stream. A quad emitted in the same pass that rasterized its glyph
+  therefore sampled empty texels, and the text appeared only on the next frame —
+  which, in an app that draws on demand, could mean whenever the user next moved
+  the mouse. Each page now tracks the region rasterized into since its last
+  upload and sends it between the resolve pass and the emit passes, gated on
+  `RectTextureUpdater` so backends that do not need it do not pay whole-page
+  transfers per draw call.
 
 ## [v1.23.0] - 2026-08-18
 

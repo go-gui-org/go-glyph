@@ -188,13 +188,23 @@ func (l *Layout) GetCursorPos(byteIndex int) (CursorPosition, bool) {
 
 	// Check valid cursor position via log attrs.
 	attrIdx, ok := l.LogAttrByIndex[byteIndex]
-	if !ok && byteIndex != 0 {
-		return CursorPosition{}, false
+	valid := ok || byteIndex == 0
+	if ok && attrIdx >= 0 && attrIdx < len(l.LogAttrs) &&
+		!l.LogAttrs[attrIdx].IsCursorPosition {
+		valid = false
 	}
-	if ok && attrIdx >= 0 && attrIdx < len(l.LogAttrs) {
-		if !l.LogAttrs[attrIdx].IsCursorPosition {
-			return CursorPosition{}, false
+	if !valid {
+		// A soft wrap consumes the space it broke at, so that byte
+		// belongs to no line and carries no log attr — yet it is
+		// exactly where the caret sits at the end of the wrapped line,
+		// and it is what findClosestIndexInLine returns for a click
+		// past the line's right edge or for vertical motion with a
+		// preferred x beyond it. Answer with the line's end geometry
+		// rather than refusing a position the caller was handed here.
+		if cp, endOK := l.lineEndPos(byteIndex); endOK {
+			return cp, true
 		}
+		return CursorPosition{}, false
 	}
 
 	// Try exact char rect. Skip '\n' — its glyph rect is at the
@@ -246,6 +256,23 @@ func (l *Layout) GetCursorPos(byteIndex int) (CursorPosition, bool) {
 			Y:      first.Rect.Y,
 			Height: first.Rect.Height,
 		}, true
+	}
+	return CursorPosition{}, false
+}
+
+// lineEndPos returns the caret geometry for a byte index that sits
+// exactly at the end of a line. Only a byte the wrap consumed reaches
+// it: every other line end is a cursor position in its own right and is
+// answered before this.
+func (l *Layout) lineEndPos(byteIndex int) (CursorPosition, bool) {
+	for _, line := range l.Lines {
+		if byteIndex == line.StartIndex+line.Length {
+			return CursorPosition{
+				X:      line.Rect.X + line.Rect.Width,
+				Y:      line.Rect.Y,
+				Height: line.Rect.Height,
+			}, true
+		}
 	}
 	return CursorPosition{}, false
 }
