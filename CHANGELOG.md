@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.25.1] - 2026-09-09
+
 ### Fixed
 
 - **Word wrap no longer emits a zero-length line before a word that is wider
