@@ -8,6 +8,16 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.25.2] - 2026-09-16
+
+### Changed
+
+- **Dependencies updated (#132).** typesetting v0.3.4 to v0.3.5, x/image v0.44
+  to v0.46, x/text v0.40 to v0.42, ebiten v2.9.9 to v2.9.11. The typesetting
+  `replace` directive is gone, because the fork now matches upstream v0.3.5.
+  Consumers resolve the same upstream typesetting module that glyph builds
+  against.
+
 ## [v1.25.1] - 2026-09-09
 
 ### Fixed
