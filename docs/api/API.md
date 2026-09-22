@@ -230,9 +230,14 @@ See the sub\-package documentation for usage details.
 - [type AffineTransform](<#AffineTransform>)
   - [func AffineIdentity\(\) AffineTransform](<#AffineIdentity>)
   - [func AffineRotation\(angle float32\) AffineTransform](<#AffineRotation>)
+  - [func AffineRotationAround\(angle, cx, cy float32\) AffineTransform](<#AffineRotationAround>)
+  - [func AffineScale\(sx, sy float32\) AffineTransform](<#AffineScale>)
   - [func AffineSkew\(skewX, skewY float32\) AffineTransform](<#AffineSkew>)
   - [func AffineTranslation\(dx, dy float32\) AffineTransform](<#AffineTranslation>)
   - [func \(a AffineTransform\) Apply\(x, y float32\) \(float32, float32\)](<#AffineTransform.Apply>)
+  - [func \(a AffineTransform\) Inverse\(\) \(inv AffineTransform, ok bool\)](<#AffineTransform.Inverse>)
+  - [func \(a AffineTransform\) IsFinite\(\) bool](<#AffineTransform.IsFinite>)
+  - [func \(a AffineTransform\) IsIdentity\(\) bool](<#AffineTransform.IsIdentity>)
   - [func \(a AffineTransform\) Multiply\(b AffineTransform\) AffineTransform](<#AffineTransform.Multiply>)
 - [type Alignment](<#Alignment>)
 - [type AtlasPage](<#AtlasPage>)
@@ -252,12 +257,12 @@ See the sub\-package documentation for usage details.
   - [func NewCompositionState\(\) CompositionState](<#NewCompositionState>)
   - [func \(cs \*CompositionState\) ClearClauses\(\)](<#CompositionState.ClearClauses>)
   - [func \(cs \*CompositionState\) Commit\(\) string](<#CompositionState.Commit>)
-  - [func \(cs \*CompositionState\) CompositionBounds\(layout Layout\) \(Rect, bool\)](<#CompositionState.CompositionBounds>)
+  - [func \(cs \*CompositionState\) CompositionBounds\(layout \*Layout\) \(Rect, bool\)](<#CompositionState.CompositionBounds>)
   - [func \(cs \*CompositionState\) DocumentCursorPos\(\) int](<#CompositionState.DocumentCursorPos>)
-  - [func \(cs \*CompositionState\) GetClauseRects\(layout Layout\) \[\]ClauseRects](<#CompositionState.GetClauseRects>)
+  - [func \(cs \*CompositionState\) GetClauseRects\(layout \*Layout\) \[\]ClauseRects](<#CompositionState.GetClauseRects>)
   - [func \(cs \*CompositionState\) HandleClause\(start, length, style int\)](<#CompositionState.HandleClause>)
-  - [func \(cs \*CompositionState\) HandleInsertText\(text string\) string](<#CompositionState.HandleInsertText>)
-  - [func \(cs \*CompositionState\) HandleMarkedText\(text string, cursorInPreedit, documentCursor int\)](<#CompositionState.HandleMarkedText>)
+  - [func \(cs \*CompositionState\) HandleInsertText\(text string\) \(string, error\)](<#CompositionState.HandleInsertText>)
+  - [func \(cs \*CompositionState\) HandleMarkedText\(text string, cursorInPreedit, documentCursor int\) error](<#CompositionState.HandleMarkedText>)
   - [func \(cs \*CompositionState\) HandleUnmarkText\(\)](<#CompositionState.HandleUnmarkText>)
   - [func \(cs \*CompositionState\) IsComposing\(\) bool](<#CompositionState.IsComposing>)
   - [func \(cs \*CompositionState\) PreeditEnd\(\) int](<#CompositionState.PreeditEnd>)
@@ -383,12 +388,12 @@ See the sub\-package documentation for usage details.
   - [func \(r \*Renderer\) Atlas\(\) \*GlyphAtlas](<#Renderer.Atlas>)
   - [func \(r \*Renderer\) Commit\(\)](<#Renderer.Commit>)
   - [func \(r \*Renderer\) DrawComposition\(layout Layout, x, y float32, cs \*CompositionState, cursorColor Color\)](<#Renderer.DrawComposition>)
+  - [func \(r \*Renderer\) DrawCompositionTransformed\(layout Layout, x, y float32, transform AffineTransform, cs \*CompositionState, cursorColor Color\)](<#Renderer.DrawCompositionTransformed>)
   - [func \(r \*Renderer\) DrawLayout\(layout Layout, x, y float32\)](<#Renderer.DrawLayout>)
   - [func \(r \*Renderer\) DrawLayoutPlaced\(layout Layout, placements \[\]GlyphPlacement\)](<#Renderer.DrawLayoutPlaced>)
   - [func \(r \*Renderer\) DrawLayoutRotated\(layout Layout, x, y, angle float32\)](<#Renderer.DrawLayoutRotated>)
   - [func \(r \*Renderer\) DrawLayoutTransformed\(layout Layout, x, y float32, transform AffineTransform\)](<#Renderer.DrawLayoutTransformed>)
   - [func \(r \*Renderer\) DrawLayoutTransformedWithGradient\(layout Layout, x, y float32, transform AffineTransform, gradient \*GradientConfig\)](<#Renderer.DrawLayoutTransformedWithGradient>)
-  - [func \(r \*Renderer\) DrawLayoutWithComposition\(layout Layout, x, y float32, cs \*CompositionState\)](<#Renderer.DrawLayoutWithComposition>)
   - [func \(r \*Renderer\) DrawLayoutWithGradient\(layout Layout, x, y float32, gradient \*GradientConfig\)](<#Renderer.DrawLayoutWithGradient>)
   - [func \(r \*Renderer\) Free\(\)](<#Renderer.Free>)
   - [func \(r \*Renderer\) PurgeGlyphCache\(\)](<#Renderer.PurgeGlyphCache>)
@@ -431,6 +436,7 @@ See the sub\-package documentation for usage details.
   - [func \(ts \*TextSystem\) TextHeight\(text string, cfg TextConfig\) \(float32, error\)](<#TextSystem.TextHeight>)
   - [func \(ts \*TextSystem\) TextWidth\(text string, cfg TextConfig\) \(float32, error\)](<#TextSystem.TextWidth>)
 - [type TextureID](<#TextureID>)
+- [type TransformedFillBackend](<#TransformedFillBackend>)
 - [type Typeface](<#Typeface>)
 - [type UndoManager](<#UndoManager>)
   - [func NewUndoManager\(maxHistory int\) \*UndoManager](<#NewUndoManager>)
@@ -569,22 +575,22 @@ func GetSelectedText(text string, cursor, anchor int) string
 GetSelectedText returns the text between cursor and anchor.
 
 <a name="IsDeadKey"></a>
-## func [IsDeadKey](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L248>)
+## func [IsDeadKey](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L331>)
 
 ```go
 func IsDeadKey(r rune) bool
 ```
 
-IsDeadKey returns true if the rune is a dead key accent starter.
+IsDeadKey returns true if the rune can start a dead\-key sequence in the table used by TryCombine. It does not know the keyboard layout: on a US layout ' " , : are plain characters. Call it only for keys the platform reports as dead keys.
 
 <a name="ScaleBitmapBicubic"></a>
-## func [ScaleBitmapBicubic](<https://github.com/go-gui-org/go-glyph/blob/main/bitmap_common.go#L74>)
+## func [ScaleBitmapBicubic](<https://github.com/go-gui-org/go-glyph/blob/main/bitmap_common.go#L129>)
 
 ```go
 func ScaleBitmapBicubic(src []byte, srcW, srcH, dstW, dstH int) []byte
 ```
 
-ScaleBitmapBicubic scales an RGBA bitmap using bicubic \(Catmull\-Rom\) interpolation with premultiplied alpha.
+ScaleBitmapBicubic scales an RGBA bitmap using bicubic \(Catmull\-Rom\) interpolation with premultiplied alpha. Samples are center\-aligned \(\(x\+0.5\)\*scale\-0.5\), so integer factors land on texel centers, and outputs round to nearest instead of truncating. Returns nil when dimensions are invalid, either allocation would exceed the 1GB limit, or src is shorter than its dimensions claim \(which would otherwise silently interpolate zeros at the edges\).
 
 <a name="SetDPIAwareWindows"></a>
 ## func [SetDPIAwareWindows](<https://github.com/go-gui-org/go-glyph/blob/main/dpi_other.go#L4>)
@@ -661,7 +667,7 @@ func WordStartRight(s string, byteIdx int) int
 WordStartRight returns the byte index of the word start after byteIdx, or len\(s\) when there is none. It is the string\-only twin of \(\*Layout\).MoveCursorWordRight.
 
 <a name="AffineTransform"></a>
-## type [AffineTransform](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L10-L17>)
+## type [AffineTransform](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L13-L20>)
 
 AffineTransform encodes a 2D affine transform matrix:
 
@@ -670,6 +676,8 @@ AffineTransform encodes a 2D affine transform matrix:
 [ YX  YY  Y0 ]
 [  0   0   1 ]
 ```
+
+The zero value is the zero matrix, not identity. Use AffineIdentity for the identity transform.
 
 ```go
 type AffineTransform struct {
@@ -683,7 +691,7 @@ type AffineTransform struct {
 ```
 
 <a name="AffineIdentity"></a>
-### func [AffineIdentity](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L25>)
+### func [AffineIdentity](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L52>)
 
 ```go
 func AffineIdentity() AffineTransform
@@ -692,16 +700,34 @@ func AffineIdentity() AffineTransform
 AffineIdentity returns an identity transform.
 
 <a name="AffineRotation"></a>
-### func [AffineRotation](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L30>)
+### func [AffineRotation](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L59>)
 
 ```go
 func AffineRotation(angle float32) AffineTransform
 ```
 
-AffineRotation returns a rotation transform in radians around origin.
+AffineRotation returns a rotation transform in radians around the origin. To rotate around another point, use AffineRotationAround.
+
+<a name="AffineRotationAround"></a>
+### func [AffineRotationAround](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L68>)
+
+```go
+func AffineRotationAround(angle, cx, cy float32) AffineTransform
+```
+
+AffineRotationAround returns a rotation by angle in radians around the point \(cx, cy\). It equals translate\(cx, cy\) after rotate\(angle\) after translate\(\-cx, \-cy\).
+
+<a name="AffineScale"></a>
+### func [AffineScale](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L84>)
+
+```go
+func AffineScale(sx, sy float32) AffineTransform
+```
+
+AffineScale returns a scale by \(sx, sy\) around the origin.
 
 <a name="AffineSkew"></a>
-### func [AffineSkew](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L42>)
+### func [AffineSkew](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L79>)
 
 ```go
 func AffineSkew(skewX, skewY float32) AffineTransform
@@ -710,7 +736,7 @@ func AffineSkew(skewX, skewY float32) AffineTransform
 AffineSkew returns a shear transform with direct skew factors.
 
 <a name="AffineTranslation"></a>
-### func [AffineTranslation](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L37>)
+### func [AffineTranslation](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L74>)
 
 ```go
 func AffineTranslation(dx, dy float32) AffineTransform
@@ -719,7 +745,7 @@ func AffineTranslation(dx, dy float32) AffineTransform
 AffineTranslation returns a translation transform.
 
 <a name="AffineTransform.Apply"></a>
-### func \(AffineTransform\) [Apply](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L20>)
+### func \(AffineTransform\) [Apply](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L23>)
 
 ```go
 func (a AffineTransform) Apply(x, y float32) (float32, float32)
@@ -727,14 +753,41 @@ func (a AffineTransform) Apply(x, y float32) (float32, float32)
 
 Apply maps a point through the affine transform.
 
+<a name="AffineTransform.Inverse"></a>
+### func \(AffineTransform\) [Inverse](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L105>)
+
+```go
+func (a AffineTransform) Inverse() (inv AffineTransform, ok bool)
+```
+
+Inverse returns the inverse transform. ok is false when the matrix has no inverse \(zero or non\-finite determinant\).
+
+<a name="AffineTransform.IsFinite"></a>
+### func \(AffineTransform\) [IsFinite](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L40>)
+
+```go
+func (a AffineTransform) IsFinite() bool
+```
+
+IsFinite reports whether all six fields are finite \(no NaN, no infinite values\). A transform that is not finite maps every point it touches to garbage, so callers must drop it before it reaches a backend.
+
+<a name="AffineTransform.IsIdentity"></a>
+### func \(AffineTransform\) [IsIdentity](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L32>)
+
+```go
+func (a AffineTransform) IsIdentity() bool
+```
+
+IsIdentity reports whether the transform is exactly identity. Exact compare is correct here: the constructors produce exact values and Multiply preserves them, so the fast path triggers reliably. Near\-identity input \(for example rotation by 2\*pi\) takes the slow path, which still draws correctly.
+
 <a name="AffineTransform.Multiply"></a>
-### func \(AffineTransform\) [Multiply](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L48>)
+### func \(AffineTransform\) [Multiply](<https://github.com/go-gui-org/go-glyph/blob/main/affine.go#L92>)
 
 ```go
 func (a AffineTransform) Multiply(b AffineTransform) AffineTransform
 ```
 
-Multiply returns the composition of two transforms: a then b. Result maps point p as: Multiply\(a, b\).Apply\(p\) == a.Apply\(b.Apply\(p\)\).
+Multiply returns the composition a after b: b runs first, then a. Result maps point p as: Multiply\(a, b\).Apply\(p\) == a.Apply\(b.Apply\(p\)\). Order matters: Multiply\(a, b\) is not Multiply\(b, a\).
 
 <a name="Alignment"></a>
 ## type [Alignment](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L4>)
@@ -756,7 +809,7 @@ const (
 ```
 
 <a name="AtlasPage"></a>
-## type [AtlasPage](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L19-L34>)
+## type [AtlasPage](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L20-L35>)
 
 AtlasPage is a single texture page in a multi\-page glyph atlas.
 
@@ -780,16 +833,16 @@ type AtlasPage struct {
 ```
 
 <a name="Bitmap"></a>
-## type [Bitmap](<https://github.com/go-gui-org/go-glyph/blob/main/bitmap_common.go#L19-L24>)
+## type [Bitmap](<https://github.com/go-gui-org/go-glyph/blob/main/bitmap_common.go#L20-L25>)
 
-Bitmap holds RGBA pixel data for a rasterized glyph.
+Bitmap holds RGBA pixel data for a rasterized glyph. Channels must be 4; copyBitmapToPage rejects anything else.
 
 ```go
 type Bitmap struct {
     Data     []byte
     Width    int
     Height   int
-    Channels int // Always 4 (RGBA).
+    Channels int // Must be 4 (RGBA).
 }
 ```
 
@@ -822,7 +875,7 @@ func DefaultBlockStyle() BlockStyle
 DefaultBlockStyle returns a BlockStyle with standard defaults.
 
 <a name="CachedGlyph"></a>
-## type [CachedGlyph](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L102-L110>)
+## type [CachedGlyph](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L107-L115>)
 
 CachedGlyph stores atlas coordinates and bearing info for a rasterized glyph.
 
@@ -851,7 +904,7 @@ type CharRect struct {
 ```
 
 <a name="Clause"></a>
-## type [Clause](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L4-L8>)
+## type [Clause](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L11-L15>)
 
 Clause represents a segment in multi\-clause CJK composition.
 
@@ -864,7 +917,7 @@ type Clause struct {
 ```
 
 <a name="ClauseRects"></a>
-## type [ClauseRects](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L11-L15>)
+## type [ClauseRects](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L18-L22>)
 
 ClauseRects holds clause index, rects, and style for rendering.
 
@@ -877,7 +930,7 @@ type ClauseRects struct {
 ```
 
 <a name="ClauseStyle"></a>
-## type [ClauseStyle](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L60>)
+## type [ClauseStyle](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L59>)
 
 ClauseStyle identifies the visual style of an IME clause.
 
@@ -940,14 +993,15 @@ const (
     CompositionNone CompositionPhase = iota
     CompositionStarted
     CompositionUpdating
-    CompositionCommitted
 )
 ```
 
 <a name="CompositionState"></a>
-## type [CompositionState](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L18-L25>)
+## type [CompositionState](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L29-L36>)
 
 CompositionState tracks IME composition for preedit display.
+
+All offsets \(PreeditStart, CursorOffset, Clause.Start and Clause.Length\) are UTF\-8 byte offsets. A platform bridge that gets UTF\-16 offsets \(for example macOS NSRange\) must convert them first.
 
 ```go
 type CompositionState struct {
@@ -961,7 +1015,7 @@ type CompositionState struct {
 ```
 
 <a name="NewCompositionState"></a>
-### func [NewCompositionState](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L28>)
+### func [NewCompositionState](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L39>)
 
 ```go
 func NewCompositionState() CompositionState
@@ -970,7 +1024,7 @@ func NewCompositionState() CompositionState
 NewCompositionState returns an initialized CompositionState.
 
 <a name="CompositionState.ClearClauses"></a>
-### func \(\*CompositionState\) [ClearClauses](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L201>)
+### func \(\*CompositionState\) [ClearClauses](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L276>)
 
 ```go
 func (cs *CompositionState) ClearClauses()
@@ -979,7 +1033,7 @@ func (cs *CompositionState) ClearClauses()
 ClearClauses resets clause array for fresh enumeration.
 
 <a name="CompositionState.Commit"></a>
-### func \(\*CompositionState\) [Commit](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L65>)
+### func \(\*CompositionState\) [Commit](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L88>)
 
 ```go
 func (cs *CompositionState) Commit() string
@@ -988,61 +1042,61 @@ func (cs *CompositionState) Commit() string
 Commit finalizes composition, returns text to insert.
 
 <a name="CompositionState.CompositionBounds"></a>
-### func \(\*CompositionState\) [CompositionBounds](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L93>)
+### func \(\*CompositionState\) [CompositionBounds](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L130>)
 
 ```go
-func (cs *CompositionState) CompositionBounds(layout Layout) (Rect, bool)
+func (cs *CompositionState) CompositionBounds(layout *Layout) (Rect, bool)
 ```
 
-CompositionBounds returns bounding rect covering entire preedit. Returns ok=false if not composing.
+CompositionBounds returns bounding rect covering entire preedit. Returns ok=false if not composing or layout is nil. layout is a pointer, like the other layout query methods, to avoid copying the Layout struct on every call.
 
 <a name="CompositionState.DocumentCursorPos"></a>
-### func \(\*CompositionState\) [DocumentCursorPos](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L82>)
+### func \(\*CompositionState\) [DocumentCursorPos](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L107>)
 
 ```go
 func (cs *CompositionState) DocumentCursorPos() int
 ```
 
-DocumentCursorPos returns absolute cursor position in document.
+DocumentCursorPos returns absolute cursor position in document. CursorOffset is clamped again here because it is a public field and a caller can set it without SetMarkedText.
 
 <a name="CompositionState.GetClauseRects"></a>
-### func \(\*CompositionState\) [GetClauseRects](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L119>)
+### func \(\*CompositionState\) [GetClauseRects](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L158>)
 
 ```go
-func (cs *CompositionState) GetClauseRects(layout Layout) []ClauseRects
+func (cs *CompositionState) GetClauseRects(layout *Layout) []ClauseRects
 ```
 
-GetClauseRects returns selection rects for each clause.
+GetClauseRects returns selection rects for each clause. Clauses are clipped to the preedit, so a bad clause cannot underline committed text. With no clauses, the whole preedit is one ClauseRaw clause.
 
 <a name="CompositionState.HandleClause"></a>
-### func \(\*CompositionState\) [HandleClause](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L182>)
+### func \(\*CompositionState\) [HandleClause](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L256>)
 
 ```go
 func (cs *CompositionState) HandleClause(start, length, style int)
 ```
 
-HandleClause processes clause info from IME overlay.
+HandleClause processes clause info from IME overlay. style uses the ClauseStyle values \(0 raw, 1 converted, 2 selected\); other values give ClauseRaw. A selected clause also sets SelectedClause. Negative ranges and clauses past maxCompositionClauses are dropped.
 
 <a name="CompositionState.HandleInsertText"></a>
-### func \(\*CompositionState\) [HandleInsertText](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L165>)
+### func \(\*CompositionState\) [HandleInsertText](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L236>)
 
 ```go
-func (cs *CompositionState) HandleInsertText(text string) string
+func (cs *CompositionState) HandleInsertText(text string) (string, error)
 ```
 
-HandleInsertText processes insertText from IME overlay.
+HandleInsertText processes insertText from IME overlay and returns the text to insert. Text that fails ValidateTextInput returns "" and that error, and the composition state does not change.
 
 <a name="CompositionState.HandleMarkedText"></a>
-### func \(\*CompositionState\) [HandleMarkedText](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L151-L152>)
+### func \(\*CompositionState\) [HandleMarkedText](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L211-L212>)
 
 ```go
-func (cs *CompositionState) HandleMarkedText(text string, cursorInPreedit, documentCursor int)
+func (cs *CompositionState) HandleMarkedText(text string, cursorInPreedit, documentCursor int) error
 ```
 
-HandleMarkedText processes setMarkedText from IME overlay.
+HandleMarkedText processes setMarkedText from IME overlay. Empty text means the user deleted the whole preedit, so an active composition ends \(same as HandleUnmarkText\). Text that fails ValidateTextInput for any other reason \(too long, bad UTF\-8, NUL\) returns that error and the current state is kept.
 
 <a name="CompositionState.HandleUnmarkText"></a>
-### func \(\*CompositionState\) [HandleUnmarkText](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L177>)
+### func \(\*CompositionState\) [HandleUnmarkText](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L248>)
 
 ```go
 func (cs *CompositionState) HandleUnmarkText()
@@ -1051,7 +1105,7 @@ func (cs *CompositionState) HandleUnmarkText()
 HandleUnmarkText cancels composition without committing.
 
 <a name="CompositionState.IsComposing"></a>
-### func \(\*CompositionState\) [IsComposing](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L36>)
+### func \(\*CompositionState\) [IsComposing](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L47>)
 
 ```go
 func (cs *CompositionState) IsComposing() bool
@@ -1060,7 +1114,7 @@ func (cs *CompositionState) IsComposing() bool
 IsComposing returns true if composition is active.
 
 <a name="CompositionState.PreeditEnd"></a>
-### func \(\*CompositionState\) [PreeditEnd](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L87>)
+### func \(\*CompositionState\) [PreeditEnd](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L122>)
 
 ```go
 func (cs *CompositionState) PreeditEnd() int
@@ -1069,7 +1123,7 @@ func (cs *CompositionState) PreeditEnd() int
 PreeditEnd returns byte offset where preedit ends in document.
 
 <a name="CompositionState.Reset"></a>
-### func \(\*CompositionState\) [Reset](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L72>)
+### func \(\*CompositionState\) [Reset](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L95>)
 
 ```go
 func (cs *CompositionState) Reset()
@@ -1078,25 +1132,25 @@ func (cs *CompositionState) Reset()
 Reset discards composition without inserting text.
 
 <a name="CompositionState.SetClauses"></a>
-### func \(\*CompositionState\) [SetClauses](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L59>)
+### func \(\*CompositionState\) [SetClauses](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L76>)
 
 ```go
 func (cs *CompositionState) SetClauses(clauses []Clause, selected int)
 ```
 
-SetClauses updates clause segmentation from IME attributes.
+SetClauses updates clause segmentation from IME attributes. The clauses are copied, so the caller keeps ownership of its slice. Only the first maxCompositionClauses are kept. A selected index that is not a kept clause becomes \-1.
 
 <a name="CompositionState.SetMarkedText"></a>
-### func \(\*CompositionState\) [SetMarkedText](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L52>)
+### func \(\*CompositionState\) [SetMarkedText](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L66>)
 
 ```go
 func (cs *CompositionState) SetMarkedText(text string, cursorInPreedit int)
 ```
 
-SetMarkedText updates preedit from IME.
+SetMarkedText updates preedit from IME. cursorInPreedit is a byte offset into text. It is clamped to \[0, len\(text\)\] and moved back to the start of a rune, so the caret never lands in committed text or inside a multi\-byte character.
 
 <a name="CompositionState.Start"></a>
-### func \(\*CompositionState\) [Start](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L42>)
+### func \(\*CompositionState\) [Start](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L53>)
 
 ```go
 func (cs *CompositionState) Start(cursorPos int)
@@ -1225,7 +1279,7 @@ type CursorPosition struct {
 ```
 
 <a name="DeadKeyState"></a>
-## type [DeadKeyState](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L207-L211>)
+## type [DeadKeyState](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L282-L286>)
 
 DeadKeyState tracks pending dead key for accent composition.
 
@@ -1238,7 +1292,7 @@ type DeadKeyState struct {
 ```
 
 <a name="DeadKeyState.Clear"></a>
-### func \(\*DeadKeyState\) [Clear](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L236>)
+### func \(\*DeadKeyState\) [Clear](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L316>)
 
 ```go
 func (dks *DeadKeyState) Clear()
@@ -1247,7 +1301,7 @@ func (dks *DeadKeyState) Clear()
 Clear cancels pending dead key.
 
 <a name="DeadKeyState.Reset"></a>
-### func \(\*DeadKeyState\) [Reset](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L241>)
+### func \(\*DeadKeyState\) [Reset](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L321>)
 
 ```go
 func (dks *DeadKeyState) Reset()
@@ -1256,7 +1310,7 @@ func (dks *DeadKeyState) Reset()
 Reset zeros all fields.
 
 <a name="DeadKeyState.StartDeadKey"></a>
-### func \(\*DeadKeyState\) [StartDeadKey](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L229>)
+### func \(\*DeadKeyState\) [StartDeadKey](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L309>)
 
 ```go
 func (dks *DeadKeyState) StartDeadKey(dead rune, pos int)
@@ -1265,13 +1319,13 @@ func (dks *DeadKeyState) StartDeadKey(dead rune, pos int)
 StartDeadKey records a dead key press.
 
 <a name="DeadKeyState.TryCombine"></a>
-### func \(\*DeadKeyState\) [TryCombine](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L215>)
+### func \(\*DeadKeyState\) [TryCombine](<https://github.com/go-gui-org/go-glyph/blob/main/composition.go#L291>)
 
 ```go
 func (dks *DeadKeyState) TryCombine(base rune) (string, bool)
 ```
 
-TryCombine attempts to combine pending dead key with base char. Returns \(result, wasCombined\). If invalid: returns both chars.
+TryCombine attempts to combine pending dead key with base char. Returns \(result, wasCombined\). A space gives the accent alone, as on common keyboard layouts. If invalid: returns both chars.
 
 <a name="DrawBackend"></a>
 ## type [DrawBackend](<https://github.com/go-gui-org/go-glyph/blob/main/backend.go#L9-L32>)
@@ -1437,7 +1491,7 @@ type Glyph struct {
 ```
 
 <a name="GlyphAtlas"></a>
-## type [GlyphAtlas](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L82-L98>)
+## type [GlyphAtlas](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L83-L103>)
 
 GlyphAtlas manages a multi\-page texture atlas for glyph bitmaps.
 
@@ -1445,12 +1499,16 @@ Not safe for concurrent use. Accessed only through Renderer.
 
 ```go
 type GlyphAtlas struct {
-    Backend           DrawBackend
-    Pages             []AtlasPage
-    Garbage           []TextureID // Textures pending deletion.
-    MaxPages          int
-    CurrentPage       int
-    FrameCounter      uint64
+    Backend      DrawBackend
+    Pages        []AtlasPage
+    Garbage      []TextureID // Textures pending deletion.
+    MaxPages     int
+    CurrentPage  int
+    FrameCounter uint64
+    // MaxGlyphDimension caps the width and height that InsertBitmap
+    // accepts. The rasterizer clamps its own output to MaxGlyphSize
+    // (256), so larger values only matter to direct InsertBitmap
+    // callers with their own bitmaps.
     MaxGlyphDimension int
     LastFrame         uint64
     // contains filtered or unexported fields
@@ -1458,7 +1516,7 @@ type GlyphAtlas struct {
 ```
 
 <a name="NewGlyphAtlas"></a>
-### func [NewGlyphAtlas](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L133>)
+### func [NewGlyphAtlas](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L137>)
 
 ```go
 func NewGlyphAtlas(backend DrawBackend, w, h int) (*GlyphAtlas, error)
@@ -1467,25 +1525,25 @@ func NewGlyphAtlas(backend DrawBackend, w, h int) (*GlyphAtlas, error)
 NewGlyphAtlas creates a new glyph atlas with one initial page. Dimensions are rounded up to the next power of two to satisfy GPU texture alignment requirements \(most drivers silently round up non\-power\-of\-two textures, wasting VRAM\). Dimensions below 64 are clamped to 64.
 
 <a name="GlyphAtlas.Cleanup"></a>
-### func \(\*GlyphAtlas\) [Cleanup](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L172>)
+### func \(\*GlyphAtlas\) [Cleanup](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L189>)
 
 ```go
 func (atlas *GlyphAtlas) Cleanup(frame uint64)
 ```
 
-Cleanup removes stale textures from previous frames.
+Cleanup removes stale textures from previous frames. It collects when frame differs from the last cleanup, forward or backward, so a repeated call within one frame stays cheap and a backward jump in frame numbers cannot leak textures.
 
 <a name="GlyphAtlas.Free"></a>
-### func \(\*GlyphAtlas\) [Free](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L160>)
+### func \(\*GlyphAtlas\) [Free](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L171>)
 
 ```go
 func (atlas *GlyphAtlas) Free()
 ```
 
-Free releases all atlas textures.
+Free releases all atlas textures. It is safe to call Free twice. After Free the atlas holds no pages, so InsertBitmap returns an error until the atlas is discarded.
 
 <a name="GlyphAtlas.InsertBitmap"></a>
-### func \(\*GlyphAtlas\) [InsertBitmap](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L186>)
+### func \(\*GlyphAtlas\) [InsertBitmap](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L206>)
 
 ```go
 func (atlas *GlyphAtlas) InsertBitmap(bmp Bitmap, left, top int) (CachedGlyph, bool, int, error)
@@ -1494,16 +1552,18 @@ func (atlas *GlyphAtlas) InsertBitmap(bmp Bitmap, left, top int) (CachedGlyph, b
 InsertBitmap places a bitmap into the atlas using shelf\-based best\-height\-fit with multi\-page support. Returns the CachedGlyph, whether a page reset occurred, and the index of the reset page.
 
 <a name="GlyphAtlas.Reset"></a>
-### func \(\*GlyphAtlas\) [Reset](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L152>)
+### func \(\*GlyphAtlas\) [Reset](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L161>)
 
 ```go
 func (atlas *GlyphAtlas) Reset()
 ```
 
-Reset clears all atlas pages \(shelves, staging buffers\) without deleting GPU textures. Use to reclaim atlas space mid\-session while keeping the TextSystem alive.
+Reset clears all atlas pages \(shelves, staging buffers\) without deleting GPU textures. Use it to reclaim atlas space mid\-session while keeping the TextSystem alive.
+
+Reset invalidates every CachedGlyph handed out before the call. Do not draw with old coordinates after Reset. To clear the Renderer cache at the same time, call PurgeGlyphCache instead of calling Reset directly.
 
 <a name="GlyphAtlas.SwapAndUpload"></a>
-### func \(\*GlyphAtlas\) [SwapAndUpload](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L301>)
+### func \(\*GlyphAtlas\) [SwapAndUpload](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L343>)
 
 ```go
 func (atlas *GlyphAtlas) SwapAndUpload()
@@ -1513,8 +1573,10 @@ SwapAndUpload swaps staging buffers and uploads dirty pages to the GPU. Called a
 
 On a backend that does implement RectTextureUpdater each page sends only its pending region rather than its full extent, so the cost tracks what was rasterized. Backends without it still receive whole pages.
 
+With no backend set, SwapAndUpload keeps the pages dirty and sends nothing, so a later call with a backend still uploads the pixels.
+
 <a name="GlyphAtlas.UploadDirtyRects"></a>
-### func \(\*GlyphAtlas\) [UploadDirtyRects](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L319>)
+### func \(\*GlyphAtlas\) [UploadDirtyRects](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L364>)
 
 ```go
 func (atlas *GlyphAtlas) UploadDirtyRects()
@@ -1711,7 +1773,7 @@ func (l *Layout) GetClosestOffset(x, y float32) int
 GetClosestOffset returns the byte index of the character closest to \(x, y\). Handles clicks outside bounds.
 
 <a name="Layout.GetCursorPos"></a>
-### func \(\*Layout\) [GetCursorPos](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L184>)
+### func \(\*Layout\) [GetCursorPos](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L190>)
 
 ```go
 func (l *Layout) GetCursorPos(byteIndex int) (CursorPosition, bool)
@@ -1720,7 +1782,7 @@ func (l *Layout) GetCursorPos(byteIndex int) (CursorPosition, bool)
 GetCursorPos returns cursor geometry at byte\_index. Returns ok=false if not a valid cursor position.
 
 <a name="Layout.GetFontNameAtIndex"></a>
-### func \(\*Layout\) [GetFontNameAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L534>)
+### func \(\*Layout\) [GetFontNameAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L567>)
 
 ```go
 func (l *Layout) GetFontNameAtIndex(index int) string
@@ -1729,7 +1791,7 @@ func (l *Layout) GetFontNameAtIndex(index int) string
 GetFontNameAtIndex returns the font family name at byte index.
 
 <a name="Layout.GetParagraphAtIndex"></a>
-### func \(\*Layout\) [GetParagraphAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L507>)
+### func \(\*Layout\) [GetParagraphAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L540>)
 
 ```go
 func (l *Layout) GetParagraphAtIndex(byteIndex int, text string) (int, int)
@@ -1747,7 +1809,7 @@ func (l *Layout) GetSelectionRects(start, end int) []Rect
 GetSelectionRects returns rectangles covering \[start, end\).
 
 <a name="Layout.GetValidCursorPositions"></a>
-### func \(\*Layout\) [GetValidCursorPositions](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L265>)
+### func \(\*Layout\) [GetValidCursorPositions](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L298>)
 
 ```go
 func (l *Layout) GetValidCursorPositions() []int
@@ -1756,7 +1818,7 @@ func (l *Layout) GetValidCursorPositions() []int
 GetValidCursorPositions returns sorted byte indices that are valid cursor positions. Uses pre\-built cache.
 
 <a name="Layout.GetWordAtIndex"></a>
-### func \(\*Layout\) [GetWordAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L459>)
+### func \(\*Layout\) [GetWordAtIndex](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L492>)
 
 ```go
 func (l *Layout) GetWordAtIndex(byteIndex int) (int, int)
@@ -1794,7 +1856,7 @@ func (l *Layout) HitTestRect(x, y float32) (Rect, bool)
 HitTestRect returns the bounding box of the character at \(x, y\) relative to the layout origin. Returns ok=false if no character is found.
 
 <a name="Layout.MoveCursorDown"></a>
-### func \(\*Layout\) [MoveCursorDown](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L420>)
+### func \(\*Layout\) [MoveCursorDown](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L453>)
 
 ```go
 func (l *Layout) MoveCursorDown(byteIndex int, preferredX float32) int
@@ -1803,7 +1865,7 @@ func (l *Layout) MoveCursorDown(byteIndex int, preferredX float32) int
 MoveCursorDown returns byte index on next line at similar x.
 
 <a name="Layout.MoveCursorLeft"></a>
-### func \(\*Layout\) [MoveCursorLeft](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L273>)
+### func \(\*Layout\) [MoveCursorLeft](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L306>)
 
 ```go
 func (l *Layout) MoveCursorLeft(byteIndex int) int
@@ -1812,7 +1874,7 @@ func (l *Layout) MoveCursorLeft(byteIndex int) int
 MoveCursorLeft returns the previous valid cursor position.
 
 <a name="Layout.MoveCursorLineEnd"></a>
-### func \(\*Layout\) [MoveCursorLineEnd](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L371>)
+### func \(\*Layout\) [MoveCursorLineEnd](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L404>)
 
 ```go
 func (l *Layout) MoveCursorLineEnd(byteIndex int) int
@@ -1821,7 +1883,7 @@ func (l *Layout) MoveCursorLineEnd(byteIndex int) int
 MoveCursorLineEnd returns the end of the current line. At a soft\-wrap boundary the later line is preferred.
 
 <a name="Layout.MoveCursorLineStart"></a>
-### func \(\*Layout\) [MoveCursorLineStart](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L354>)
+### func \(\*Layout\) [MoveCursorLineStart](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L387>)
 
 ```go
 func (l *Layout) MoveCursorLineStart(byteIndex int) int
@@ -1830,7 +1892,7 @@ func (l *Layout) MoveCursorLineStart(byteIndex int) int
 MoveCursorLineStart returns the start of the current line. At a soft\-wrap boundary the later line is preferred.
 
 <a name="Layout.MoveCursorRight"></a>
-### func \(\*Layout\) [MoveCursorRight](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L287>)
+### func \(\*Layout\) [MoveCursorRight](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L320>)
 
 ```go
 func (l *Layout) MoveCursorRight(byteIndex int) int
@@ -1839,7 +1901,7 @@ func (l *Layout) MoveCursorRight(byteIndex int) int
 MoveCursorRight returns the next valid cursor position.
 
 <a name="Layout.MoveCursorUp"></a>
-### func \(\*Layout\) [MoveCursorUp](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L388>)
+### func \(\*Layout\) [MoveCursorUp](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L421>)
 
 ```go
 func (l *Layout) MoveCursorUp(byteIndex int, preferredX float32) int
@@ -1848,7 +1910,7 @@ func (l *Layout) MoveCursorUp(byteIndex int, preferredX float32) int
 MoveCursorUp returns byte index on previous line at similar x. Pass preferredX \< 0 to use cursor's current x.
 
 <a name="Layout.MoveCursorWordLeft"></a>
-### func \(\*Layout\) [MoveCursorWordLeft](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L322>)
+### func \(\*Layout\) [MoveCursorWordLeft](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L355>)
 
 ```go
 func (l *Layout) MoveCursorWordLeft(byteIndex int) int
@@ -1857,7 +1919,7 @@ func (l *Layout) MoveCursorWordLeft(byteIndex int) int
 MoveCursorWordLeft returns the previous word start.
 
 <a name="Layout.MoveCursorWordRight"></a>
-### func \(\*Layout\) [MoveCursorWordRight](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L336>)
+### func \(\*Layout\) [MoveCursorWordRight](<https://github.com/go-gui-org/go-glyph/blob/main/layout_query.go#L369>)
 
 ```go
 func (l *Layout) MoveCursorWordRight(byteIndex int) int
@@ -2035,7 +2097,7 @@ func (m MutationResult) ToChange(inserted string) TextChange
 ToChange converts a MutationResult to a TextChange.
 
 <a name="OperationType"></a>
-## type [OperationType](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L69>)
+## type [OperationType](<https://github.com/go-gui-org/go-glyph/blob/main/enums.go#L68>)
 
 OperationType identifies the kind of undo operation.
 
@@ -2317,7 +2379,7 @@ type Rect struct {
 ```
 
 <a name="RectTextureUpdater"></a>
-## type [RectTextureUpdater](<https://github.com/go-gui-org/go-glyph/blob/main/backend.go#L51-L63>)
+## type [RectTextureUpdater](<https://github.com/go-gui-org/go-glyph/blob/main/backend.go#L68-L80>)
 
 RectTextureUpdater is an optional DrawBackend extension for uploading just the changed sub\-rectangle of a texture.
 
@@ -2342,7 +2404,7 @@ type RectTextureUpdater interface {
 ```
 
 <a name="Renderer"></a>
-## type [Renderer](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L12-L27>)
+## type [Renderer](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L12-L30>)
 
 Renderer rasterizes glyphs via the platform rasterizer, manages the glyph cache and atlas, and emits draw calls through DrawBackend.
 
@@ -2355,7 +2417,7 @@ type Renderer struct {
 ```
 
 <a name="NewRenderer"></a>
-### func [NewRenderer](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L34>)
+### func [NewRenderer](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L37>)
 
 ```go
 func NewRenderer(backend DrawBackend, scaleFactor float32) (*Renderer, error)
@@ -2364,7 +2426,7 @@ func NewRenderer(backend DrawBackend, scaleFactor float32) (*Renderer, error)
 
 
 <a name="NewRendererWithConfig"></a>
-### func [NewRendererWithConfig](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L39-L40>)
+### func [NewRendererWithConfig](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L42-L43>)
 
 ```go
 func NewRendererWithConfig(backend DrawBackend, scaleFactor float32, atlasW, atlasH int, cfg RendererConfig) (*Renderer, error)
@@ -2373,7 +2435,7 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32, atlasW, atl
 
 
 <a name="Renderer.Atlas"></a>
-### func \(\*Renderer\) [Atlas](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L114>)
+### func \(\*Renderer\) [Atlas](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L129>)
 
 ```go
 func (r *Renderer) Atlas() *GlyphAtlas
@@ -2382,7 +2444,7 @@ func (r *Renderer) Atlas() *GlyphAtlas
 
 
 <a name="Renderer.Commit"></a>
-### func \(\*Renderer\) [Commit](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L74>)
+### func \(\*Renderer\) [Commit](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L77>)
 
 ```go
 func (r *Renderer) Commit()
@@ -2391,7 +2453,7 @@ func (r *Renderer) Commit()
 
 
 <a name="Renderer.DrawComposition"></a>
-### func \(\*Renderer\) [DrawComposition](<https://github.com/go-gui-org/go-glyph/blob/main/draw_composition.go#L6-L7>)
+### func \(\*Renderer\) [DrawComposition](<https://github.com/go-gui-org/go-glyph/blob/main/draw_composition.go#L11-L12>)
 
 ```go
 func (r *Renderer) DrawComposition(layout Layout, x, y float32, cs *CompositionState, cursorColor Color)
@@ -2399,8 +2461,17 @@ func (r *Renderer) DrawComposition(layout Layout, x, y float32, cs *CompositionS
 
 DrawComposition renders IME preedit visual feedback: clause underlines and preedit cursor. Call after DrawLayout when composition is active.
 
+<a name="Renderer.DrawCompositionTransformed"></a>
+### func \(\*Renderer\) [DrawCompositionTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/draw_composition.go#L21-L22>)
+
+```go
+func (r *Renderer) DrawCompositionTransformed(layout Layout, x, y float32, transform AffineTransform, cs *CompositionState, cursorColor Color)
+```
+
+DrawCompositionTransformed renders IME preedit feedback through transform. Use it with DrawLayoutTransformed and the same x, y and transform, so the underlines and cursor stay on the glyphs. A transform or origin that is not finite draws nothing.
+
 <a name="Renderer.DrawLayout"></a>
-### func \(\*Renderer\) [DrawLayout](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L89>)
+### func \(\*Renderer\) [DrawLayout](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L92>)
 
 ```go
 func (r *Renderer) DrawLayout(layout Layout, x, y float32)
@@ -2418,43 +2489,34 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout, placements []GlyphPlacement)
 
 
 <a name="Renderer.DrawLayoutRotated"></a>
-### func \(\*Renderer\) [DrawLayoutRotated](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L98-L99>)
+### func \(\*Renderer\) [DrawLayoutRotated](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L110-L111>)
 
 ```go
 func (r *Renderer) DrawLayoutRotated(layout Layout, x, y, angle float32)
 ```
 
-
+DrawLayoutRotated draws layout at \(x, y\) rotated by angle in radians around the layout origin. Backgrounds and decorations rotate with the glyphs.
 
 <a name="Renderer.DrawLayoutTransformed"></a>
-### func \(\*Renderer\) [DrawLayoutTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L93-L94>)
+### func \(\*Renderer\) [DrawLayoutTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L102-L103>)
 
 ```go
 func (r *Renderer) DrawLayoutTransformed(layout Layout, x, y float32, transform AffineTransform)
 ```
 
-
+DrawLayoutTransformed draws layout at \(x, y\) through transform. The transform runs first \(rotation around the layout origin\), then the result moves to \(x, y\). To rotate around another point, build the transform with AffineRotationAround. Backgrounds and decorations rotate with the glyphs. A transform that is not finite draws nothing.
 
 <a name="Renderer.DrawLayoutTransformedWithGradient"></a>
-### func \(\*Renderer\) [DrawLayoutTransformedWithGradient](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L108-L110>)
+### func \(\*Renderer\) [DrawLayoutTransformedWithGradient](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L123-L125>)
 
 ```go
 func (r *Renderer) DrawLayoutTransformedWithGradient(layout Layout, x, y float32, transform AffineTransform, gradient *GradientConfig)
 ```
 
-
-
-<a name="Renderer.DrawLayoutWithComposition"></a>
-### func \(\*Renderer\) [DrawLayoutWithComposition](<https://github.com/go-gui-org/go-glyph/blob/main/draw_composition.go#L58-L59>)
-
-```go
-func (r *Renderer) DrawLayoutWithComposition(layout Layout, x, y float32, cs *CompositionState)
-```
-
-DrawLayoutWithComposition renders a layout with preedit text. Currently draws normally; opacity reduction deferred to future.
+DrawLayoutTransformedWithGradient combines DrawLayoutTransformed and DrawLayoutWithGradient. The pivot rule from DrawLayoutTransformed applies.
 
 <a name="Renderer.DrawLayoutWithGradient"></a>
-### func \(\*Renderer\) [DrawLayoutWithGradient](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L103-L104>)
+### func \(\*Renderer\) [DrawLayoutWithGradient](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L115-L116>)
 
 ```go
 func (r *Renderer) DrawLayoutWithGradient(layout Layout, x, y float32, gradient *GradientConfig)
@@ -2463,7 +2525,7 @@ func (r *Renderer) DrawLayoutWithGradient(layout Layout, x, y float32, gradient 
 
 
 <a name="Renderer.Free"></a>
-### func \(\*Renderer\) [Free](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L68>)
+### func \(\*Renderer\) [Free](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L71>)
 
 ```go
 func (r *Renderer) Free()
@@ -2472,7 +2534,7 @@ func (r *Renderer) Free()
 
 
 <a name="Renderer.PurgeGlyphCache"></a>
-### func \(\*Renderer\) [PurgeGlyphCache](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L83>)
+### func \(\*Renderer\) [PurgeGlyphCache](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L86>)
 
 ```go
 func (r *Renderer) PurgeGlyphCache()
@@ -2481,7 +2543,7 @@ func (r *Renderer) PurgeGlyphCache()
 PurgeGlyphCache clears the glyph cache and resets atlas pages, reclaiming GPU textures and Go heap memory. Call after a full terminal clear \(e.g. CSI 3 J\) to drop cached glyphs no longer on screen while keeping the TextSystem alive.
 
 <a name="RendererConfig"></a>
-## type [RendererConfig](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L30-L32>)
+## type [RendererConfig](<https://github.com/go-gui-org/go-glyph/blob/main/renderer_common.go#L33-L35>)
 
 RendererConfig configures the Renderer.
 
@@ -2503,7 +2565,7 @@ type RichText struct {
 ```
 
 <a name="Shelf"></a>
-## type [Shelf](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L72-L77>)
+## type [Shelf](<https://github.com/go-gui-org/go-glyph/blob/main/atlas.go#L73-L78>)
 
 Shelf is a horizontal strip within an atlas page.
 
@@ -2733,7 +2795,7 @@ func (ts *TextSystem) Context() *Context
 Context returns the underlying Context for advanced usage.
 
 <a name="TextSystem.DPIScale"></a>
-### func \(\*TextSystem\) [DPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/scale.go#L55>)
+### func \(\*TextSystem\) [DPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/scale.go#L59>)
 
 ```go
 func (ts *TextSystem) DPIScale() float32
@@ -2908,7 +2970,7 @@ func (ts *TextSystem) ResolveFontName(name string) (string, error)
 ResolveFontName returns the actual font family name that Pango resolves for the given description string.
 
 <a name="TextSystem.SetDPIScale"></a>
-### func \(\*TextSystem\) [SetDPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/scale.go#L37>)
+### func \(\*TextSystem\) [SetDPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/scale.go#L41>)
 
 ```go
 func (ts *TextSystem) SetDPIScale(s float32)
@@ -2916,7 +2978,7 @@ func (ts *TextSystem) SetDPIScale(s float32)
 
 SetDPIScale updates the device scale factor for shaping, rasterization and placement, and drops the caches keyed at the old one. Call it when the window moves to a display with a different scale factor, together with the matching setter on the DrawBackend.
 
-Values of zero or less \(NaN included\) are rejected, and a scale equal to the current one is a no\-op — so calling this on every resize costs nothing.
+Values of zero or less \(NaN included\) and non\-finite values are rejected, and values above 10× are ignored to bound rasterization cost; a scale equal to the current one is a no\-op — so calling this on every resize costs nothing.
 
 <a name="TextSystem.TextHeight"></a>
 ### func \(\*TextSystem\) [TextHeight](<https://github.com/go-gui-org/go-glyph/blob/main/glyph.go#L121>)
@@ -2943,6 +3005,20 @@ TextureID is an opaque handle to a GPU texture managed by a DrawBackend.
 
 ```go
 type TextureID uint64
+```
+
+<a name="TransformedFillBackend"></a>
+## type [TransformedFillBackend](<https://github.com/go-gui-org/go-glyph/blob/main/backend.go#L46-L49>)
+
+TransformedFillBackend is an optional DrawBackend extension for rotated fills. Backgrounds and decorations \(underlines, strikethroughs\) rotate with the glyphs under DrawLayout\* transformed calls. A backend that implements this draws the rect through t. One that does not gets the old fallback: the rect origin moves but the rect stays axis\-aligned. All bundled backends implement it. Custom backends must do the same to keep rotated backgrounds aligned with rotated text.
+
+t is always finite here. dst holds layout coords without the draw origin: the caller folds the origin into t, the same way DrawTexturedQuadTransformed calls do.
+
+```go
+type TransformedFillBackend interface {
+    // DrawFilledRectTransformed draws a filled rect through t.
+    DrawFilledRectTransformed(dst Rect, c Color, t AffineTransform)
+}
 ```
 
 <a name="Typeface"></a>
@@ -3584,7 +3660,7 @@ type Bridge interface {
 ```
 
 <a name="NewBridge"></a>
-### func [NewBridge](<https://github.com/go-gui-org/go-glyph/blob/main/ime/bridge.go#L36>)
+### func [NewBridge](<https://github.com/go-gui-org/go-glyph/blob/main/ime/bridge.go#L38>)
 
 ```go
 func NewBridge(cb Callbacks) Bridge
@@ -3593,13 +3669,15 @@ func NewBridge(cb Callbacks) Bridge
 NewBridge creates a platform\-specific IME bridge. The callbacks receive IME events from the platform.
 
 <a name="Callbacks"></a>
-## type [Callbacks](<https://github.com/go-gui-org/go-glyph/blob/main/ime/bridge.go#L23-L32>)
+## type [Callbacks](<https://github.com/go-gui-org/go-glyph/blob/main/ime/bridge.go#L23-L34>)
 
 Callbacks receives IME events from the platform bridge.
 
 ```go
 type Callbacks struct {
     // OnMarkedText is called when preedit text changes.
+    // cursorInPreedit is a UTF-8 byte offset into text. A bridge
+    // that gets UTF-16 offsets (macOS NSRange) must convert them.
     OnMarkedText func(text string, cursorInPreedit int)
 
     // OnInsertText is called when text is committed.
@@ -3625,6 +3703,7 @@ Package ebitengine provides an Ebitengine DrawBackend for the glyph text renderi
   - [func \(b \*Backend\) DPIScale\(\) float32](<#Backend.DPIScale>)
   - [func \(b \*Backend\) DeleteTexture\(id glyph.TextureID\)](<#Backend.DeleteTexture>)
   - [func \(b \*Backend\) DrawFilledRect\(dst glyph.Rect, c glyph.Color\)](<#Backend.DrawFilledRect>)
+  - [func \(b \*Backend\) DrawFilledRectTransformed\(dst glyph.Rect, c glyph.Color, t glyph.AffineTransform\)](<#Backend.DrawFilledRectTransformed>)
   - [func \(b \*Backend\) DrawTexturedQuad\(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color\)](<#Backend.DrawTexturedQuad>)
   - [func \(b \*Backend\) DrawTexturedQuadTransformed\(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color, t glyph.AffineTransform\)](<#Backend.DrawTexturedQuadTransformed>)
   - [func \(b \*Backend\) NewTexture\(width, height int\) glyph.TextureID](<#Backend.NewTexture>)
@@ -3634,7 +3713,7 @@ Package ebitengine provides an Ebitengine DrawBackend for the glyph text renderi
 
 
 <a name="Backend"></a>
-## type [Backend](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L15-L22>)
+## type [Backend](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L16-L27>)
 
 Backend implements glyph.DrawBackend using Ebitengine.
 
@@ -3645,7 +3724,7 @@ type Backend struct {
 ```
 
 <a name="New"></a>
-### func [New](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L27>)
+### func [New](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L32>)
 
 ```go
 func New(target *ebiten.Image, dpiScale float32) *Backend
@@ -3654,7 +3733,7 @@ func New(target *ebiten.Image, dpiScale float32) *Backend
 New creates an Ebitengine backend. target is the destination image \(usually the screen from Game.Draw\). dpiScale is the display scale factor \(e.g. ebiten.Monitor\(\).DeviceScaleFactor\(\)\).
 
 <a name="Backend.DPIScale"></a>
-### func \(\*Backend\) [DPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L202>)
+### func \(\*Backend\) [DPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L300>)
 
 ```go
 func (b *Backend) DPIScale() float32
@@ -3663,7 +3742,7 @@ func (b *Backend) DPIScale() float32
 DPIScale returns the display DPI scale factor.
 
 <a name="Backend.DeleteTexture"></a>
-### func \(\*Backend\) [DeleteTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L68>)
+### func \(\*Backend\) [DeleteTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L86>)
 
 ```go
 func (b *Backend) DeleteTexture(id glyph.TextureID)
@@ -3672,7 +3751,7 @@ func (b *Backend) DeleteTexture(id glyph.TextureID)
 DeleteTexture releases a texture.
 
 <a name="Backend.DrawFilledRect"></a>
-### func \(\*Backend\) [DrawFilledRect](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L116>)
+### func \(\*Backend\) [DrawFilledRect](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L147>)
 
 ```go
 func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color)
@@ -3680,8 +3759,17 @@ func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color)
 
 DrawFilledRect draws a filled rectangle.
 
+<a name="Backend.DrawFilledRectTransformed"></a>
+### func \(\*Backend\) [DrawFilledRectTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L184-L185>)
+
+```go
+func (b *Backend) DrawFilledRectTransformed(dst glyph.Rect, c glyph.Color, t glyph.AffineTransform)
+```
+
+DrawFilledRectTransformed draws a filled rect with an affine transform applied. Implements glyph.TransformedFillBackend, so rotated backgrounds and decorations rotate with the glyphs instead of staying axis\-aligned.
+
 <a name="Backend.DrawTexturedQuad"></a>
-### func \(\*Backend\) [DrawTexturedQuad](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L78>)
+### func \(\*Backend\) [DrawTexturedQuad](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L96>)
 
 ```go
 func (b *Backend) DrawTexturedQuad(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color)
@@ -3690,7 +3778,7 @@ func (b *Backend) DrawTexturedQuad(id glyph.TextureID, src, dst glyph.Rect, c gl
 DrawTexturedQuad draws a textured rectangle with color tinting.
 
 <a name="Backend.DrawTexturedQuadTransformed"></a>
-### func \(\*Backend\) [DrawTexturedQuadTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L149-L150>)
+### func \(\*Backend\) [DrawTexturedQuadTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L244-L245>)
 
 ```go
 func (b *Backend) DrawTexturedQuadTransformed(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color, t glyph.AffineTransform)
@@ -3699,25 +3787,25 @@ func (b *Backend) DrawTexturedQuadTransformed(id glyph.TextureID, src, dst glyph
 DrawTexturedQuadTransformed draws with an affine transform applied.
 
 <a name="Backend.NewTexture"></a>
-### func \(\*Backend\) [NewTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L46>)
+### func \(\*Backend\) [NewTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L54>)
 
 ```go
 func (b *Backend) NewTexture(width, height int) glyph.TextureID
 ```
 
-NewTexture allocates a new RGBA texture.
+NewTexture allocates a new RGBA texture. Non\-positive sizes return 0 \(invalid\): ebiten.NewImage panics on them, and a zero\-size texture is never drawable.
 
 <a name="Backend.SetDPIScale"></a>
-### func \(\*Backend\) [SetDPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L209>)
+### func \(\*Backend\) [SetDPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L308>)
 
 ```go
 func (b *Backend) SetDPIScale(dpiScale float32)
 ```
 
-SetDPIScale updates the display scale factor, which the backend applies when it converts glyph's logical coordinates to physical pixels. Call it when the window moves to a display with a different scale factor, paired with \(\*glyph.TextSystem\).SetDPIScale so shaping and rasterization follow. Values of zero or less \(NaN included\) are ignored, as in New.
+SetDPIScale updates the display scale factor, which the backend applies when it converts glyph's logical coordinates to physical pixels. Call it when the window moves to a display with a different scale factor, paired with \(\*glyph.TextSystem\).SetDPIScale so shaping and rasterization follow. Values of zero or less \(NaN included\) and non\-finite or \>10× values are ignored, as in New.
 
 <a name="Backend.SetTarget"></a>
-### func \(\*Backend\) [SetTarget](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L41>)
+### func \(\*Backend\) [SetTarget](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L47>)
 
 ```go
 func (b *Backend) SetTarget(target *ebiten.Image)
@@ -3726,13 +3814,13 @@ func (b *Backend) SetTarget(target *ebiten.Image)
 SetTarget updates the draw target \(call each frame with screen\).
 
 <a name="Backend.UpdateTexture"></a>
-### func \(\*Backend\) [UpdateTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L57>)
+### func \(\*Backend\) [UpdateTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/ebitengine/backend.go#L71>)
 
 ```go
 func (b *Backend) UpdateTexture(id glyph.TextureID, data []byte)
 ```
 
-UpdateTexture uploads RGBA data to an existing texture.
+UpdateTexture uploads RGBA data to an existing texture. A short buffer or unknown size is ignored: WritePixels would panic on a short slice. int64 arithmetic avoids overflow on the product.
 
 # gpu
 
@@ -3771,6 +3859,7 @@ b.EndFrame(0, 0, 0, 1, logW, logH)
   - [func \(b \*Backend\) DeleteTexture\(id glyph.TextureID\)](<#Backend.DeleteTexture>)
   - [func \(b \*Backend\) Destroy\(\)](<#Backend.Destroy>)
   - [func \(b \*Backend\) DrawFilledRect\(dst glyph.Rect, c glyph.Color\)](<#Backend.DrawFilledRect>)
+  - [func \(b \*Backend\) DrawFilledRectTransformed\(dst glyph.Rect, c glyph.Color, t glyph.AffineTransform\)](<#Backend.DrawFilledRectTransformed>)
   - [func \(b \*Backend\) DrawTexturedQuad\(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color\)](<#Backend.DrawTexturedQuad>)
   - [func \(b \*Backend\) DrawTexturedQuadTransformed\(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color, t glyph.AffineTransform\)](<#Backend.DrawTexturedQuadTransformed>)
   - [func \(b \*Backend\) DrawableSize\(\) \(int, int\)](<#Backend.DrawableSize>)
@@ -3782,7 +3871,7 @@ b.EndFrame(0, 0, 0, 1, logW, logH)
 
 
 <a name="Backend"></a>
-## type [Backend](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L16-L22>)
+## type [Backend](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L17-L23>)
 
 Backend implements glyph.DrawBackend using a GPU backend via CGo.
 
@@ -3795,7 +3884,7 @@ type Backend struct {
 ```
 
 <a name="New"></a>
-### func [New](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L32>)
+### func [New](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L33>)
 
 ```go
 func New(nativeWindow unsafe.Pointer, dpiScale float32) (*Backend, error)
@@ -3812,7 +3901,7 @@ nativeWindow is platform\-dependent:
 dpiScale is physical pixels / logical pixels.
 
 <a name="Backend.BeginFrame"></a>
-### func \(\*Backend\) [BeginFrame](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L165>)
+### func \(\*Backend\) [BeginFrame](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L210>)
 
 ```go
 func (b *Backend) BeginFrame()
@@ -3821,7 +3910,7 @@ func (b *Backend) BeginFrame()
 BeginFrame resets vertex/command buffers for a new frame.
 
 <a name="Backend.DPIScale"></a>
-### func \(\*Backend\) [DPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L150>)
+### func \(\*Backend\) [DPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L194>)
 
 ```go
 func (b *Backend) DPIScale() float32
@@ -3830,7 +3919,7 @@ func (b *Backend) DPIScale() float32
 DPIScale returns the display DPI scale factor.
 
 <a name="Backend.DeleteTexture"></a>
-### func \(\*Backend\) [DeleteTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L72>)
+### func \(\*Backend\) [DeleteTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L73>)
 
 ```go
 func (b *Backend) DeleteTexture(id glyph.TextureID)
@@ -3839,7 +3928,7 @@ func (b *Backend) DeleteTexture(id glyph.TextureID)
 DeleteTexture releases a texture.
 
 <a name="Backend.Destroy"></a>
-### func \(\*Backend\) [Destroy](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L183>)
+### func \(\*Backend\) [Destroy](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L228>)
 
 ```go
 func (b *Backend) Destroy()
@@ -3848,7 +3937,7 @@ func (b *Backend) Destroy()
 Destroy releases all GPU resources.
 
 <a name="Backend.DrawFilledRect"></a>
-### func \(\*Backend\) [DrawFilledRect](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L104>)
+### func \(\*Backend\) [DrawFilledRect](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L105>)
 
 ```go
 func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color)
@@ -3856,8 +3945,17 @@ func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color)
 
 DrawFilledRect draws a filled rectangle \(textureID=0 → white tex\).
 
+<a name="Backend.DrawFilledRectTransformed"></a>
+### func \(\*Backend\) [DrawFilledRectTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L125-L127>)
+
+```go
+func (b *Backend) DrawFilledRectTransformed(dst glyph.Rect, c glyph.Color, t glyph.AffineTransform)
+```
+
+DrawFilledRectTransformed draws a filled rect with an affine transform applied CPU\-side. Implements glyph.TransformedFillBackend, so rotated backgrounds and decorations rotate with the glyphs instead of staying axis\-aligned.
+
 <a name="Backend.DrawTexturedQuad"></a>
-### func \(\*Backend\) [DrawTexturedQuad](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L79-L81>)
+### func \(\*Backend\) [DrawTexturedQuad](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L80-L82>)
 
 ```go
 func (b *Backend) DrawTexturedQuad(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color)
@@ -3866,7 +3964,7 @@ func (b *Backend) DrawTexturedQuad(id glyph.TextureID, src, dst glyph.Rect, c gl
 DrawTexturedQuad draws a textured rectangle with color tinting.
 
 <a name="Backend.DrawTexturedQuadTransformed"></a>
-### func \(\*Backend\) [DrawTexturedQuadTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L121-L124>)
+### func \(\*Backend\) [DrawTexturedQuadTransformed](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L149-L152>)
 
 ```go
 func (b *Backend) DrawTexturedQuadTransformed(id glyph.TextureID, src, dst glyph.Rect, c glyph.Color, t glyph.AffineTransform)
@@ -3875,7 +3973,7 @@ func (b *Backend) DrawTexturedQuadTransformed(id glyph.TextureID, src, dst glyph
 DrawTexturedQuadTransformed draws a textured quad with an affine transform applied CPU\-side.
 
 <a name="Backend.DrawableSize"></a>
-### func \(\*Backend\) [DrawableSize](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L178>)
+### func \(\*Backend\) [DrawableSize](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L223>)
 
 ```go
 func (b *Backend) DrawableSize() (int, int)
@@ -3884,7 +3982,7 @@ func (b *Backend) DrawableSize() (int, int)
 DrawableSize returns the physical drawable size in pixels.
 
 <a name="Backend.EndFrame"></a>
-### func \(\*Backend\) [EndFrame](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L170-L171>)
+### func \(\*Backend\) [EndFrame](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L215-L216>)
 
 ```go
 func (b *Backend) EndFrame(clearR, clearG, clearB, clearA float32, logicalW, logicalH int) error
@@ -3893,7 +3991,7 @@ func (b *Backend) EndFrame(clearR, clearG, clearB, clearA float32, logicalW, log
 EndFrame flushes batched draw commands to the GPU and presents.
 
 <a name="Backend.NewTexture"></a>
-### func \(\*Backend\) [NewTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L52>)
+### func \(\*Backend\) [NewTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L53>)
 
 ```go
 func (b *Backend) NewTexture(width, height int) glyph.TextureID
@@ -3902,16 +4000,16 @@ func (b *Backend) NewTexture(width, height int) glyph.TextureID
 NewTexture allocates a new RGBA texture.
 
 <a name="Backend.SetDPIScale"></a>
-### func \(\*Backend\) [SetDPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L157>)
+### func \(\*Backend\) [SetDPIScale](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L202>)
 
 ```go
 func (b *Backend) SetDPIScale(dpiScale float32)
 ```
 
-SetDPIScale updates the display scale factor, which the backend applies when it converts glyph's logical coordinates to physical pixels. Call it when the window moves to a display with a different scale factor, paired with \(\*glyph.TextSystem\).SetDPIScale so shaping and rasterization follow. Values of zero or less \(NaN included\) are ignored, as in New.
+SetDPIScale updates the display scale factor, which the backend applies when it converts glyph's logical coordinates to physical pixels. Call it when the window moves to a display with a different scale factor, paired with \(\*glyph.TextSystem\).SetDPIScale so shaping and rasterization follow. Values of zero or less \(NaN included\) and non\-finite or \>10× values are ignored, as in New.
 
 <a name="Backend.UpdateTexture"></a>
-### func \(\*Backend\) [UpdateTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L62>)
+### func \(\*Backend\) [UpdateTexture](<https://github.com/go-gui-org/go-glyph/blob/main/backend/gpu/backend.go#L63>)
 
 ```go
 func (b *Backend) UpdateTexture(id glyph.TextureID, data []byte)

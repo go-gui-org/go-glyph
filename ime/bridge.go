@@ -22,6 +22,8 @@ type Bridge interface {
 // Callbacks receives IME events from the platform bridge.
 type Callbacks struct {
 	// OnMarkedText is called when preedit text changes.
+	// cursorInPreedit is a UTF-8 byte offset into text. A bridge
+	// that gets UTF-16 offsets (macOS NSRange) must convert them.
 	OnMarkedText func(text string, cursorInPreedit int)
 
 	// OnInsertText is called when text is committed.
