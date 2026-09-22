@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"math/bits"
 
 	"golang.org/x/image/vector"
 )
@@ -80,12 +81,16 @@ type Shelf struct {
 //
 // Not safe for concurrent use. Accessed only through Renderer.
 type GlyphAtlas struct {
-	Backend           DrawBackend
-	Pages             []AtlasPage
-	Garbage           []TextureID // Textures pending deletion.
-	MaxPages          int
-	CurrentPage       int
-	FrameCounter      uint64
+	Backend      DrawBackend
+	Pages        []AtlasPage
+	Garbage      []TextureID // Textures pending deletion.
+	MaxPages     int
+	CurrentPage  int
+	FrameCounter uint64
+	// MaxGlyphDimension caps the width and height that InsertBitmap
+	// accepts. The rasterizer clamps its own output to MaxGlyphSize
+	// (256), so larger values only matter to direct InsertBitmap
+	// callers with their own bitmaps.
 	MaxGlyphDimension int
 	LastFrame         uint64
 
@@ -110,19 +115,18 @@ type CachedGlyph struct {
 }
 
 // nextPowerOfTwo rounds n up to the next power of two.
-// Returns n unchanged if already a power of two.
+// It returns n unchanged when n is already a power of two.
+// It saturates at math.MaxInt when the next power of two does not
+// fit in an int, so callers never see a wrapped negative value.
 func nextPowerOfTwo(n int) int {
-	if n <= 0 {
+	if n <= 1 {
 		return 1
 	}
-	n--
-	n |= n >> 1
-	n |= n >> 2
-	n |= n >> 4
-	n |= n >> 8
-	n |= n >> 16
-	n |= n >> 32
-	return n + 1
+	k := bits.Len(uint(n - 1))
+	if k >= bits.UintSize-1 {
+		return math.MaxInt
+	}
+	return 1 << k
 }
 
 // NewGlyphAtlas creates a new glyph atlas with one initial page.
@@ -147,8 +151,13 @@ func NewGlyphAtlas(backend DrawBackend, w, h int) (*GlyphAtlas, error) {
 }
 
 // Reset clears all atlas pages (shelves, staging buffers) without
-// deleting GPU textures. Use to reclaim atlas space mid-session
+// deleting GPU textures. Use it to reclaim atlas space mid-session
 // while keeping the TextSystem alive.
+//
+// Reset invalidates every CachedGlyph handed out before the call.
+// Do not draw with old coordinates after Reset. To clear the
+// Renderer cache at the same time, call PurgeGlyphCache instead
+// of calling Reset directly.
 func (atlas *GlyphAtlas) Reset() {
 	for i := range atlas.Pages {
 		atlas.resetPage(i)
@@ -156,27 +165,38 @@ func (atlas *GlyphAtlas) Reset() {
 	atlas.Garbage = atlas.Garbage[:0]
 }
 
-// Free releases all atlas textures.
+// Free releases all atlas textures. It is safe to call Free twice.
+// After Free the atlas holds no pages, so InsertBitmap returns an
+// error until the atlas is discarded.
 func (atlas *GlyphAtlas) Free() {
-	for _, page := range atlas.Pages {
-		atlas.Backend.DeleteTexture(page.TextureID)
-	}
-	for _, id := range atlas.Garbage {
-		atlas.Backend.DeleteTexture(id)
-	}
-	atlas.Pages = nil
-	atlas.Garbage = nil
-}
-
-// Cleanup removes stale textures from previous frames.
-func (atlas *GlyphAtlas) Cleanup(frame uint64) {
-	if frame > atlas.LastFrame {
+	if atlas.Backend != nil {
+		for _, page := range atlas.Pages {
+			atlas.Backend.DeleteTexture(page.TextureID)
+		}
 		for _, id := range atlas.Garbage {
 			atlas.Backend.DeleteTexture(id)
 		}
-		atlas.Garbage = atlas.Garbage[:0]
-		atlas.LastFrame = frame
 	}
+	atlas.Pages = nil
+	atlas.Garbage = nil
+	atlas.CurrentPage = 0
+}
+
+// Cleanup removes stale textures from previous frames. It collects
+// when frame differs from the last cleanup, forward or backward, so
+// a repeated call within one frame stays cheap and a backward jump
+// in frame numbers cannot leak textures.
+func (atlas *GlyphAtlas) Cleanup(frame uint64) {
+	if frame == atlas.LastFrame {
+		return
+	}
+	if atlas.Backend != nil {
+		for _, id := range atlas.Garbage {
+			atlas.Backend.DeleteTexture(id)
+		}
+	}
+	atlas.Garbage = atlas.Garbage[:0]
+	atlas.LastFrame = frame
 }
 
 // InsertBitmap places a bitmap into the atlas using shelf-based
@@ -186,8 +206,6 @@ func (atlas *GlyphAtlas) Cleanup(frame uint64) {
 func (atlas *GlyphAtlas) InsertBitmap(bmp Bitmap, left, top int) (CachedGlyph, bool, int, error) {
 	glyphW := bmp.Width
 	glyphH := bmp.Height
-	paddedW := glyphW + atlasGlyphPadding*2
-	paddedH := glyphH + atlasGlyphPadding*2
 
 	if glyphW > atlas.MaxGlyphDimension || glyphH > atlas.MaxGlyphDimension {
 		return CachedGlyph{}, false, 0, fmt.Errorf(
@@ -197,8 +215,23 @@ func (atlas *GlyphAtlas) InsertBitmap(bmp Bitmap, left, top int) (CachedGlyph, b
 	if glyphW <= 0 || glyphH <= 0 {
 		return CachedGlyph{}, false, 0, nil // empty glyph
 	}
+	if atlas.Backend == nil {
+		return CachedGlyph{}, false, 0, fmt.Errorf("glyph atlas has no backend")
+	}
+	if len(atlas.Pages) == 0 || atlas.CurrentPage < 0 ||
+		atlas.CurrentPage >= len(atlas.Pages) {
+		return CachedGlyph{}, false, 0, fmt.Errorf(
+			"glyph atlas has no usable page (Free was called?)")
+	}
+	paddedW := glyphW + atlasGlyphPadding*2
+	paddedH := glyphH + atlasGlyphPadding*2
 
 	page := &atlas.Pages[atlas.CurrentPage]
+	if paddedW > page.Width {
+		return CachedGlyph{}, false, 0, fmt.Errorf(
+			"glyph too wide for atlas page: width %d exceeds page width %d",
+			paddedW, page.Width)
+	}
 	resetOccurred := false
 	resetPageIdx := 0
 
@@ -220,7 +253,13 @@ func (atlas *GlyphAtlas) InsertBitmap(bmp Bitmap, left, top int) (CachedGlyph, b
 					return CachedGlyph{}, false, 0, err
 				}
 			} else if len(atlas.Pages) < atlas.MaxPages {
-				newPage, err := newAtlasPage(atlas.Backend, page.Width, 1024)
+				// This branch runs only when the page has grown to
+				// MaxGlyphDimension. Cap new pages at 1024 rows so the
+				// default 4096 limit does not allocate a full-height page
+				// at once; the new page grows on demand like the first.
+				// Small atlases (limit below 1024) stay at their height.
+				newPage, err := newAtlasPage(atlas.Backend, page.Width,
+					min(page.Height, 1024))
 				if err != nil {
 					return CachedGlyph{}, false, 0, err
 				}
@@ -298,7 +337,13 @@ func (atlas *GlyphAtlas) rectUpdater() RectTextureUpdater {
 // On a backend that does implement RectTextureUpdater each page sends only
 // its pending region rather than its full extent, so the cost tracks what
 // was rasterized. Backends without it still receive whole pages.
+//
+// With no backend set, SwapAndUpload keeps the pages dirty and sends
+// nothing, so a later call with a backend still uploads the pixels.
 func (atlas *GlyphAtlas) SwapAndUpload() {
+	if atlas.Backend == nil {
+		return
+	}
 	for i := range atlas.Pages {
 		if page := &atlas.Pages[i]; page.Dirty {
 			atlas.uploadPage(page)
@@ -363,6 +408,9 @@ func (atlas *GlyphAtlas) uploadPage(page *AtlasPage) {
 // --- internal helpers ---
 
 func newAtlasPage(backend DrawBackend, w, h int) (AtlasPage, error) {
+	if backend == nil {
+		return AtlasPage{}, fmt.Errorf("atlas backend must not be nil")
+	}
 	if w <= 0 || h <= 0 {
 		return AtlasPage{}, fmt.Errorf("atlas page dimensions must be positive: %dx%d", w, h)
 	}
@@ -441,6 +489,9 @@ func (atlas *GlyphAtlas) findOldestPage() int {
 }
 
 func (atlas *GlyphAtlas) resetPage(pageIdx int) {
+	if pageIdx < 0 || pageIdx >= len(atlas.Pages) {
+		return
+	}
 	page := &atlas.Pages[pageIdx]
 	page.Shelves = page.Shelves[:0]
 	page.UsedPixels = 0
@@ -455,6 +506,9 @@ func (atlas *GlyphAtlas) resetPage(pageIdx int) {
 }
 
 func (atlas *GlyphAtlas) growPage(pageIdx, newHeight int) error {
+	if pageIdx < 0 || pageIdx >= len(atlas.Pages) {
+		return fmt.Errorf("atlas page index out of range: %d", pageIdx)
+	}
 	page := &atlas.Pages[pageIdx]
 	if newHeight <= page.Height {
 		return nil
@@ -468,7 +522,13 @@ func (atlas *GlyphAtlas) growPage(pageIdx, newHeight int) error {
 	// Reallocate staging buffers, preserving existing data.
 	newFront := make([]byte, newSize)
 	newBack := make([]byte, newSize)
-	copy(newBack, page.StagingBack[:oldSize])
+	// The staging buffers are exported, so outside code can shrink
+	// them. Copy only what the old buffer still holds. When it is
+	// short, the old pixels are already lost and the full-page dirty
+	// mark below still makes the GPU copy match the new buffers.
+	if int64(len(page.StagingBack)) >= oldSize {
+		copy(newBack, page.StagingBack[:oldSize])
+	}
 
 	page.StagingFront = newFront
 	page.StagingBack = newBack
@@ -487,14 +547,32 @@ func (atlas *GlyphAtlas) growPage(pageIdx, newHeight int) error {
 }
 
 func copyBitmapToPage(page *AtlasPage, bmp Bitmap, x, y int) error {
-	if x < 0 || y < 0 || x+bmp.Width > page.Width || y+bmp.Height > page.Height {
-		return fmt.Errorf("bitmap copy out of bounds: pos(%d,%d) size(%dx%d) page(%dx%d)",
-			x, y, bmp.Width, bmp.Height, page.Width, page.Height)
-	}
 	if bmp.Width <= 0 || bmp.Height <= 0 || len(bmp.Data) == 0 {
 		return nil
 	}
+	// Compare in int64 so a crafted Bitmap with huge dimensions
+	// cannot wrap the arithmetic and pass the bounds check.
+	if x < 0 || y < 0 ||
+		int64(x)+int64(bmp.Width) > int64(page.Width) ||
+		int64(y)+int64(bmp.Height) > int64(page.Height) {
+		return fmt.Errorf("bitmap copy out of bounds: pos(%d,%d) size(%dx%d) page(%dx%d)",
+			x, y, bmp.Width, bmp.Height, page.Width, page.Height)
+	}
+	need := int64(bmp.Width) * int64(bmp.Height) * 4
+	if int64(len(bmp.Data)) < need {
+		return fmt.Errorf("bitmap data too short: have %d bytes, need %d for a %dx%d bitmap",
+			len(bmp.Data), need, bmp.Width, bmp.Height)
+	}
+	// The staging buffers are exported, so outside code can shrink
+	// them. Check the last row end, which is the highest address
+	// the loop below touches.
 	rowBytes := bmp.Width * 4
+	lastEnd := int64(y+bmp.Height-1)*int64(page.Width)*4 +
+		int64(x)*4 + int64(rowBytes)
+	if lastEnd > int64(len(page.StagingBack)) {
+		return fmt.Errorf("atlas staging buffer too short: need %d bytes, have %d",
+			lastEnd, len(page.StagingBack))
+	}
 	for row := range bmp.Height {
 		srcOff := row * rowBytes
 		dstOff := ((y+row)*page.Width + x) * 4
@@ -506,6 +584,8 @@ func copyBitmapToPage(page *AtlasPage, bmp Bitmap, x, y int) error {
 // ensureAlpha grows the scratch-alpha buffer if needed and returns an
 // *image.Alpha wrapping the buffer at the requested dimensions. The
 // contents are not zeroed; the caller must fully overwrite via draw.Src.
+// The image aliases atlas scratch storage. Copy the pixels (with
+// InsertBitmap) before the next ensure call reuses the buffer.
 func (atlas *GlyphAtlas) ensureAlpha(w, h int) *image.Alpha {
 	size := w * h
 	if cap(atlas.scratchAlpha) < size {
@@ -521,6 +601,8 @@ func (atlas *GlyphAtlas) ensureAlpha(w, h int) *image.Alpha {
 // ensureRGBA grows the scratch-RGBA buffer if needed and returns an
 // *image.RGBA wrapping the buffer at the requested dimensions. The
 // contents are not zeroed; the caller must fully overwrite via draw.Src.
+// The image aliases atlas scratch storage. Copy the pixels (with
+// InsertBitmap) before the next ensure call reuses the buffer.
 func (atlas *GlyphAtlas) ensureRGBA(w, h int) *image.RGBA {
 	size := w * h * 4
 	if cap(atlas.scratchRGBA) < size {
