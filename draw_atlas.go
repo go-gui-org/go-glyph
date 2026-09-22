@@ -10,6 +10,13 @@ import "unicode/utf8"
 func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 	transform AffineTransform, gradient *GradientConfig) {
 
+	// A transform that is not finite maps every point it
+	// touches to garbage, so draw nothing. Same for a draw
+	// origin that is not finite.
+	if !transform.IsFinite() || !finiteF32(x) || !finiteF32(y) {
+		return
+	}
+
 	r.atlas.Cleanup(r.atlas.FrameCounter)
 
 	hasGradient := gradient != nil && len(gradient.Stops) > 0
@@ -41,7 +48,16 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		}
 	}
 
-	isIdentity := transform == AffineIdentity()
+	isIdentity := transform.IsIdentity()
+
+	// combined folds the draw origin into the matrix once, so
+	// per-glyph code must not rebuild it. combined.Apply(p)
+	// equals origin + transform.Apply(p): glyphs rotate around
+	// the layout origin, then move to (x, y).
+	var combined AffineTransform
+	if !isIdentity {
+		combined = AffineTranslation(x, y).Multiply(transform)
+	}
 
 	// Pass 1 — resolve (rasterize) every glyph in the layout before any
 	// textured quad is emitted, so a mid-call atlas reset cannot leave
@@ -127,26 +143,19 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 	// only reachable under full-atlas thrash (> ~4k distinct glyphs).
 	r.atlas.UploadDirtyRects()
 
-	// 1. Backgrounds.
+	// 1. Backgrounds. They rotate with the glyphs through
+	// emitFillRect, so a rotated run keeps its highlight
+	// behind the text.
 	for _, item := range layout.Items {
 		if !item.HasBgColor {
 			continue
 		}
-		bgX := float32(item.X)
-		bgY := float32(item.Y) - float32(item.Ascent)
-		bgW := float32(item.Width)
-		bgH := float32(item.Ascent + item.Descent)
-
-		if isIdentity {
-			r.backend.DrawFilledRect(
-				Rect{X: x + bgX, Y: y + bgY, Width: bgW, Height: bgH},
-				item.BgColor)
-		} else {
-			tx, ty := transformLayoutPoint(transform, x, y, bgX, bgY)
-			r.backend.DrawFilledRect(
-				Rect{X: tx, Y: ty, Width: bgW, Height: bgH},
-				item.BgColor)
-		}
+		r.emitFillRect(Rect{
+			X:      float32(item.X),
+			Y:      float32(item.Y) - float32(item.Ascent),
+			Width:  float32(item.Width),
+			Height: float32(item.Ascent + item.Descent),
+		}, item.BgColor, x, y, combined, isIdentity)
 	}
 
 	// 2. Stroke outlines (cached, same as fill path).
@@ -176,7 +185,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 				gx := cx + float32(g.XOffset)
 				gy := cy - float32(g.YOffset)
 				r.emitGlyphQuad(cg, gx, gy, x, y,
-					transform, isIdentity, item.StrokeColor)
+					combined, isIdentity, item.StrokeColor)
 			}
 
 			cx += float32(g.XAdvance)
@@ -326,7 +335,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 								Width: glyphW, Height: stripDstH}
 							r.backend.DrawTexturedQuadTransformed(
 								page.TextureID, stripSrc, dst, sc,
-								AffineTranslation(x, y).Multiply(transform))
+								combined)
 						}
 					}
 				} else if isIdentity {
@@ -339,7 +348,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 						Width: glyphW, Height: glyphH}
 					r.backend.DrawTexturedQuadTransformed(
 						page.TextureID, src, dst, c,
-						AffineTranslation(x, y).Multiply(transform))
+						combined)
 				}
 			}
 
@@ -359,29 +368,29 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 			}
 
 			if item.HasUnderline {
-				lineX := runX
-				lineY := runY + float32(item.UnderlineOffset) -
-					float32(item.UnderlineThickness)
-				lineW := float32(item.Width)
-				lineH := float32(item.UnderlineThickness)
-				r.emitDecorationRect(lineX, lineY, lineW, lineH,
-					x, y, transform, isIdentity, decoColor)
+				r.emitFillRect(Rect{
+					X: runX,
+					Y: runY + float32(item.UnderlineOffset) -
+						float32(item.UnderlineThickness),
+					Width:  float32(item.Width),
+					Height: float32(item.UnderlineThickness),
+				}, decoColor, x, y, combined, isIdentity)
 			}
 			if item.HasStrikethrough {
-				lineX := runX
-				lineY := runY - float32(item.StrikethroughOffset) +
-					float32(item.StrikethroughThickness)
-				lineW := float32(item.Width)
-				lineH := float32(item.StrikethroughThickness)
-				r.emitDecorationRect(lineX, lineY, lineW, lineH,
-					x, y, transform, isIdentity, decoColor)
+				r.emitFillRect(Rect{
+					X: runX,
+					Y: runY - float32(item.StrikethroughOffset) +
+						float32(item.StrikethroughThickness),
+					Width:  float32(item.Width),
+					Height: float32(item.StrikethroughThickness),
+				}, decoColor, x, y, combined, isIdentity)
 			}
 		}
 	}
 }
 
 func (r *Renderer) emitGlyphQuad(cg CachedGlyph, gx, gy, ox, oy float32,
-	transform AffineTransform, isIdentity bool, color Color) {
+	combined AffineTransform, isIdentity bool, color Color) {
 
 	scaleInv := r.scaleInv
 	drawX := gx + float32(cg.Left)*scaleInv
@@ -401,10 +410,11 @@ func (r *Renderer) emitGlyphQuad(cg CachedGlyph, gx, gy, ox, oy float32,
 		dst := Rect{X: ox + drawX, Y: oy + drawY, Width: w, Height: h}
 		r.backend.DrawTexturedQuad(page.TextureID, src, dst, color)
 	} else {
+		// combined already holds the origin, so dst stays
+		// in layout coords here.
 		dst := Rect{X: drawX, Y: drawY, Width: w, Height: h}
 		r.backend.DrawTexturedQuadTransformed(
-			page.TextureID, src, dst, color,
-			AffineTranslation(ox, oy).Multiply(transform))
+			page.TextureID, src, dst, color, combined)
 	}
 }
 
@@ -453,26 +463,6 @@ func (r *Renderer) emitPlacedQuad(cg CachedGlyph,
 		dst.Y += placement.Y
 		r.backend.DrawTexturedQuad(page.TextureID, src, dst, color)
 	}
-}
-
-func (r *Renderer) emitDecorationRect(lx, ly, lw, lh, ox, oy float32,
-	transform AffineTransform, isIdentity bool, color Color) {
-
-	if isIdentity {
-		r.backend.DrawFilledRect(
-			Rect{X: ox + lx, Y: oy + ly, Width: lw, Height: lh},
-			color)
-	} else {
-		tx, ty := transformLayoutPoint(transform, ox, oy, lx, ly)
-		r.backend.DrawFilledRect(
-			Rect{X: tx, Y: ty, Width: lw, Height: lh}, color)
-	}
-}
-
-func transformLayoutPoint(transform AffineTransform,
-	originX, originY, x, y float32) (float32, float32) {
-	tx, ty := transform.Apply(x, y)
-	return originX + tx, originY + ty
 }
 
 func gradientStripCount(glyphH float32) int {

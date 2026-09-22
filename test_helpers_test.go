@@ -7,6 +7,9 @@ type recordingBackend struct {
 	mockBackend
 	drawCalls   []drawCall
 	filledRects []filledRectCall
+	// filledTransformed records DrawFilledRectTransformed calls:
+	// dst stays in layout coords and t holds the draw origin.
+	filledTransformed []transformedFillCall
 	// ops is an ordered log of texture uploads and textured draws
 	// ("upload"/"draw" with the TextureID) for upload-ordering assertions.
 	ops []backendOp
@@ -31,6 +34,12 @@ type filledRectCall struct {
 	Color Color
 }
 
+type transformedFillCall struct {
+	Dst       Rect
+	Color     Color
+	Transform AffineTransform
+}
+
 func newRecordingBackend() *recordingBackend {
 	return &recordingBackend{
 		mockBackend: *newMockBackend(),
@@ -49,6 +58,12 @@ func (r *recordingBackend) DrawTexturedQuad(id TextureID, src, dst Rect, c Color
 
 func (r *recordingBackend) DrawFilledRect(dst Rect, c Color) {
 	r.filledRects = append(r.filledRects, filledRectCall{dst, c})
+}
+
+func (r *recordingBackend) DrawFilledRectTransformed(dst Rect,
+	c Color, t AffineTransform) {
+	r.filledTransformed = append(r.filledTransformed,
+		transformedFillCall{dst, c, t})
 }
 
 func (r *recordingBackend) DrawTexturedQuadTransformed(id TextureID,

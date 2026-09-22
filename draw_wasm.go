@@ -74,8 +74,24 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		return
 	}
 
+	// A transform that is not finite maps every point it
+	// touches to garbage, so draw nothing. Same for a draw
+	// origin that is not finite.
+	if !transform.IsFinite() || !finiteF32(x) || !finiteF32(y) {
+		return
+	}
+
 	hasGradient := gradient != nil && len(gradient.Stops) > 0
-	isIdentity := transform == AffineIdentity()
+	isIdentity := transform.IsIdentity()
+
+	// combined folds the draw origin into the matrix for the
+	// fill-rect path (backgrounds, decorations). The fillText
+	// path instead installs transform + origin directly with
+	// setCanvasTransform, once per item, not once per glyph.
+	var combined AffineTransform
+	if !isIdentity {
+		combined = AffineTranslation(x, y).Multiply(transform)
+	}
 
 	// Pre-compute gradient extents.
 	var gradXOff, gradYOff float32
@@ -105,26 +121,19 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		}
 	}
 
-	// 1. Backgrounds.
+	// 1. Backgrounds. They rotate with the glyphs through
+	// emitFillRect, so a rotated run keeps its highlight
+	// behind the text.
 	for _, item := range layout.Items {
 		if !item.HasBgColor {
 			continue
 		}
-		bgX := float32(item.X)
-		bgY := float32(item.Y) - float32(item.Ascent)
-		bgW := float32(item.Width)
-		bgH := float32(item.Ascent + item.Descent)
-
-		if isIdentity {
-			r.backend.DrawFilledRect(
-				Rect{X: x + bgX, Y: y + bgY, Width: bgW, Height: bgH},
-				item.BgColor)
-		} else {
-			tx, ty := transformLayoutPoint(transform, x, y, bgX, bgY)
-			r.backend.DrawFilledRect(
-				Rect{X: tx, Y: ty, Width: bgW, Height: bgH},
-				item.BgColor)
-		}
+		r.emitFillRect(Rect{
+			X:      float32(item.X),
+			Y:      float32(item.Y) - float32(item.Ascent),
+			Width:  float32(item.Width),
+			Height: float32(item.Ascent + item.Descent),
+		}, item.BgColor, x, y, combined, isIdentity)
 	}
 
 	// 2. Stroke outlines via strokeText.
@@ -147,6 +156,11 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		cx := float32(item.X)
 		cy := float32(item.Y)
 
+		// One canvas transform per item, not per glyph: each
+		// setTransform/reset pair crosses the JS bridge.
+		if !isIdentity {
+			setCanvasTransform(ctx2d, transform, x, y, r.scaleFactor)
+		}
 		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
 			if i < 0 || i >= len(layout.Glyphs) {
 				continue
@@ -166,14 +180,15 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 				ctx2d.Call("strokeText", ch,
 					float64(x+gx), float64(y+gy))
 			} else {
-				setCanvasTransform(ctx2d, transform, x, y, r.scaleFactor)
 				ctx2d.Call("strokeText", ch,
 					float64(gx), float64(gy))
-				resetCanvasTransform(ctx2d, r.scaleFactor)
 			}
 
 			cx += float32(g.XAdvance)
 			cy -= float32(g.YAdvance)
+		}
+		if !isIdentity {
+			resetCanvasTransform(ctx2d, r.scaleFactor)
 		}
 	}
 	ctx2d.Set("globalAlpha", 1.0)
@@ -222,6 +237,11 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		cx := float32(item.X)
 		cy := float32(item.Y)
 
+		// One canvas transform per item, not per glyph: each
+		// setTransform/reset pair crosses the JS bridge.
+		if !isIdentity {
+			setCanvasTransform(ctx2d, transform, x, y, r.scaleFactor)
+		}
 		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
 			if i < 0 || i >= len(layout.Glyphs) {
 				continue
@@ -265,14 +285,15 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 				ctx2d.Call("fillText", ch,
 					float64(x+gx), float64(y+gy))
 			} else {
-				setCanvasTransform(ctx2d, transform, x, y, r.scaleFactor)
 				ctx2d.Call("fillText", ch,
 					float64(gx), float64(gy))
-				resetCanvasTransform(ctx2d, r.scaleFactor)
 			}
 
 			cx += float32(g.XAdvance)
 			cy -= float32(g.YAdvance)
+		}
+		if !isIdentity {
+			resetCanvasTransform(ctx2d, r.scaleFactor)
 		}
 	}
 	ctx2d.Set("globalAlpha", 1.0)
@@ -292,45 +313,24 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		}
 
 		if item.HasUnderline {
-			lineX := runX
-			lineY := runY + float32(item.UnderlineOffset) -
-				float32(item.UnderlineThickness)
-			lineW := float32(item.Width)
-			lineH := float32(item.UnderlineThickness)
-			emitDecorationRect(r, lineX, lineY, lineW, lineH,
-				x, y, transform, isIdentity, decoColor)
+			r.emitFillRect(Rect{
+				X: runX,
+				Y: runY + float32(item.UnderlineOffset) -
+					float32(item.UnderlineThickness),
+				Width:  float32(item.Width),
+				Height: float32(item.UnderlineThickness),
+			}, decoColor, x, y, combined, isIdentity)
 		}
 		if item.HasStrikethrough {
-			lineX := runX
-			lineY := runY - float32(item.StrikethroughOffset) +
-				float32(item.StrikethroughThickness)
-			lineW := float32(item.Width)
-			lineH := float32(item.StrikethroughThickness)
-			emitDecorationRect(r, lineX, lineY, lineW, lineH,
-				x, y, transform, isIdentity, decoColor)
+			r.emitFillRect(Rect{
+				X: runX,
+				Y: runY - float32(item.StrikethroughOffset) +
+					float32(item.StrikethroughThickness),
+				Width:  float32(item.Width),
+				Height: float32(item.StrikethroughThickness),
+			}, decoColor, x, y, combined, isIdentity)
 		}
 	}
-}
-
-// emitDecorationRect draws an underline or strikethrough line.
-func emitDecorationRect(r *Renderer, lx, ly, lw, lh, ox, oy float32,
-	transform AffineTransform, isIdentity bool, color Color) {
-
-	if isIdentity {
-		r.backend.DrawFilledRect(
-			Rect{X: ox + lx, Y: oy + ly, Width: lw, Height: lh},
-			color)
-	} else {
-		tx, ty := transformLayoutPoint(transform, ox, oy, lx, ly)
-		r.backend.DrawFilledRect(
-			Rect{X: tx, Y: ty, Width: lw, Height: lh}, color)
-	}
-}
-
-func transformLayoutPoint(transform AffineTransform,
-	originX, originY, x, y float32) (float32, float32) {
-	tx, ty := transform.Apply(x, y)
-	return originX + tx, originY + ty
 }
 
 var (

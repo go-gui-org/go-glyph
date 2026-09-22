@@ -29,6 +29,7 @@ type callRecordingBackend struct {
 	texturedQuads    []texturedQuadCall
 	transformedQuads []transformedQuadCall
 	filledRects      []filledRectRecord
+	filledXf         []transformedFillCall
 }
 
 func (b *callRecordingBackend) DrawTexturedQuad(id TextureID, src, dst Rect, c Color) {
@@ -41,6 +42,10 @@ func (b *callRecordingBackend) DrawFilledRect(dst Rect, c Color) {
 
 func (b *callRecordingBackend) DrawTexturedQuadTransformed(id TextureID, src, dst Rect, c Color, t AffineTransform) {
 	b.transformedQuads = append(b.transformedQuads, transformedQuadCall{id, src, dst, c, t})
+}
+
+func (b *callRecordingBackend) DrawFilledRectTransformed(dst Rect, c Color, t AffineTransform) {
+	b.filledXf = append(b.filledXf, transformedFillCall{dst, c, t})
 }
 
 // --- Backend interface contract tests ---

@@ -103,7 +103,7 @@ func (b *Backend) DrawTexturedQuad(
 
 // DrawFilledRect draws a filled rectangle (textureID=0 → white tex).
 func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color) {
-	if dst.Width <= 0 || dst.Height <= 0 {
+	if dst.Width <= 0 || dst.Height <= 0 || !finiteRect(dst) {
 		return
 	}
 	x0, y0 := dst.X, dst.Y
@@ -117,6 +117,33 @@ func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color) {
 	)
 }
 
+// DrawFilledRectTransformed draws a filled rect with an affine
+// transform applied CPU-side. Implements
+// glyph.TransformedFillBackend, so rotated backgrounds and
+// decorations rotate with the glyphs instead of staying
+// axis-aligned.
+func (b *Backend) DrawFilledRectTransformed(
+	dst glyph.Rect, c glyph.Color, t glyph.AffineTransform,
+) {
+	if dst.Width <= 0 || dst.Height <= 0 {
+		return
+	}
+	if !t.IsFinite() || !finiteRect(dst) {
+		return
+	}
+	x0, y0 := t.Apply(dst.X, dst.Y)
+	x1, y1 := t.Apply(dst.X+dst.Width, dst.Y)
+	x2, y2 := t.Apply(dst.X+dst.Width, dst.Y+dst.Height)
+	x3, y3 := t.Apply(dst.X, dst.Y+dst.Height)
+
+	b.batch.append6(0,
+		Vertex{x0, y0, c.R, c.G, c.B, c.A, 0, 0},
+		Vertex{x1, y1, c.R, c.G, c.B, c.A, 1, 0},
+		Vertex{x2, y2, c.R, c.G, c.B, c.A, 1, 1},
+		Vertex{x3, y3, c.R, c.G, c.B, c.A, 0, 1},
+	)
+}
+
 // DrawTexturedQuadTransformed draws a textured quad with an
 // affine transform applied CPU-side.
 func (b *Backend) DrawTexturedQuadTransformed(
@@ -126,6 +153,9 @@ func (b *Backend) DrawTexturedQuadTransformed(
 	texW := float32(b.widths[id])
 	texH := float32(b.heights[id])
 	if texW == 0 || texH == 0 {
+		return
+	}
+	if !t.IsFinite() || !finiteRect(src) || !finiteRect(dst) {
 		return
 	}
 	u0 := src.X / texW
@@ -145,6 +175,19 @@ func (b *Backend) DrawTexturedQuadTransformed(
 		Vertex{x2, y2, c.R, c.G, c.B, c.A, u1, v1},
 		Vertex{x3, y3, c.R, c.G, c.B, c.A, u0, v1},
 	)
+}
+
+// finiteRect reports whether all rect fields are finite. A
+// rect with NaN or infinite coords would poison the batch with
+// bad verts, so callers drop it before appending.
+func finiteRect(r glyph.Rect) bool {
+	return finiteF32(r.X) && finiteF32(r.Y) &&
+		finiteF32(r.Width) && finiteF32(r.Height)
+}
+
+// finiteF32 reports whether v is finite (no NaN, no infinite).
+func finiteF32(v float32) bool {
+	return !math.IsNaN(float64(v)) && !math.IsInf(float64(v), 0)
 }
 
 // DPIScale returns the display DPI scale factor.

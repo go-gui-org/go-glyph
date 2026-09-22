@@ -7,6 +7,8 @@ import (
 	"math"
 	"testing"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/go-gui-org/go-glyph"
 )
 
@@ -102,3 +104,62 @@ func TestBackend_SetDPIScale(t *testing.T) {
 
 // Verify DrawBackend interface is satisfied.
 var _ glyph.DrawBackend = (*Backend)(nil)
+
+// Verify the transformed-fill extension is satisfied.
+var _ glyph.TransformedFillBackend = (*Backend)(nil)
+
+func TestBackend_NewTextureInvalid(t *testing.T) {
+	b := New(nil, 1.0)
+	for _, size := range [][2]int{
+		{0, 10}, {10, 0}, {-1, 10}, {10, -5}, {0, 0},
+	} {
+		if id := b.NewTexture(size[0], size[1]); id != 0 {
+			t.Errorf("NewTexture(%d, %d) = %d, want 0 (invalid)",
+				size[0], size[1], id)
+		}
+	}
+	if len(b.textures) != 0 {
+		t.Error("invalid sizes must not store textures")
+	}
+}
+
+func TestBackend_UpdateTextureShortBufferNoOp(t *testing.T) {
+	b := New(nil, 1.0)
+	id := b.NewTexture(4, 4) // needs 64 bytes
+	if id == 0 {
+		t.Fatal("NewTexture(4, 4) returned 0")
+	}
+	b.UpdateTexture(id, make([]byte, 4)) // must not panic
+	b.UpdateTexture(id, nil)             // must not panic
+	b.UpdateTexture(99999, make([]byte, 64))
+}
+
+// Fills share one 1x1 white image. A new image per fill would
+// allocate a GPU texture for every background and underline.
+func TestBackend_FilledRectReusesPixel(t *testing.T) {
+	b := New(ebiten.NewImage(16, 16), 1.0)
+	c := glyph.Color{R: 255, A: 255}
+	b.DrawFilledRect(glyph.Rect{Width: 4, Height: 4}, c)
+	first := b.pixel
+	if first == nil {
+		t.Fatal("DrawFilledRect did not build the fill pixel")
+	}
+	b.DrawFilledRect(glyph.Rect{X: 2, Width: 4, Height: 4}, c)
+	b.DrawFilledRectTransformed(glyph.Rect{Width: 4, Height: 4}, c,
+		glyph.AffineRotation(0.5))
+	if b.pixel != first {
+		t.Error("fill pixel rebuilt, want one shared image")
+	}
+}
+
+func TestBackend_DrawFilledRectTransformedNonFiniteNoOp(t *testing.T) {
+	b := New(ebiten.NewImage(16, 16), 1.0)
+	nan := float32(math.NaN())
+	b.DrawFilledRectTransformed(glyph.Rect{Width: 4, Height: 4},
+		glyph.Color{A: 255}, glyph.AffineTransform{XX: 1, YY: 1, X0: nan})
+	b.DrawFilledRectTransformed(glyph.Rect{X: nan, Width: 4, Height: 4},
+		glyph.Color{A: 255}, glyph.AffineIdentity())
+	if b.pixel != nil {
+		t.Error("non-finite input reached the draw path")
+	}
+}

@@ -15,6 +15,9 @@ func newMockBackend() *mockBackend {
 }
 
 func (m *mockBackend) NewTexture(w, h int) TextureID {
+	if w <= 0 || h <= 0 {
+		return 0
+	}
 	m.nextID++
 	m.textures[m.nextID] = make([]byte, w*h*4)
 	return m.nextID

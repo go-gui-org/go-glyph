@@ -98,7 +98,12 @@ func (b *Backend) SetDPIScale(dpiScale float32) {
 }
 
 // NewTexture allocates a texture backed by an RGBA byte slice.
+// Non-positive sizes return 0 (invalid) instead of panicking
+// in make.
 func (b *Backend) NewTexture(width, height int) glyph.TextureID {
+	if width <= 0 || height <= 0 {
+		return 0
+	}
 	id := b.nextID
 	b.nextID++
 	b.textures[id] = &textureData{
@@ -109,10 +114,15 @@ func (b *Backend) NewTexture(width, height int) glyph.TextureID {
 	return id
 }
 
-// UpdateTexture uploads RGBA pixel data.
+// UpdateTexture uploads RGBA pixel data. Unknown ids and short
+// buffers are ignored: a short copy would leave stale pixels in
+// the rows it does not reach.
 func (b *Backend) UpdateTexture(id glyph.TextureID, data []byte) {
 	td, ok := b.textures[id]
 	if !ok {
+		return
+	}
+	if int64(len(data)) < int64(td.width)*int64(td.height)*4 {
 		return
 	}
 	copy(td.data, data)
@@ -135,6 +145,9 @@ func (b *Backend) DrawTexturedQuadTransformed(_ glyph.TextureID,
 
 // DrawFilledRect draws an untextured filled rectangle.
 func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color) {
+	if dst.Width <= 0 || dst.Height <= 0 || !finiteRect(dst) {
+		return
+	}
 	b.ctx2d.Set("globalAlpha", float64(c.A)/255.0)
 	b.ctx2d.Set("fillStyle",
 		rgbaStyle(int(c.R), int(c.G), int(c.B), 255))
@@ -142,6 +155,52 @@ func (b *Backend) DrawFilledRect(dst glyph.Rect, c glyph.Color) {
 		float64(dst.X), float64(dst.Y),
 		float64(dst.Width), float64(dst.Height))
 	b.ctx2d.Set("globalAlpha", 1.0)
+}
+
+// DrawFilledRectTransformed draws a filled rect with an affine
+// transform applied. Implements glyph.TransformedFillBackend,
+// so rotated backgrounds and decorations rotate with the glyphs
+// instead of staying axis-aligned. t already holds the draw
+// origin (folded in by the caller), and the device-pixel-ratio
+// scale is folded into the canvas matrix the same way
+// setCanvasTransform does it on the renderer side.
+func (b *Backend) DrawFilledRectTransformed(dst glyph.Rect,
+	c glyph.Color, t glyph.AffineTransform) {
+
+	if dst.Width <= 0 || dst.Height <= 0 {
+		return
+	}
+	if !t.IsFinite() || !finiteRect(dst) {
+		return
+	}
+	s := float64(b.dpiScale)
+	b.ctx2d.Call("save")
+	b.ctx2d.Call("setTransform",
+		float64(t.XX)*s, float64(t.YX)*s,
+		float64(t.XY)*s, float64(t.YY)*s,
+		float64(t.X0)*s, float64(t.Y0)*s)
+	b.ctx2d.Set("globalAlpha", float64(c.A)/255.0)
+	b.ctx2d.Set("fillStyle",
+		rgbaStyle(int(c.R), int(c.G), int(c.B), 255))
+	b.ctx2d.Call("fillRect",
+		float64(dst.X), float64(dst.Y),
+		float64(dst.Width), float64(dst.Height))
+	// restore brings back the base transform (device-pixel
+	// ratio), the fill style, and the alpha in one call.
+	b.ctx2d.Call("restore")
+}
+
+// finiteRect reports whether all rect fields are finite. Canvas
+// ignores non-finite fillRect args, which would silently drop
+// the fill and desync later draws, so callers drop them first.
+func finiteRect(r glyph.Rect) bool {
+	return finiteF32(r.X) && finiteF32(r.Y) &&
+		finiteF32(r.Width) && finiteF32(r.Height)
+}
+
+// finiteF32 reports whether v is finite (no NaN, no infinite).
+func finiteF32(v float32) bool {
+	return !math.IsNaN(float64(v)) && !math.IsInf(float64(v), 0)
 }
 
 func rgbaStyle(r, g, b, a int) string {

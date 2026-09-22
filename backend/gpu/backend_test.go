@@ -1,6 +1,7 @@
 package gpu
 
 import (
+	"math"
 	"testing"
 
 	glyph "github.com/go-gui-org/go-glyph"
@@ -133,5 +134,96 @@ func TestNew_NilWindow(t *testing.T) {
 	}
 	if be != nil {
 		t.Errorf("expected nil backend on error, got %v", be)
+	}
+}
+
+// --- Transformed-fill tests (pure Go, no CGo) ---
+
+func TestDrawFilledRectTransformed_Corners(t *testing.T) {
+	b := &Backend{
+		gpu:     nil, // batch append is pure Go; any CGo call would panic
+		widths:  map[glyph.TextureID]int{},
+		heights: map[glyph.TextureID]int{},
+	}
+	dst := glyph.Rect{X: 1, Y: 2, Width: 10, Height: 20}
+	tr := glyph.AffineTranslation(5, 7)
+	b.DrawFilledRectTransformed(dst, glyph.Color{R: 255, A: 255}, tr)
+
+	if len(b.batch.verts) != 6 {
+		t.Fatalf("expected 6 verts, got %d", len(b.batch.verts))
+	}
+	// Translation shifts every corner by (5, 7).
+	want := [][2]float32{{6, 9}, {16, 9}, {16, 29}, {6, 29}}
+	got := [][2]float32{
+		{b.batch.verts[0].PosX, b.batch.verts[0].PosY},
+		{b.batch.verts[1].PosX, b.batch.verts[1].PosY},
+		{b.batch.verts[2].PosX, b.batch.verts[2].PosY},
+		{b.batch.verts[5].PosX, b.batch.verts[5].PosY},
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("corner %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+	if b.batch.cmds[0].textureID != 0 {
+		t.Errorf("fill textureID = %d, want 0 (white tex)",
+			b.batch.cmds[0].textureID)
+	}
+}
+
+func TestDrawFilledRectTransformed_NonFiniteNoOp(t *testing.T) {
+	b := &Backend{
+		gpu:     nil,
+		widths:  map[glyph.TextureID]int{},
+		heights: map[glyph.TextureID]int{},
+	}
+	nan := float32(math.NaN())
+	b.DrawFilledRectTransformed(
+		glyph.Rect{X: 0, Y: 0, Width: 10, Height: 10},
+		glyph.Color{R: 255, G: 255, B: 255, A: 255},
+		glyph.AffineTransform{XX: 1, YY: 1, X0: nan})
+	if len(b.batch.verts) != 0 {
+		t.Errorf("NaN transform drew %d verts, want 0",
+			len(b.batch.verts))
+	}
+}
+
+func TestDrawTexturedQuadTransformed_NonFiniteNoOp(t *testing.T) {
+	const id = glyph.TextureID(3)
+	b := &Backend{
+		gpu:     nil,
+		widths:  map[glyph.TextureID]int{id: 8},
+		heights: map[glyph.TextureID]int{id: 8},
+	}
+	nan := float32(math.NaN())
+	b.DrawTexturedQuadTransformed(id,
+		glyph.Rect{X: 0, Y: 0, Width: 8, Height: 8},
+		glyph.Rect{X: 0, Y: 0, Width: 8, Height: 8},
+		glyph.Color{R: 255, G: 255, B: 255, A: 255},
+		glyph.AffineTransform{XX: 1, YY: 1, X0: nan})
+	if len(b.batch.verts) != 0 {
+		t.Errorf("NaN transform drew %d verts, want 0",
+			len(b.batch.verts))
+	}
+}
+
+func TestDrawFilledRectTransformed_DegenerateSizeNoOp(t *testing.T) {
+	b := &Backend{
+		gpu:     nil,
+		widths:  map[glyph.TextureID]int{},
+		heights: map[glyph.TextureID]int{},
+	}
+	for _, dst := range []glyph.Rect{
+		{Width: 0, Height: 10},
+		{Width: 10, Height: 0},
+		{Width: -5, Height: 10},
+		{Width: 10, Height: float32(math.Inf(1))},
+	} {
+		b.DrawFilledRectTransformed(dst,
+			glyph.Color{A: 255}, glyph.AffineIdentity())
+	}
+	if len(b.batch.verts) != 0 {
+		t.Errorf("degenerate rects drew %d verts, want 0",
+			len(b.batch.verts))
 	}
 }
