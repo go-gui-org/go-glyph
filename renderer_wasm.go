@@ -150,6 +150,11 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 				continue
 			}
 			p := placements[i]
+			// Same rule as the native path: a NaN or Inf placement
+			// draws nothing.
+			if !p.finite() {
+				continue
+			}
 			ch := glyphText(layout.Text, g)
 
 			// A rotated placement gets the font glyph: pixel snapping is
@@ -163,7 +168,7 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 				continue
 			}
 
-			if p.Angle != 0 && finiteF32(p.Angle) {
+			if p.Angle != 0 {
 				ctx2d.Call("save")
 				ctx2d.Call("translate",
 					float64(p.X), float64(p.Y))

@@ -24,6 +24,10 @@ type Backend struct {
 	// Built once on first use: ebiten.NewImage allocates a GPU
 	// texture, too costly to repeat per background or underline.
 	pixel *ebiten.Image
+	// rectScratch holds the compacted rows of a sub-rectangle upload:
+	// WritePixels wants exactly w*h*4 bytes, while the atlas hands over
+	// a whole page. Reused so steady-state uploads do not allocate.
+	rectScratch []byte
 }
 
 // New creates an Ebitengine backend. target is the destination
@@ -80,6 +84,33 @@ func (b *Backend) UpdateTexture(id glyph.TextureID, data []byte) {
 		return
 	}
 	img.WritePixels(data[:w*h*4])
+}
+
+// UpdateTextureRect uploads the (x, y, w, h) region of a texture from
+// data, a whole page with srcStride bytes per row. It implements
+// glyph.RectTextureUpdater, so the atlas sends only newly rasterized
+// glyphs instead of the whole page. An invalid region or a short buffer
+// is ignored.
+func (b *Backend) UpdateTextureRect(id glyph.TextureID, data []byte,
+	srcStride, x, y, w, h int) {
+
+	img, ok := b.textures[id]
+	if !ok || !validTextureRect(b.widths[id], b.heights[id], len(data),
+		srcStride, x, y, w, h) {
+		return
+	}
+	rowBytes := w * 4
+	n := rowBytes * h
+	if cap(b.rectScratch) < n {
+		b.rectScratch = make([]byte, n)
+	}
+	pix := b.rectScratch[:n]
+	for row := range h {
+		src := (y+row)*srcStride + x*4
+		copy(pix[row*rowBytes:(row+1)*rowBytes], data[src:src+rowBytes])
+	}
+	sub := img.SubImage(image.Rect(x, y, x+w, y+h)).(*ebiten.Image)
+	sub.WritePixels(pix)
 }
 
 // DeleteTexture releases a texture.
@@ -310,4 +341,23 @@ func (b *Backend) SetDPIScale(dpiScale float32) {
 		return
 	}
 	b.dpiScale = dpiScale
+}
+
+// validTextureRect reports whether the region (x, y, w, h) lies inside a
+// texW x texH texture and data, read with srcStride bytes per row, holds
+// every pixel of it. int64 math keeps huge inputs from wrapping past the
+// checks.
+func validTextureRect(texW, texH, dataLen, srcStride, x, y, w, h int) bool {
+	if w <= 0 || h <= 0 || x < 0 || y < 0 || srcStride <= 0 ||
+		srcStride%4 != 0 {
+		return false
+	}
+	if int64(x)+int64(w) > int64(texW) || int64(y)+int64(h) > int64(texH) {
+		return false
+	}
+	if (int64(x)+int64(w))*4 > int64(srcStride) {
+		return false
+	}
+	end := (int64(y)+int64(h)-1)*int64(srcStride) + (int64(x)+int64(w))*4
+	return end <= int64(dataLen)
 }

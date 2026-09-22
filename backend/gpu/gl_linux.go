@@ -48,6 +48,17 @@ func (m *gpuCtx) updateTexture(id uint64, data []byte, w, h int) {
 		unsafe.Pointer(&data[0]), C.int(w), C.int(h))
 }
 
+// updateTextureRect uploads the (x, y, w, h) region of data, a whole
+// texture with srcStride bytes per row. The caller has validated the
+// region with validTextureRect.
+func (m *gpuCtx) updateTextureRect(id uint64, data []byte,
+	srcStride, x, y, w, h int) {
+
+	off := y*srcStride + x*4
+	C.glCtxUpdateTexRect(m.ptr, C.uint64_t(id), unsafe.Pointer(&data[off]),
+		C.int(srcStride), C.int(x), C.int(y), C.int(w), C.int(h))
+}
+
 func (m *gpuCtx) deleteTexture(id uint64) {
 	C.glCtxDeleteTex(m.ptr, C.uint64_t(id))
 }

@@ -36,6 +36,17 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		combined = AffineTranslation(x, y).Multiply(transform)
 	}
 
+	// (penX, penY) is added to every pen position before it is snapped
+	// to device pixels. Under identity it is the draw origin, so glyphs
+	// snap to the screen's pixel grid: snapping in layout space and then
+	// adding a fractional origin would put every quad between pixels and
+	// blur it. Under a transform the quad goes through combined, and
+	// there is no screen grid to snap to, so glyphs snap in layout space.
+	var penX, penY float32
+	if isIdentity {
+		penX, penY = x, y
+	}
+
 	// Pass 1 — resolve (rasterize) every glyph in the layout before any
 	// textured quad is emitted, so a mid-call atlas reset cannot leave
 	// earlier quads of this call sampling evicted texels (issue #89).
@@ -57,18 +68,27 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		if !item.HasStroke || item.UseOriginalColor {
 			continue
 		}
-		// Strokes rasterize at bin 0, so no pen position is needed here.
+		// Strokes use the same subpixel bin as the fill of the same
+		// glyph, so the outline and the fill snap to the same pixel.
+		cx := float32(item.X)
+		cy := float32(item.Y)
 		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
 			if i < 0 || i >= len(layout.Glyphs) {
 				continue
 			}
 			g := layout.Glyphs[i]
 			if (g.Index & PangoGlyphUnknownFlag) != 0 {
+				cx += float32(g.XAdvance)
+				cy -= float32(g.YAdvance)
 				continue
 			}
-			strokes[i] = r.getOrLoadGlyph(layout.Text, item, g, 0,
+			_, _, bin := r.computeDrawOrigin(
+				penX+cx+float32(g.XOffset), penY+cy-float32(g.YOffset))
+			strokes[i] = r.getOrLoadGlyph(layout.Text, item, g, bin,
 				item.StrokeWidth)
 			r.touchPage(strokes[i])
+			cx += float32(g.XAdvance)
+			cy -= float32(g.YAdvance)
 		}
 	}
 	for _, item := range layout.Items {
@@ -88,7 +108,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 				continue
 			}
 			_, _, bin := r.computeDrawOrigin(
-				cx+float32(g.XOffset), cy-float32(g.YOffset))
+				penX+cx+float32(g.XOffset), penY+cy-float32(g.YOffset))
 			if item.UseOriginalColor {
 				bin = 0
 			}
@@ -142,9 +162,9 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 
 			if cg.Width > 0 && cg.Height > 0 &&
 				cg.Page >= 0 && cg.Page < len(r.atlas.Pages) {
-				gx := cx + float32(g.XOffset)
-				gy := cy - float32(g.YOffset)
-				r.emitGlyphQuad(cg, gx, gy, x, y,
+				originX, originY, _ := r.computeDrawOrigin(
+					penX+cx+float32(g.XOffset), penY+cy-float32(g.YOffset))
+				r.emitGlyphQuad(cg, originX, originY,
 					combined, isIdentity, item.StrokeColor)
 			}
 
@@ -178,7 +198,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 			if m, ok := boxMetricsFor(item, Glyph{}, boxLineLo,
 				r.scaleFactor); ok {
 				snapCellW = m.cellW
-				baseX, _, _ := r.computeDrawOrigin(float32(item.X), 0)
+				baseX, _, _ := r.computeDrawOrigin(penX+float32(item.X), 0)
 				// Through pxRoundOrigin, the same clamp boxCellOrigin applies
 				// to box origins: a NaN or absurd item.X must not fall into
 				// the implementation-defined float-to-int conversion.
@@ -197,9 +217,8 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 				continue
 			}
 
-			targetX := cx + float32(g.XOffset)
 			drawOriginX, drawOriginY, _ := r.computeDrawOrigin(
-				targetX, cy-float32(g.YOffset))
+				penX+cx+float32(g.XOffset), penY+cy-float32(g.YOffset))
 
 			// A built-in box bitmap is exactly one cell wide, so it only
 			// tiles if the placement steps by that same integer. Inside a
@@ -285,16 +304,19 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 							Width: src.Width, Height: stripSrcH,
 						}
 						stripDstY := drawY + sf*stripDstH
-						// Sample at the strip's own center. drawY is the
-						// glyph top in layout coords, the same space as
-						// ext; the line top would give every glyph the
+						// Sample at the strip's own center. drawY-penY is
+						// the glyph top in layout coords, the same space
+						// as ext; the line top would give every glyph the
 						// colors from the top of the gradient.
-						stripMidY := drawY + (sf+0.5)*stripDstH
+						stripMidY := drawY - penY + (sf+0.5)*stripDstH
 						t := clamp01((stripMidY - ext.yOff) / ext.h)
 						sc := GradientColorAt(gradient.Stops, t)
 
+						// Under identity drawX/drawY already hold the
+						// draw origin (penX/penY); under a transform
+						// they are layout coords and combined moves them.
 						if isIdentity {
-							dst := Rect{X: x + drawX, Y: y + stripDstY,
+							dst := Rect{X: drawX, Y: stripDstY,
 								Width: glyphW, Height: stripDstH}
 							r.backend.DrawTexturedQuad(
 								page.TextureID, stripSrc, dst, sc)
@@ -307,7 +329,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 						}
 					}
 				} else if isIdentity {
-					dst := Rect{X: x + drawX, Y: y + drawY,
+					dst := Rect{X: drawX, Y: drawY,
 						Width: glyphW, Height: glyphH}
 					r.backend.DrawTexturedQuad(
 						page.TextureID, src, dst, c)
@@ -329,12 +351,16 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 	r.emitDecorations(&layout, gradient, ext, x, y, combined, isIdentity)
 }
 
-func (r *Renderer) emitGlyphQuad(cg CachedGlyph, gx, gy, ox, oy float32,
+// emitGlyphQuad draws cg hung from the device-pixel pen origin
+// (originX, originY) that computeDrawOrigin returned. Under identity that
+// origin already holds the draw origin; under a transform it is in layout
+// space and combined moves it.
+func (r *Renderer) emitGlyphQuad(cg CachedGlyph, originX, originY float32,
 	combined AffineTransform, isIdentity bool, color Color) {
 
 	scaleInv := r.scaleInv
-	drawX := gx + float32(cg.Left)*scaleInv
-	drawY := gy - float32(cg.Top)*scaleInv
+	drawX := (originX + float32(cg.Left)) * scaleInv
+	drawY := (originY - float32(cg.Top)) * scaleInv
 	w := float32(cg.Width) * scaleInv
 	h := float32(cg.Height) * scaleInv
 
@@ -347,7 +373,7 @@ func (r *Renderer) emitGlyphQuad(cg CachedGlyph, gx, gy, ox, oy float32,
 	}
 
 	if isIdentity {
-		dst := Rect{X: ox + drawX, Y: oy + drawY, Width: w, Height: h}
+		dst := Rect{X: drawX, Y: drawY, Width: w, Height: h}
 		r.backend.DrawTexturedQuad(page.TextureID, src, dst, color)
 	} else {
 		// combined already holds the origin, so dst stays
@@ -358,6 +384,11 @@ func (r *Renderer) emitGlyphQuad(cg CachedGlyph, gx, gy, ox, oy float32,
 	}
 }
 
+// emitPlacedQuad draws one placed glyph. An upright placement hangs from
+// its device-pixel pen origin, the same snap DrawLayoutPlaced used to pick
+// the raster's subpixel bin; the raster already holds the fractional part.
+// A rotated placement has no pixel grid to snap to and rasterizes at bin
+// 0, so it rotates around the exact placement point.
 func (r *Renderer) emitPlacedQuad(cg CachedGlyph,
 	placement GlyphPlacement, color Color, ascent, descent float32,
 	useOriginalColor bool, xAdvance float32) {
@@ -391,8 +422,9 @@ func (r *Renderer) emitPlacedQuad(cg CachedGlyph,
 		r.backend.DrawTexturedQuadTransformed(
 			page.TextureID, src, dst, color, combined)
 	} else {
-		dst.X += placement.X
-		dst.Y += placement.Y
+		originX, originY, _ := r.computeDrawOrigin(placement.X, placement.Y)
+		dst.X += originX * scaleInv
+		dst.Y += originY * scaleInv
 		r.backend.DrawTexturedQuad(page.TextureID, src, dst, color)
 	}
 }

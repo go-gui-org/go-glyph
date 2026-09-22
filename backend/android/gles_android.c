@@ -291,6 +291,19 @@ void glesUpdateTex(GLESCtx *ctx, uint64_t tid,
                     GL_RGBA, GL_UNSIGNED_BYTE, data);
 }
 
+void glesUpdateTexRect(GLESCtx *ctx, uint64_t tid, void *data,
+                       int rowBytes, int x, int y, int w, int h) {
+    if (tid >= (uint64_t)ctx->texCap || !ctx->texSlots[tid].used)
+        return;
+    glBindTexture(GL_TEXTURE_2D, ctx->texSlots[tid].glTex);
+    // Rows in data are a whole atlas page apart, not w pixels apart.
+    // GL_UNPACK_ROW_LENGTH is core in GLES 3.
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, rowBytes / 4);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h,
+                    GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+}
+
 void glesDeleteTex(GLESCtx *ctx, uint64_t tid) {
     if (tid >= (uint64_t)ctx->texCap || !ctx->texSlots[tid].used)
         return;

@@ -7,11 +7,51 @@ import "testing"
 // seedCacheEntry inserts a synthetic cache entry (no rasterization) so
 // eviction can be exercised deterministically at the map level.
 func seedCacheEntry(r *Renderer, key uint64, page int, age uint64) {
-	r.cache[key] = cacheEntry{
+	r.storeGlyph(key, cacheEntry{
 		CachedGlyph: CachedGlyph{Width: 1, Height: 1, Page: page},
 		age:         age,
+	})
+}
+
+// TestDropGlyphKeepsSlotsConsistent checks the O(1) removal bookkeeping:
+// after removals in arbitrary order, every cached entry's slot still
+// points at its own key in its page list, and the lists hold exactly the
+// cached keys.
+func TestDropGlyphKeepsSlotsConsistent(t *testing.T) {
+	r, err := NewRenderer(newMockBackend(), 1.0)
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
 	}
-	r.pageKeys[page] = append(r.pageKeys[page], key)
+	defer r.Free()
+
+	const n = 500
+	for k := range uint64(n) {
+		seedCacheEntry(r, k, int(k%3), k)
+	}
+	// Drop every key whose value is a multiple of 7 or 5, first and
+	// last slots included.
+	for k := range uint64(n) {
+		if k%7 == 0 || k%5 == 0 {
+			r.dropGlyph(k)
+		}
+	}
+	total := 0
+	for page, keys := range r.pageKeys {
+		total += len(keys)
+		for i, k := range keys {
+			e, ok := r.cache[k]
+			if !ok {
+				t.Fatalf("page %d slot %d holds dropped key %d", page, i, k)
+			}
+			if e.Page != page || e.slot != i {
+				t.Fatalf("key %d: entry says page %d slot %d, list has it "+
+					"at page %d slot %d", k, e.Page, e.slot, page, i)
+			}
+		}
+	}
+	if total != len(r.cache) {
+		t.Errorf("page lists hold %d keys, cache holds %d", total, len(r.cache))
+	}
 }
 
 // TestEvictOldestGlyphRemovesOldest seeds fewer entries than the eviction

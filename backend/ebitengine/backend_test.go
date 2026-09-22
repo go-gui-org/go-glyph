@@ -163,3 +163,29 @@ func TestBackend_DrawFilledRectTransformedNonFiniteNoOp(t *testing.T) {
 		t.Error("non-finite input reached the draw path")
 	}
 }
+
+func TestBackend_UpdateTextureRectInvalidNoOp(t *testing.T) {
+	b := New(nil, 1.0)
+	id := b.NewTexture(4, 4)
+	if id == 0 {
+		t.Fatal("NewTexture(4, 4) returned 0")
+	}
+	b.UpdateTextureRect(id, make([]byte, 8), 16, 0, 0, 4, 4)  // short
+	b.UpdateTextureRect(id, make([]byte, 64), 16, 2, 0, 4, 1) // outside
+	b.UpdateTextureRect(99999, make([]byte, 64), 16, 0, 0, 1, 1)
+}
+
+func TestValidTextureRect(t *testing.T) {
+	if !validTextureRect(4, 4, 64, 16, 1, 1, 2, 2) {
+		t.Error("inner region rejected")
+	}
+	if validTextureRect(4, 4, 63, 16, 0, 0, 4, 4) {
+		t.Error("short data accepted")
+	}
+	if validTextureRect(4, 4, 64, 16, 3, 0, 2, 1) {
+		t.Error("region past the right edge accepted")
+	}
+	if validTextureRect(4, 4, 64, 16, 0, 0, math.MaxInt, 1) {
+		t.Error("huge region accepted")
+	}
+}
