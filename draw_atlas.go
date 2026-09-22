@@ -20,32 +20,9 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 	r.atlas.Cleanup(r.atlas.FrameCounter)
 
 	hasGradient := gradient != nil && len(gradient.Stops) > 0
-
-	var gradXOff, gradYOff float32
-	gradW := float32(1.0)
-	gradH := float32(1.0)
+	var ext gradientExtents
 	if hasGradient {
-		if layout.VisualWidth > 0 {
-			gradW = layout.VisualWidth
-		}
-		if layout.VisualHeight > 0 {
-			gradH = layout.VisualHeight
-		}
-		if len(layout.Items) > 0 {
-			gradXOff = float32(layout.Items[0].X)
-			gradYOff = float32(layout.Items[0].Y) -
-				float32(layout.Items[0].Ascent)
-			for _, item := range layout.Items {
-				ix := float32(item.X)
-				iy := float32(item.Y) - float32(item.Ascent)
-				if ix < gradXOff {
-					gradXOff = ix
-				}
-				if iy < gradYOff {
-					gradYOff = iy
-				}
-			}
-		}
+		ext = layoutGradientExtents(&layout)
 	}
 
 	isIdentity := transform.IsIdentity()
@@ -80,23 +57,18 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		if !item.HasStroke || item.UseOriginalColor {
 			continue
 		}
-		cx := float32(item.X)
-		cy := float32(item.Y)
+		// Strokes rasterize at bin 0, so no pen position is needed here.
 		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
 			if i < 0 || i >= len(layout.Glyphs) {
 				continue
 			}
 			g := layout.Glyphs[i]
 			if (g.Index & PangoGlyphUnknownFlag) != 0 {
-				cx += float32(g.XAdvance)
-				cy -= float32(g.YAdvance)
 				continue
 			}
 			strokes[i] = r.getOrLoadGlyph(layout.Text, item, g, 0,
 				item.StrokeWidth)
 			r.touchPage(strokes[i])
-			cx += float32(g.XAdvance)
-			cy -= float32(g.YAdvance)
 		}
 	}
 	for _, item := range layout.Items {
@@ -143,20 +115,8 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 	// only reachable under full-atlas thrash (> ~4k distinct glyphs).
 	r.atlas.UploadDirtyRects()
 
-	// 1. Backgrounds. They rotate with the glyphs through
-	// emitFillRect, so a rotated run keeps its highlight
-	// behind the text.
-	for _, item := range layout.Items {
-		if !item.HasBgColor {
-			continue
-		}
-		r.emitFillRect(Rect{
-			X:      float32(item.X),
-			Y:      float32(item.Y) - float32(item.Ascent),
-			Width:  float32(item.Width),
-			Height: float32(item.Ascent + item.Descent),
-		}, item.BgColor, x, y, combined, isIdentity)
-	}
+	// 1. Backgrounds.
+	r.emitBackgrounds(&layout, x, y, combined, isIdentity)
 
 	// 2. Stroke outlines (cached, same as fill path).
 	for _, item := range layout.Items {
@@ -283,40 +243,24 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 				glyphW := float32(cg.Width) * scaleInv
 				glyphH := float32(cg.Height) * scaleInv
 
-				// GPU emoji scaling.
-				if item.UseOriginalColor && glyphH > 0 {
-					targetH := float32(item.Ascent + item.Descent)
-					boxW := item.Style.EmojiBoxWidth
-					switch {
-					case boxW > 0 && glyphW > 0:
-						// Grid caller: fill the reserved cell box (boxW × line
-						// height), preserving aspect, centered on both axes, so
-						// wide glyphs (flags) and square glyphs (people) fill the
-						// same width instead of the font's narrower advance.
-						emojiScale := min(boxW/glyphW, targetH/glyphH)
-						glyphW *= emojiScale
-						glyphH *= emojiScale
-						drawX = drawOriginX*scaleInv + (boxW-glyphW)*0.5
-						drawY = drawOriginY*scaleInv - float32(item.Ascent) +
-							(targetH-glyphH)*0.5
-					case glyphH != targetH:
-						emojiScale := targetH / glyphH
-						adv := float32(g.XAdvance)
-						if adv > 0 && glyphW*emojiScale > adv {
-							emojiScale = adv / glyphW
-						}
-						glyphW *= emojiScale
-						glyphH *= emojiScale
-						drawX = (drawOriginX + float32(cg.Left)*emojiScale) * scaleInv
-						drawY = drawOriginY*scaleInv - float32(item.Ascent) +
-							(targetH-glyphH)*0.5
-					}
+				// GPU emoji scaling: fit the line box, or the grid cell
+				// when the caller reserved one.
+				if item.UseOriginalColor {
+					dx, dy, w, h := emojiQuadBox(cg, scaleInv,
+						float32(item.Ascent), float32(item.Descent),
+						item.Style.EmojiBoxWidth, float32(g.XAdvance))
+					drawX = drawOriginX*scaleInv + dx
+					drawY = drawOriginY*scaleInv + dy
+					glyphW, glyphH = w, h
 				}
 
-				if hasGradient {
+				// A color emoji keeps its own colors: the quad color
+				// multiplies into the bitmap, so it stays white.
+				tinted := hasGradient && !item.UseOriginalColor
+				if tinted {
 					c = gradientColorForGlyph(gradient, cx, cy,
 						float32(item.Ascent),
-						gradXOff, gradYOff, gradW, gradH)
+						ext.xOff, ext.yOff, ext.w, ext.h)
 				}
 
 				page := r.atlas.Pages[cg.Page]
@@ -327,14 +271,13 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 					Height: float32(cg.Height),
 				}
 
-				if hasGradient &&
+				if tinted &&
 					gradient.Direction == GradientVertical &&
 					glyphH > 0 {
 
 					numStrips := gradientStripCount(glyphH)
 					stripSrcH := src.Height / float32(numStrips)
 					stripDstH := glyphH / float32(numStrips)
-					glyphTopY := float32(item.Y) - float32(item.Ascent)
 					for s := range numStrips {
 						sf := float32(s)
 						stripSrc := Rect{
@@ -342,8 +285,12 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 							Width: src.Width, Height: stripSrcH,
 						}
 						stripDstY := drawY + sf*stripDstH
-						stripMidY := glyphTopY + (sf+0.5)*stripDstH
-						t := clamp01((stripMidY - gradYOff) / gradH)
+						// Sample at the strip's own center. drawY is the
+						// glyph top in layout coords, the same space as
+						// ext; the line top would give every glyph the
+						// colors from the top of the gradient.
+						stripMidY := drawY + (sf+0.5)*stripDstH
+						t := clamp01((stripMidY - ext.yOff) / ext.h)
 						sc := GradientColorAt(gradient.Stops, t)
 
 						if isIdentity {
@@ -376,38 +323,10 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 			cx += float32(g.XAdvance)
 			cy -= float32(g.YAdvance)
 		}
-
-		// 4. Decorations.
-		if item.HasUnderline || item.HasStrikethrough {
-			runX := float32(item.X)
-			runY := float32(item.Y)
-			decoColor := item.Color
-			if hasGradient {
-				decoColor = gradientColorForGlyph(gradient,
-					runX, runY, float32(item.Ascent),
-					gradXOff, gradYOff, gradW, gradH)
-			}
-
-			if item.HasUnderline {
-				r.emitFillRect(Rect{
-					X: runX,
-					Y: runY + float32(item.UnderlineOffset) -
-						float32(item.UnderlineThickness),
-					Width:  float32(item.Width),
-					Height: float32(item.UnderlineThickness),
-				}, decoColor, x, y, combined, isIdentity)
-			}
-			if item.HasStrikethrough {
-				r.emitFillRect(Rect{
-					X: runX,
-					Y: runY - float32(item.StrikethroughOffset) +
-						float32(item.StrikethroughThickness),
-					Width:  float32(item.Width),
-					Height: float32(item.StrikethroughThickness),
-				}, decoColor, x, y, combined, isIdentity)
-			}
-		}
 	}
+
+	// 4. Decorations, after every glyph as on WASM.
+	r.emitDecorations(&layout, gradient, ext, x, y, combined, isIdentity)
 }
 
 func (r *Renderer) emitGlyphQuad(cg CachedGlyph, gx, gy, ox, oy float32,
@@ -449,19 +368,11 @@ func (r *Renderer) emitPlacedQuad(cg CachedGlyph,
 	w := float32(cg.Width) * scaleInv
 	h := float32(cg.Height) * scaleInv
 
-	// GPU emoji scaling.
-	if useOriginalColor && h > 0 {
-		targetH := ascent + descent
-		if h != targetH {
-			emojiScale := targetH / h
-			if xAdvance > 0 && w*emojiScale > xAdvance {
-				emojiScale = xAdvance / w
-			}
-			w *= emojiScale
-			h *= emojiScale
-			dx = float32(cg.Left) * emojiScale * scaleInv
-			dy = -float32(cg.Top)*emojiScale*scaleInv + h - ascent
-		}
+	// GPU emoji scaling, with the same geometry as drawLayoutImpl. No
+	// grid box: placed glyphs have no cell to fill.
+	if useOriginalColor {
+		dx, dy, w, h = emojiQuadBox(cg, scaleInv, ascent, descent, 0,
+			xAdvance)
 	}
 
 	page := r.atlas.Pages[cg.Page]
@@ -484,6 +395,46 @@ func (r *Renderer) emitPlacedQuad(cg CachedGlyph,
 		dst.Y += placement.Y
 		r.backend.DrawTexturedQuad(page.TextureID, src, dst, color)
 	}
+}
+
+// emojiQuadBox returns where a color emoji quad goes, relative to the
+// glyph's pen origin, in logical units: the offset (dx, dy) of its top-left
+// corner and its size (w, h). A bitmap whose height is not the line height
+// ascent+descent is scaled to it, centered vertically in the line box, and
+// held to the advance so it does not overlap the next glyph. With boxW > 0
+// (a grid caller's reserved cell) it fills boxW × line height instead,
+// centered on both axes, so wide glyphs (flags) and square glyphs (people)
+// fill the same width instead of the font's narrower advance.
+func emojiQuadBox(cg CachedGlyph, scaleInv, ascent, descent, boxW,
+	xAdvance float32) (dx, dy, w, h float32) {
+
+	dx = float32(cg.Left) * scaleInv
+	dy = -float32(cg.Top) * scaleInv
+	w = float32(cg.Width) * scaleInv
+	h = float32(cg.Height) * scaleInv
+	if h <= 0 {
+		return dx, dy, w, h
+	}
+	targetH := ascent + descent
+	switch {
+	case boxW > 0 && w > 0:
+		s := min(boxW/w, targetH/h)
+		w *= s
+		h *= s
+		dx = (boxW - w) * 0.5
+	case h != targetH:
+		s := targetH / h
+		if xAdvance > 0 && w*s > xAdvance {
+			s = xAdvance / w
+		}
+		w *= s
+		h *= s
+		dx = float32(cg.Left) * s * scaleInv
+	default:
+		return dx, dy, w, h
+	}
+	dy = -ascent + (targetH-h)*0.5
+	return dx, dy, w, h
 }
 
 func gradientStripCount(glyphH float32) int {

@@ -81,8 +81,12 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		return
 	}
 
-	hasGradient := gradient != nil && len(gradient.Stops) > 0
 	isIdentity := transform.IsIdentity()
+	fillMode := canvasFillModeFor(gradient)
+	var ext gradientExtents
+	if fillMode != canvasFillFlat {
+		ext = layoutGradientExtents(&layout)
+	}
 
 	// combined folds the draw origin into the matrix for the
 	// fill-rect path (backgrounds, decorations). The fillText
@@ -93,48 +97,8 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		combined = AffineTranslation(x, y).Multiply(transform)
 	}
 
-	// Pre-compute gradient extents.
-	var gradXOff, gradYOff float32
-	gradW := float32(1.0)
-	gradH := float32(1.0)
-	if hasGradient {
-		if layout.VisualWidth > 0 {
-			gradW = layout.VisualWidth
-		}
-		if layout.VisualHeight > 0 {
-			gradH = layout.VisualHeight
-		}
-		if len(layout.Items) > 0 {
-			gradXOff = float32(layout.Items[0].X)
-			gradYOff = float32(layout.Items[0].Y) -
-				float32(layout.Items[0].Ascent)
-			for _, item := range layout.Items {
-				ix := float32(item.X)
-				iy := float32(item.Y) - float32(item.Ascent)
-				if ix < gradXOff {
-					gradXOff = ix
-				}
-				if iy < gradYOff {
-					gradYOff = iy
-				}
-			}
-		}
-	}
-
-	// 1. Backgrounds. They rotate with the glyphs through
-	// emitFillRect, so a rotated run keeps its highlight
-	// behind the text.
-	for _, item := range layout.Items {
-		if !item.HasBgColor {
-			continue
-		}
-		r.emitFillRect(Rect{
-			X:      float32(item.X),
-			Y:      float32(item.Y) - float32(item.Ascent),
-			Width:  float32(item.Width),
-			Height: float32(item.Ascent + item.Descent),
-		}, item.BgColor, x, y, combined, isIdentity)
-	}
+	// 1. Backgrounds.
+	r.emitBackgrounds(&layout, x, y, combined, isIdentity)
 
 	// 2. Stroke outlines via strokeText.
 	for _, item := range layout.Items {
@@ -148,7 +112,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		}
 
 		ctx2d.Set("font", cssFont)
-		ctx2d.Set("strokeStyle", cssColorString(sc))
+		ctx2d.Set("strokeStyle", cssColorRGB(sc))
 		ctx2d.Set("lineWidth", float64(item.StrokeWidth))
 		ctx2d.Set("textBaseline", "alphabetic")
 		ctx2d.Set("globalAlpha", float64(sc.A)/255.0)
@@ -193,7 +157,11 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 	}
 	ctx2d.Set("globalAlpha", 1.0)
 
-	// 3. Fill text via fillText.
+	// 3. Fill text via fillText. A vertical gradient is one Canvas2D
+	// gradient for the whole call, built on first use: every item shares
+	// the same span and matrix, and each build crosses the JS bridge once
+	// per stop.
+	var canvasGrad js.Value
 	for _, item := range layout.Items {
 		if item.HasStroke && item.Color.A == 0 {
 			continue
@@ -215,23 +183,21 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		// glyph can modulate it for the shade blocks and put it back.
 		alpha := 1.0
 
-		// For vertical gradient, create a Canvas2D linear gradient
-		// that the browser composites per-pixel.
-		if hasGradient && gradient.Direction == GradientVertical {
-			canvasGrad := ctx2d.Call("createLinearGradient",
-				0, float64(y+gradYOff),
-				0, float64(y+gradYOff+gradH))
-			for _, stop := range gradient.Stops {
-				canvasGrad.Call("addColorStop",
-					float64(stop.Position),
-					cssColorString(stop.Color))
+		// Every mode sets fillStyle here or per glyph below, so no item
+		// inherits the style the previous item or pass left.
+		switch fillMode {
+		case canvasFillGradient:
+			if canvasGrad.IsUndefined() {
+				canvasGrad = newCanvasGradient(ctx2d, gradient,
+					ext, y, isIdentity)
 			}
 			ctx2d.Set("fillStyle", canvasGrad)
 			ctx2d.Set("globalAlpha", 1.0)
-		} else if !hasGradient {
+		case canvasFillFlat:
 			alpha = float64(c.A) / 255.0
 			ctx2d.Set("globalAlpha", alpha)
-			ctx2d.Set("fillStyle", cssColorString(c))
+			ctx2d.Set("fillStyle", cssColorRGB(c))
+		case canvasFillPerGlyph:
 		}
 
 		cx := float32(item.X)
@@ -253,15 +219,14 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 				continue
 			}
 
-			// Per-glyph color for horizontal gradient only.
-			if hasGradient &&
-				gradient.Direction == GradientHorizontal {
+			// Per-glyph color for horizontal and diagonal gradients.
+			if fillMode == canvasFillPerGlyph {
 				gc := gradientColorForGlyph(gradient, cx, cy,
 					float32(item.Ascent),
-					gradXOff, gradYOff, gradW, gradH)
+					ext.xOff, ext.yOff, ext.w, ext.h)
 				alpha = float64(gc.A) / 255.0
 				ctx2d.Set("globalAlpha", alpha)
-				ctx2d.Set("fillStyle", cssColorString(gc))
+				ctx2d.Set("fillStyle", cssColorRGB(gc))
 			}
 
 			gx := cx + float32(g.XOffset)
@@ -299,85 +264,22 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 	ctx2d.Set("globalAlpha", 1.0)
 
 	// 4. Decorations (underline / strikethrough).
-	for _, item := range layout.Items {
-		if !item.HasUnderline && !item.HasStrikethrough {
-			continue
-		}
-		runX := float32(item.X)
-		runY := float32(item.Y)
-		decoColor := item.Color
-		if hasGradient {
-			decoColor = gradientColorForGlyph(gradient, runX, runY,
-				float32(item.Ascent),
-				gradXOff, gradYOff, gradW, gradH)
-		}
-
-		if item.HasUnderline {
-			r.emitFillRect(Rect{
-				X: runX,
-				Y: runY + float32(item.UnderlineOffset) -
-					float32(item.UnderlineThickness),
-				Width:  float32(item.Width),
-				Height: float32(item.UnderlineThickness),
-			}, decoColor, x, y, combined, isIdentity)
-		}
-		if item.HasStrikethrough {
-			r.emitFillRect(Rect{
-				X: runX,
-				Y: runY - float32(item.StrikethroughOffset) +
-					float32(item.StrikethroughThickness),
-				Width:  float32(item.Width),
-				Height: float32(item.StrikethroughThickness),
-			}, decoColor, x, y, combined, isIdentity)
-		}
-	}
+	r.emitDecorations(&layout, gradient, ext, x, y, combined, isIdentity)
 }
 
-var (
-	lastColor Color
-	lastCSS   string
-)
+// newCanvasGradient builds the Canvas2D linear gradient for a vertical
+// text gradient. The stops keep their own alpha, because globalAlpha is 1
+// while it fills.
+func newCanvasGradient(ctx2d js.Value, gradient *GradientConfig,
+	ext gradientExtents, oy float32, isIdentity bool) js.Value {
 
-func cssColorString(c Color) string {
-	if c == lastColor && lastCSS != "" {
-		return lastCSS
+	y0, y1 := ext.canvasSpanY(oy, isIdentity)
+	g := ctx2d.Call("createLinearGradient", 0, float64(y0), 0, float64(y1))
+	for _, stop := range gradient.Stops {
+		g.Call("addColorStop", float64(stop.Position),
+			cssColorRGBA(stop.Color))
 	}
-	s := "rgba(" +
-		jsItoa(int(c.R)) + "," +
-		jsItoa(int(c.G)) + "," +
-		jsItoa(int(c.B)) + "," +
-		jsAlpha(c.A) + ")"
-	lastColor = c
-	lastCSS = s
-	return s
-}
-
-func jsAlpha(a uint8) string {
-	if a == 255 {
-		return "1"
-	}
-	if a == 0 {
-		return "0"
-	}
-	v := int(a) * 100 / 255
-	return "0." + jsItoa(v/10) + jsItoa(v%10)
-}
-
-func jsItoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	if i < 0 {
-		return "-" + jsItoa(-i)
-	}
-	var buf [10]byte
-	n := len(buf)
-	for i > 0 {
-		n--
-		buf[n] = byte('0' + i%10)
-		i /= 10
-	}
-	return string(buf[n:])
+	return g
 }
 
 // setCanvasTransform installs the layout transform. setTransform replaces
