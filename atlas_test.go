@@ -1,6 +1,8 @@
 package glyph
 
 import (
+	"math"
+	"strings"
 	"testing"
 )
 
@@ -398,13 +400,14 @@ func TestAtlasPageEvictionSelectsOldest(t *testing.T) {
 		atlas.FrameCounter++
 	}
 
-	if len(atlas.Pages) < 2 {
-		t.Fatalf("expected multiple pages, got %d", len(atlas.Pages))
+	if len(atlas.Pages) != 3 {
+		t.Fatalf("expected 3 pages, got %d", len(atlas.Pages))
 	}
 
 	// Set page ages manually.
 	atlas.Pages[0].Age = 100
 	atlas.Pages[1].Age = 50 // oldest
+	atlas.Pages[2].Age = 75
 
 	oldestIdx := atlas.findOldestPage()
 	if oldestIdx != 1 {
@@ -543,5 +546,279 @@ func TestAtlasCopyBitmapData(t *testing.T) {
 	if page.StagingBack[idx] != 255 || page.StagingBack[idx+1] != 0 {
 		t.Errorf("padded pixel: R=%d G=%d, want R=255 G=0",
 			page.StagingBack[idx], page.StagingBack[idx+1])
+	}
+}
+
+func TestAtlasCopyBitmapRejectsShortData(t *testing.T) {
+	backend := newMockBackend()
+	atlas, err := NewGlyphAtlas(backend, 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+
+	// A 10x10 bitmap needs 400 bytes; 10 bytes must fail, not panic.
+	bmp := Bitmap{Width: 10, Height: 10, Channels: 4,
+		Data: make([]byte, 10)}
+	_, _, _, err = atlas.InsertBitmap(bmp, 0, 0)
+	if err == nil {
+		t.Fatal("expected error for short bitmap data")
+	}
+	if !strings.Contains(err.Error(), "too short") {
+		t.Errorf("error = %q, want it to mention short data", err)
+	}
+}
+
+func TestAtlasWideGlyphRejectedCleanly(t *testing.T) {
+	backend := newMockBackend()
+	atlas, err := NewGlyphAtlas(backend, 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+
+	// 100px fits MaxGlyphDimension but never fits a 64px page.
+	// This must fail with a width error, not an out-of-bounds copy.
+	bmp := makeSyntheticBitmap(100, 10, 255, 255, 255, 255)
+	_, _, _, err = atlas.InsertBitmap(bmp, 0, 0)
+	if err == nil {
+		t.Fatal("expected error for over-wide glyph")
+	}
+	if !strings.Contains(err.Error(), "too wide") {
+		t.Errorf("error = %q, want it to mention width", err)
+	}
+}
+
+func TestAtlasInsertAfterFreeReturnsError(t *testing.T) {
+	backend := newMockBackend()
+	atlas, err := NewGlyphAtlas(backend, 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	atlas.Free()
+
+	// The atlas holds no pages after Free. This must return an
+	// error, not panic on an empty page slice.
+	bmp := makeSyntheticBitmap(10, 10, 255, 255, 255, 255)
+	_, _, _, err = atlas.InsertBitmap(bmp, 0, 0)
+	if err == nil {
+		t.Error("expected error inserting after Free")
+	}
+}
+
+func TestNewGlyphAtlasNilBackend(t *testing.T) {
+	_, err := NewGlyphAtlas(nil, 64, 64)
+	if err == nil {
+		t.Error("expected error for nil backend")
+	}
+}
+
+func TestNextPowerOfTwoSaturates(t *testing.T) {
+	// Inputs past 2^62 have no next power of two in an int.
+	// They must saturate at MaxInt, never wrap negative.
+	for _, in := range []int{math.MaxInt, 1<<62 + 1} {
+		if got := nextPowerOfTwo(in); got <= 0 {
+			t.Errorf("nextPowerOfTwo(%d) = %d, want a positive value",
+				in, got)
+		}
+	}
+	if got := nextPowerOfTwo(math.MaxInt); got != math.MaxInt {
+		t.Errorf("nextPowerOfTwo(MaxInt) = %d, want MaxInt", got)
+	}
+}
+
+func TestAtlasCleanupCollectsOnBackwardFrame(t *testing.T) {
+	backend := newMockBackend()
+	atlas, err := NewGlyphAtlas(backend, 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+
+	atlas.Garbage = append(atlas.Garbage, TextureID(999))
+	backend.textures[TextureID(999)] = []byte{1, 2, 3}
+	atlas.Cleanup(5)
+	if len(atlas.Garbage) != 0 {
+		t.Fatal("expected garbage cleared after forward cleanup")
+	}
+
+	// A backward frame jump must still collect, or textures leak.
+	atlas.Garbage = append(atlas.Garbage, TextureID(1000))
+	backend.textures[TextureID(1000)] = []byte{1, 2, 3}
+	atlas.Cleanup(3)
+	if len(atlas.Garbage) != 0 {
+		t.Error("expected garbage cleared after backward cleanup")
+	}
+	if _, ok := backend.textures[TextureID(1000)]; ok {
+		t.Error("expected texture 1000 deleted")
+	}
+}
+
+func TestAtlasNewPageMatchesCurrentHeight(t *testing.T) {
+	backend := newMockBackend()
+	atlas, err := NewGlyphAtlas(backend, 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+	atlas.MaxGlyphDimension = 64 // No growth — forces new pages.
+	atlas.MaxPages = 4
+
+	for range 10 {
+		bmp := makeSyntheticBitmap(60, 30, 255, 255, 255, 255)
+		if _, _, _, err := atlas.InsertBitmap(bmp, 0, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if len(atlas.Pages) < 2 {
+		t.Fatalf("expected multiple pages, got %d", len(atlas.Pages))
+	}
+	// New pages must match the current page, not jump to 1024 rows.
+	for i, p := range atlas.Pages {
+		if p.Height != 64 || p.Width != 64 {
+			t.Errorf("page %d = %dx%d, want 64x64",
+				i, p.Width, p.Height)
+		}
+	}
+}
+
+func TestAtlasGrowPageToleratesShortStaging(t *testing.T) {
+	backend := newMockBackend()
+	atlas, err := NewGlyphAtlas(backend, 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+
+	// Staging buffers are exported, so outside code can shrink them.
+	// Growing must not panic slicing past the short buffer.
+	page := &atlas.Pages[0]
+	page.StagingBack = page.StagingBack[:10]
+	if err := atlas.growPage(0, 128); err != nil {
+		t.Fatalf("growPage failed: %v", err)
+	}
+	if page.Height != 128 {
+		t.Errorf("height = %d, want 128", page.Height)
+	}
+}
+
+func TestAtlasNewPageCappedAt1024(t *testing.T) {
+	backend := newMockBackend()
+	atlas, err := NewGlyphAtlas(backend, 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+	atlas.MaxGlyphDimension = 2048
+	if err := atlas.growPage(0, 2048); err != nil {
+		t.Fatal(err)
+	}
+	// One full shelf fills the page, so the next insert needs a new
+	// page. The page is at MaxGlyphDimension, so growth is not possible.
+	atlas.Pages[0].Shelves = []Shelf{{Y: 0, Height: 2048, CursorX: 64, Width: 64}}
+
+	bmp := makeSyntheticBitmap(10, 10, 255, 255, 255, 255)
+	if _, _, _, err := atlas.InsertBitmap(bmp, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if len(atlas.Pages) != 2 {
+		t.Fatalf("expected 2 pages, got %d", len(atlas.Pages))
+	}
+	// A full-height page would waste memory. The new page starts at
+	// 1024 rows and grows on demand.
+	if h := atlas.Pages[1].Height; h != 1024 {
+		t.Errorf("new page height = %d, want 1024", h)
+	}
+}
+
+func TestAtlasInsertNilBackendReturnsError(t *testing.T) {
+	atlas, err := NewGlyphAtlas(newMockBackend(), 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	atlas.Backend = nil
+	bmp := makeSyntheticBitmap(10, 10, 255, 255, 255, 255)
+	if _, _, _, err := atlas.InsertBitmap(bmp, 0, 0); err == nil {
+		t.Error("expected error for nil backend")
+	}
+	// Free and Cleanup must not panic without a backend.
+	atlas.Garbage = append(atlas.Garbage, TextureID(7))
+	atlas.Cleanup(1)
+	if len(atlas.Garbage) != 0 {
+		t.Error("expected garbage cleared")
+	}
+	atlas.Free()
+}
+
+func TestAtlasFreeTwiceNoPanic(t *testing.T) {
+	backend := newMockBackend()
+	atlas, err := NewGlyphAtlas(backend, 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	atlas.Free()
+	atlas.Free()
+	if len(backend.textures) != 0 {
+		t.Errorf("expected all textures deleted, %d left",
+			len(backend.textures))
+	}
+}
+
+func TestAtlasSwapAndUploadNilBackendKeepsDirty(t *testing.T) {
+	backend := newMockBackend()
+	atlas, err := NewGlyphAtlas(backend, 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+	bmp := makeSyntheticBitmap(10, 10, 255, 255, 255, 255)
+	if _, _, _, err := atlas.InsertBitmap(bmp, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	atlas.Backend = nil
+	atlas.SwapAndUpload()
+	if !atlas.Pages[0].Dirty {
+		t.Fatal("page must stay dirty when no backend can take the upload")
+	}
+	atlas.Backend = backend
+	atlas.SwapAndUpload()
+	if atlas.Pages[0].Dirty {
+		t.Error("expected page clean after upload with backend")
+	}
+}
+
+func TestAtlasCopyBitmapRejectsShortStaging(t *testing.T) {
+	backend := newMockBackend()
+	atlas, err := NewGlyphAtlas(backend, 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+
+	// Outside code shrank the exported staging buffer. The copy must
+	// fail with an error, not panic on an out-of-range slice.
+	atlas.Pages[0].StagingBack = atlas.Pages[0].StagingBack[:10]
+	bmp := makeSyntheticBitmap(10, 10, 255, 255, 255, 255)
+	_, _, _, err = atlas.InsertBitmap(bmp, 0, 0)
+	if err == nil {
+		t.Fatal("expected error for short staging buffer")
+	}
+	if !strings.Contains(err.Error(), "staging buffer too short") {
+		t.Errorf("error = %q, want it to mention the staging buffer", err)
+	}
+}
+
+func TestAtlasPageIndexOutOfRange(t *testing.T) {
+	atlas, err := NewGlyphAtlas(newMockBackend(), 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+	atlas.resetPage(-1)
+	atlas.resetPage(5)
+	if err := atlas.growPage(5, 128); err == nil {
+		t.Error("expected error for out-of-range page index")
 	}
 }

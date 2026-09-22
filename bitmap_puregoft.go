@@ -200,6 +200,9 @@ func loadGlyphByIDFT(atlas *GlyphAtlas, path string, gid uint32, item Item,
 }
 
 // insertRaster uploads a rasterized bitmap to the atlas.
+// res.data may alias atlas scratch storage. InsertBitmap copies the
+// pixels at once, so the alias is safe as long as res goes straight
+// to InsertBitmap with no other render in between.
 func insertRaster(atlas *GlyphAtlas, res *rasterResult) (LoadGlyphResult, error) {
 	if res == nil || res.w == 0 || res.h == 0 {
 		return LoadGlyphResult{}, nil
@@ -526,6 +529,8 @@ func renderColorGlyph(atlas *GlyphAtlas, path string, size float64, text string)
 		rgba = image.NewRGBA(image.Rect(0, 0, w, h))
 	}
 	draw.Draw(rgba, rgba.Bounds(), img, b.Min, draw.Src)
+	// data aliases atlas scratch storage when atlas is set. The
+	// caller must pass it to insertRaster before the next render.
 	return &rasterResult{data: rgba.Pix, w: w, h: h, left: 0, top: h}, true
 }
 
