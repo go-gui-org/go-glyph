@@ -84,11 +84,20 @@ func (r *Renderer) DrawLayout(layout Layout, x, y float32) {
 	r.drawLayoutImpl(layout, x, y, AffineIdentity(), nil)
 }
 
+// DrawLayoutTransformed draws layout at (x, y) through transform.
+// The transform runs first (rotation around the layout origin),
+// then the result moves to (x, y). To rotate around another
+// point, build the transform with AffineRotationAround.
+// Backgrounds and decorations rotate with the glyphs. A
+// transform that is not finite draws nothing.
 func (r *Renderer) DrawLayoutTransformed(layout Layout, x, y float32,
 	transform AffineTransform) {
 	r.drawLayoutImpl(layout, x, y, transform, nil)
 }
 
+// DrawLayoutRotated draws layout at (x, y) rotated by angle in
+// radians around the layout origin. Backgrounds and decorations
+// rotate with the glyphs.
 func (r *Renderer) DrawLayoutRotated(layout Layout, x, y, angle float32) {
 	r.drawLayoutImpl(layout, x, y, AffineRotation(angle), nil)
 }
@@ -98,6 +107,9 @@ func (r *Renderer) DrawLayoutWithGradient(layout Layout, x, y float32,
 	r.drawLayoutImpl(layout, x, y, AffineIdentity(), gradient)
 }
 
+// DrawLayoutTransformedWithGradient combines DrawLayoutTransformed
+// and DrawLayoutWithGradient. The pivot rule from
+// DrawLayoutTransformed applies.
 func (r *Renderer) DrawLayoutTransformedWithGradient(layout Layout,
 	x, y float32, transform AffineTransform, gradient *GradientConfig) {
 	r.drawLayoutImpl(layout, x, y, transform, gradient)
@@ -151,7 +163,7 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 				continue
 			}
 
-			if p.Angle != 0 {
+			if p.Angle != 0 && finiteF32(p.Angle) {
 				ctx2d.Call("save")
 				ctx2d.Call("translate",
 					float64(p.X), float64(p.Y))

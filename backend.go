@@ -31,6 +31,23 @@ type DrawBackend interface {
 	DPIScale() float32
 }
 
+// TransformedFillBackend is an optional DrawBackend extension
+// for rotated fills. Backgrounds and decorations (underlines,
+// strikethroughs) rotate with the glyphs under DrawLayout*
+// transformed calls. A backend that implements this draws the
+// rect through t. One that does not gets the old fallback: the
+// rect origin moves but the rect stays axis-aligned. All
+// bundled backends implement it. Custom backends must do the
+// same to keep rotated backgrounds aligned with rotated text.
+//
+// t is always finite here. dst holds layout coords without the
+// draw origin: the caller folds the origin into t, the same way
+// DrawTexturedQuadTransformed calls do.
+type TransformedFillBackend interface {
+	// DrawFilledRectTransformed draws a filled rect through t.
+	DrawFilledRectTransformed(dst Rect, c Color, t AffineTransform)
+}
+
 // RectTextureUpdater is an optional DrawBackend extension for uploading
 // just the changed sub-rectangle of a texture.
 //
