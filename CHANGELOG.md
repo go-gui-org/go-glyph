@@ -8,6 +8,46 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **`Renderer.DrawCompositionTransformed`.** Draws the IME preedit underlines
+  and cursor through an affine transform. Use it with `DrawLayoutTransformed` so
+  the feedback stays on the rotated glyphs.
+
+### Fixed
+
+- **An empty preedit now ends IME composition.** `HandleMarkedText("")` was
+  rejected by input validation, so the old preedit stayed on screen after the
+  user deleted it.
+- **`SetClauses` copies its input.** It kept the caller's slice, and a later
+  `ClearClauses` + `HandleClause` wrote into the caller's memory.
+- **The preedit cursor offset is clamped** to the preedit and moved to a rune
+  start. A bad offset put the caret in committed text or hid it.
+- **Clauses are clipped to the preedit**, so a bad clause cannot underline
+  committed text. `HandleClause` and `SetClauses` keep at most 256 clauses.
+  Negative clause starts shrink the clause, negative `Start` positions clamp to
+  0, and empty clauses are dropped.
+- **`HandleClause` sets `SelectedClause`** for a selected clause.
+- **Dead key + space gives the accent alone.** Added ý, Ý and Ÿ.
+- **`DrawComposition` keeps the cursor color's alpha** and scales it by about
+  70%. Before, it replaced the alpha with 178. It no longer allocates per frame.
+
+### Changed (breaking)
+
+These break the v1 API on purpose. go-gui and its sibling repos are the only
+clients, and none of them call these functions.
+
+- `CompositionState.HandleMarkedText` returns `error`, and `HandleInsertText`
+  returns `(string, error)`. Before, invalid input was dropped with no signal.
+- `CompositionState.CompositionBounds` and `GetClauseRects` take `*Layout`, like
+  the other layout query methods. A nil layout gives no result.
+
+### Removed
+
+- `Renderer.DrawLayoutWithComposition`. It ignored the composition state. Use
+  `DrawLayout`, then `DrawComposition`.
+- `CompositionCommitted`. No code set this phase.
+
 ## [v1.25.2] - 2026-09-16
 
 ### Changed

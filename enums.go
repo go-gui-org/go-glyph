@@ -53,7 +53,6 @@ const (
 	CompositionNone CompositionPhase = iota
 	CompositionStarted
 	CompositionUpdating
-	CompositionCommitted
 )
 
 // ClauseStyle identifies the visual style of an IME clause.

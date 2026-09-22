@@ -24,6 +24,9 @@ type Renderer struct {
 	// layout's glyph count exceeds the previous high-water mark.
 	scratchFills   []CachedGlyph
 	scratchStrokes []CachedGlyph
+	// scratchRects holds per-clause selection rects in DrawComposition,
+	// reused so drawing the IME preedit each frame does not allocate.
+	scratchRects []Rect
 }
 
 // RendererConfig configures the Renderer.

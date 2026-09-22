@@ -136,15 +136,21 @@ func (l *Layout) GetClosestOffset(x, y float32) int {
 
 // GetSelectionRects returns rectangles covering [start, end).
 func (l *Layout) GetSelectionRects(start, end int) []Rect {
+	return l.appendSelectionRects(nil, start, end)
+}
+
+// appendSelectionRects appends the rectangles covering [start, end) to
+// rects and returns the result. Draw paths pass a reused scratch slice
+// so per-frame selection geometry does not allocate.
+func (l *Layout) appendSelectionRects(rects []Rect, start, end int) []Rect {
 	if start >= end || len(l.Lines) == 0 {
-		return nil
+		return rects
 	}
 	s := start
 	if s < 0 {
 		s = 0
 	}
 
-	var rects []Rect
 	for _, line := range l.Lines {
 		lineEnd := line.StartIndex + line.Length
 		overlapStart := max(s, line.StartIndex)

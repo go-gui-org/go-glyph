@@ -18,6 +18,9 @@ type Renderer struct {
 	// boxSink is re-aimed per built-in box glyph rather than reallocated,
 	// so drawing a screen of box art allocates nothing.
 	boxSink canvasSink
+	// scratchRects holds per-clause selection rects in DrawComposition,
+	// reused so drawing the IME preedit each frame does not allocate.
+	scratchRects []Rect
 }
 
 // RendererConfig configures the Renderer.
