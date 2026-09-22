@@ -2,7 +2,10 @@
 
 package glyph
 
-import "testing"
+import (
+	"image/color"
+	"testing"
+)
 
 // TestEmojiRendersColorCOLR verifies loadGlyphFT rasterizes a COLR v0 color
 // emoji (Windows' Segoe UI Emoji) as an actual color bitmap for a
@@ -22,8 +25,9 @@ func TestEmojiRendersColorCOLR(t *testing.T) {
 	// A font may advertise color tables yet use a format we don't render
 	// (e.g. COLR v1) — that environment skips rather than fails.
 	renderable := false
+	fg := color.NRGBA{R: 255, G: 255, B: 255, A: 255}
 	for _, p := range ftColorFallbacksSingleton {
-		if _, ok := renderCOLRGlyph(nil, p, 32, "\U0001F600"); ok {
+		if _, ok := renderCOLRGlyph(nil, p, 32, "\U0001F600", fg); ok {
 			renderable = true
 			break
 		}

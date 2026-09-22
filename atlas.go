@@ -550,6 +550,10 @@ func copyBitmapToPage(page *AtlasPage, bmp Bitmap, x, y int) error {
 	if bmp.Width <= 0 || bmp.Height <= 0 || len(bmp.Data) == 0 {
 		return nil
 	}
+	if bmp.Channels != 4 {
+		return fmt.Errorf("unsupported bitmap channels: %d (want 4 RGBA)",
+			bmp.Channels)
+	}
 	// Compare in int64 so a crafted Bitmap with huge dimensions
 	// cannot wrap the arithmetic and pass the bounds check.
 	if x < 0 || y < 0 ||
@@ -586,7 +590,12 @@ func copyBitmapToPage(page *AtlasPage, bmp Bitmap, x, y int) error {
 // contents are not zeroed; the caller must fully overwrite via draw.Src.
 // The image aliases atlas scratch storage. Copy the pixels (with
 // InsertBitmap) before the next ensure call reuses the buffer.
+// A nil return means the dimensions are invalid; the caller must not use
+// the result.
 func (atlas *GlyphAtlas) ensureAlpha(w, h int) *image.Alpha {
+	if _, err := checkAllocationSize(w, h, 1); err != nil {
+		return nil
+	}
 	size := w * h
 	if cap(atlas.scratchAlpha) < size {
 		atlas.scratchAlpha = make([]byte, size)
@@ -603,7 +612,12 @@ func (atlas *GlyphAtlas) ensureAlpha(w, h int) *image.Alpha {
 // contents are not zeroed; the caller must fully overwrite via draw.Src.
 // The image aliases atlas scratch storage. Copy the pixels (with
 // InsertBitmap) before the next ensure call reuses the buffer.
+// A nil return means the dimensions are invalid; the caller must not use
+// the result.
 func (atlas *GlyphAtlas) ensureRGBA(w, h int) *image.RGBA {
+	if _, err := checkAllocationSize(w, h, 4); err != nil {
+		return nil
+	}
 	size := w * h * 4
 	if cap(atlas.scratchRGBA) < size {
 		atlas.scratchRGBA = make([]byte, size)
@@ -617,8 +631,12 @@ func (atlas *GlyphAtlas) ensureRGBA(w, h int) *image.RGBA {
 
 // ensureRasterizer returns a *vector.Rasterizer of the given dimensions,
 // reusing the atlas's rasterizer when present. The rasterizer's DrawOp is
-// NOT set; the caller must assign it.
+// NOT set; the caller must assign it. A nil return means the dimensions
+// are invalid; the caller must not use the result.
 func (atlas *GlyphAtlas) ensureRasterizer(w, h int) *vector.Rasterizer {
+	if _, err := checkAllocationSize(w, h, 1); err != nil {
+		return nil
+	}
 	if atlas.scratchRaster == nil {
 		atlas.scratchRaster = vector.NewRasterizer(w, h)
 	} else {
