@@ -1,6 +1,11 @@
 package glyph
 
 // MutationResult contains the result of applying a text mutation.
+//
+// RangeStart and RangeEnd are byte offsets. For a pure deletion,
+// [RangeStart, RangeEnd) is the removed range in the old text. For an
+// insertion or a replacement, it is the inserted range in the new text.
+// UndoManager depends on this convention.
 type MutationResult struct {
 	NewText     string
 	DeletedText string
@@ -31,31 +36,33 @@ func (m MutationResult) ToChange(inserted string) TextChange {
 // (Backspace). Uses layout.MoveCursorLeft for grapheme boundary.
 func DeleteBackward(text string, layout Layout, cursor int) MutationResult {
 	c := clampIndex(cursor, len(text))
-	if c == 0 {
-		return MutationResult{NewText: text, CursorPos: 0}
-	}
-	prev := layout.MoveCursorLeft(c)
-	return MutationResult{
-		NewText:     text[:prev] + text[c:],
-		CursorPos:   prev,
-		DeletedText: text[prev:c],
-		RangeStart:  prev,
-		RangeEnd:    c,
-	}
+	// Clamp what the layout returns too: a layout built for another
+	// (longer) text can name offsets past the end of this one. The same
+	// holds for every layout-driven delete below.
+	prev := clampIndex(layout.MoveCursorLeft(c), len(text))
+	return deleteRange(text, prev, c, c)
 }
 
 // DeleteForward removes one grapheme cluster after cursor (Delete).
 func DeleteForward(text string, layout Layout, cursor int) MutationResult {
-	next := layout.MoveCursorRight(cursor)
-	if next == cursor {
+	c := clampIndex(cursor, len(text))
+	next := clampIndex(layout.MoveCursorRight(c), len(text))
+	return deleteRange(text, c, next, c)
+}
+
+// deleteRange removes text[start:end] and puts the cursor at cursor. An
+// empty or inverted range changes nothing. Both bounds must already be
+// clamped to the text.
+func deleteRange(text string, start, end, cursor int) MutationResult {
+	if start >= end {
 		return MutationResult{NewText: text, CursorPos: cursor}
 	}
 	return MutationResult{
-		NewText:     text[:cursor] + text[next:],
-		CursorPos:   cursor,
-		DeletedText: text[cursor:next],
-		RangeStart:  cursor,
-		RangeEnd:    next,
+		NewText:     text[:start] + text[end:],
+		CursorPos:   start,
+		DeletedText: text[start:end],
+		RangeStart:  start,
+		RangeEnd:    end,
 	}
 }
 
@@ -73,65 +80,33 @@ func InsertText(text string, cursor int, insert string) MutationResult {
 // DeleteToWordBoundary removes text from cursor to previous word
 // boundary (Option+Backspace).
 func DeleteToWordBoundary(text string, layout Layout, cursor int) MutationResult {
-	if cursor == 0 {
-		return MutationResult{NewText: text, CursorPos: 0}
-	}
-	wordStart := layout.MoveCursorWordLeft(cursor)
-	return MutationResult{
-		NewText:     text[:wordStart] + text[cursor:],
-		CursorPos:   wordStart,
-		DeletedText: text[wordStart:cursor],
-		RangeStart:  wordStart,
-		RangeEnd:    cursor,
-	}
+	c := clampIndex(cursor, len(text))
+	wordStart := clampIndex(layout.MoveCursorWordLeft(c), len(text))
+	return deleteRange(text, wordStart, c, c)
 }
 
 // DeleteToWordEnd removes text from cursor to next word boundary
 // (Option+Delete).
 func DeleteToWordEnd(text string, layout Layout, cursor int) MutationResult {
-	wordEnd := layout.MoveCursorWordRight(cursor)
-	if wordEnd == cursor {
-		return MutationResult{NewText: text, CursorPos: cursor}
-	}
-	return MutationResult{
-		NewText:     text[:cursor] + text[wordEnd:],
-		CursorPos:   cursor,
-		DeletedText: text[cursor:wordEnd],
-		RangeStart:  cursor,
-		RangeEnd:    wordEnd,
-	}
+	c := clampIndex(cursor, len(text))
+	wordEnd := clampIndex(layout.MoveCursorWordRight(c), len(text))
+	return deleteRange(text, c, wordEnd, c)
 }
 
 // DeleteToLineStart removes text from cursor to line start
 // (Cmd+Backspace).
 func DeleteToLineStart(text string, layout Layout, cursor int) MutationResult {
-	lineStart := layout.MoveCursorLineStart(cursor)
-	if lineStart == cursor {
-		return MutationResult{NewText: text, CursorPos: cursor}
-	}
-	return MutationResult{
-		NewText:     text[:lineStart] + text[cursor:],
-		CursorPos:   lineStart,
-		DeletedText: text[lineStart:cursor],
-		RangeStart:  lineStart,
-		RangeEnd:    cursor,
-	}
+	c := clampIndex(cursor, len(text))
+	lineStart := clampIndex(layout.MoveCursorLineStart(c), len(text))
+	return deleteRange(text, lineStart, c, c)
 }
 
 // DeleteToLineEnd removes text from cursor to line end
 // (Cmd+Delete).
 func DeleteToLineEnd(text string, layout Layout, cursor int) MutationResult {
-	lineEnd := layout.MoveCursorLineEnd(cursor)
-	if lineEnd == cursor {
-		return MutationResult{NewText: text, CursorPos: cursor}
-	}
-	return MutationResult{
-		NewText:     text[:cursor] + text[lineEnd:],
-		CursorPos:   cursor,
-		DeletedText: text[cursor:lineEnd],
-		RangeStart:  cursor,
-		RangeEnd:    lineEnd,
-	}
+	c := clampIndex(cursor, len(text))
+	lineEnd := clampIndex(layout.MoveCursorLineEnd(c), len(text))
+	return deleteRange(text, c, lineEnd, c)
 }
 
 // DeleteSelection removes text between cursor and anchor.
@@ -150,7 +125,7 @@ func DeleteSelection(text string, cursor, anchor int) MutationResult {
 		CursorPos:   selStart,
 		DeletedText: text[selStart:selEnd],
 		RangeStart:  selStart,
-		RangeEnd:    selStart,
+		RangeEnd:    selEnd,
 	}
 }
 

@@ -189,35 +189,44 @@ func applyWordAttrs(text string, logAttrs []LogAttr, logAttrByIndex map[int]int)
 		return
 	}
 
-	// mark sets a flag at a byte offset, but only where the offset is a
-	// real caret stop. An offset with no map entry, or one whose attr is
-	// not a cursor position, lies inside a grapheme cluster — a ZWJ in an
+	// stop returns the attr index of the first caret stop at or after off,
+	// or -1. An offset with no map entry, or one whose attr is not a cursor
+	// position, lies inside a grapheme cluster or a ligature — a ZWJ in an
 	// emoji sequence classifies as punctuation, and must not be allowed to
-	// split the cluster into two words.
-	mark := func(off int, start bool) {
-		idx, ok := logAttrByIndex[off]
-		if !ok || idx < 0 || idx >= len(logAttrs) {
-			return
+	// split the cluster into two words. Such a boundary moves forward to
+	// the cluster's end.
+	stop := func(off int) (int, int) {
+		for ; off <= len(text); off++ {
+			idx, ok := logAttrByIndex[off]
+			if ok && idx >= 0 && idx < len(logAttrs) &&
+				logAttrs[idx].IsCursorPosition {
+				return off, idx
+			}
 		}
-		if !logAttrs[idx].IsCursorPosition {
-			return
-		}
-		if start {
-			logAttrs[idx].IsWordStart = true
-		} else {
-			logAttrs[idx].IsWordEnd = true
-		}
+		return -1, -1
 	}
 
 	// Every non-whitespace run is a word: it opens at its first byte and
 	// ends at the byte one past its last, which for a run reaching the
 	// end of the text is len(text) — the end-of-text attr every layout
 	// builder appends.
+	//
+	// Both bounds move forward to a caret stop, so the starts and the ends
+	// stay in step: word k is [start k, end k), which GetWordAtIndex
+	// relies on. Moving only one bound, or dropping it, would pair each
+	// start with the wrong end. A run that shrinks to nothing (it is
+	// wholly inside one cluster) is not a word.
 	wordRuns(text, func(start, end int, space bool) bool {
-		if !space {
-			mark(start, true)
-			mark(end, false)
+		if space {
+			return true
 		}
+		s, si := stop(start)
+		e, ei := stop(end)
+		if si < 0 || ei < 0 || s >= e {
+			return true
+		}
+		logAttrs[si].IsWordStart = true
+		logAttrs[ei].IsWordEnd = true
 		return true
 	})
 }

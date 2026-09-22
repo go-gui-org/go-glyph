@@ -10,6 +10,10 @@ const (
 	// MaxTextLength is the maximum text input length (10KB) for
 	// DoS prevention.
 	MaxTextLength = 10240
+	// MaxRichTextLength is the maximum total length (1 MiB) of all runs of
+	// a RichText, for DoS prevention. Each run is also limited to
+	// MaxTextLength.
+	MaxRichTextLength = 1 << 20
 	// MaxTextureDimension is the maximum texture size in pixels.
 	MaxTextureDimension = 16384
 	// MinFontSize is the minimum font size in points.
@@ -57,4 +61,26 @@ func ValidateDimension(dim int, name, location string) error {
 			name, dim, MaxTextureDimension, location)
 	}
 	return nil
+}
+
+// validateRichRuns checks every non-empty run of rt with ValidateTextInput
+// and bounds the total length by MaxRichTextLength. It returns the total
+// length. Empty runs are allowed: they contribute no text.
+func validateRichRuns(rt RichText) (int, error) {
+	total := 0
+	for _, run := range rt.Runs {
+		if run.Text == "" {
+			continue
+		}
+		if err := ValidateTextInput(run.Text, MaxTextLength,
+			"LayoutRichText"); err != nil {
+			return 0, err
+		}
+		total += len(run.Text)
+		if total > MaxRichTextLength {
+			return 0, fmt.Errorf("rich text exceeds max length %d bytes at %s",
+				MaxRichTextLength, "LayoutRichText")
+		}
+	}
+	return total, nil
 }
