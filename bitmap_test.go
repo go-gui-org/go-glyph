@@ -219,6 +219,109 @@ func TestScaleBitmapBicubicOverflowDimensions(t *testing.T) {
 	}
 }
 
+func TestScaleBitmapBicubicShortSrc(t *testing.T) {
+	// 2x2 claimed but only one pixel present: must refuse rather than
+	// interpolate zeros at the clamped edges.
+	if got := ScaleBitmapBicubic([]byte{1, 2, 3, 4}, 2, 2, 2, 2); got != nil {
+		t.Errorf("expected nil for short src, got %d bytes", len(got))
+	}
+	if got := ScaleBitmapBicubic(nil, 2, 2, 2, 2); got != nil {
+		t.Error("expected nil for nil src with nonzero dimensions")
+	}
+}
+
+func TestScaleBitmapBicubicOver1GB(t *testing.T) {
+	src := []byte{255, 255, 255, 255}
+	// 20000x20000x4 = 1.6GB: under MaxInt32 but over the 1GB cap.
+	if got := ScaleBitmapBicubic(src, 1, 1, 20000, 20000); got != nil {
+		t.Error("expected nil for dst exceeding the 1GB limit")
+	}
+}
+
+func TestCheckAllocationSizeInt64Overflow(t *testing.T) {
+	// The naive int64 product wraps to a small positive here; the
+	// validator must still reject it.
+	if _, err := checkAllocationSize(1<<32, 1<<32, 4); err == nil {
+		t.Error("expected error for wrapping dimensions")
+	}
+	if _, err := checkAllocationSize(1, 1, 0); err == nil {
+		t.Error("expected error for zero channels")
+	}
+}
+
+func TestFitGlyphDims(t *testing.T) {
+	w, h, s := fitGlyphDims(512, 100)
+	if w != 256 || h != 50 || s != 0.5 {
+		t.Errorf("fit(512,100) = %dx%d s=%v, want 256x50 s=0.5", w, h, s)
+	}
+	w, h, s = fitGlyphDims(100, 100)
+	if w != 100 || h != 100 || s != 1 {
+		t.Errorf("fit(100,100) = %dx%d s=%v, want unchanged", w, h, s)
+	}
+	if got := scaleOffset(-30, 0.5); got != -15 {
+		t.Errorf("scaleOffset(-30, 0.5) = %d, want -15", got)
+	}
+}
+
+func TestValidRenderSize(t *testing.T) {
+	for _, s := range []float64{0, -1, math.NaN(), math.Inf(1), math.Inf(-1), 1 << 21} {
+		if validRenderSize(s) {
+			t.Errorf("validRenderSize(%v) = true, want false", s)
+		}
+	}
+	if !validRenderSize(16) {
+		t.Error("validRenderSize(16) = false, want true")
+	}
+}
+
+func TestScaleBitmapBicubicMidpoint(t *testing.T) {
+	// 2x1 black-to-white gradient downscaled to 1x1 must sample the
+	// texel center (mid gray), proving center-aligned sampling.
+	src := []byte{0, 0, 0, 255, 255, 255, 255, 255}
+	dst := ScaleBitmapBicubic(src, 2, 1, 1, 1)
+	if dst == nil {
+		t.Fatal("nil result")
+	}
+	if absDiffByte(dst[0], 128) > 2 || dst[3] != 255 {
+		t.Errorf("midpoint = (%d,%d,%d,%d), want ~(128,128,128,255)",
+			dst[0], dst[1], dst[2], dst[3])
+	}
+}
+
+func TestCopyBitmapToPageRejectsChannels(t *testing.T) {
+	b := newMockBackend()
+	atlas, err := NewGlyphAtlas(b, 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+	bmp := Bitmap{Width: 2, Height: 2, Channels: 3, Data: make([]byte, 2*2*4)}
+	if err := copyBitmapToPage(&atlas.Pages[0], bmp, 0, 0); err == nil {
+		t.Error("expected error for Channels != 4")
+	}
+}
+
+func TestEnsureGuardsReturnNil(t *testing.T) {
+	b := newMockBackend()
+	atlas, err := NewGlyphAtlas(b, 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+	if atlas.ensureAlpha(0, 4) != nil {
+		t.Error("ensureAlpha(0,4) should be nil")
+	}
+	if atlas.ensureRGBA(-1, 4) != nil {
+		t.Error("ensureRGBA(-1,4) should be nil")
+	}
+	if atlas.ensureRasterizer(0, 0) != nil {
+		t.Error("ensureRasterizer(0,0) should be nil")
+	}
+	if atlas.ensureAlpha(1<<32, 1<<32) != nil {
+		t.Error("ensureAlpha(huge) should be nil")
+	}
+}
+
 func BenchmarkScaleBitmapBicubic(b *testing.B) {
 	src := make([]byte, 32*32*4)
 	for i := range src {

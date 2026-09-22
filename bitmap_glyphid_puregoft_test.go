@@ -4,7 +4,14 @@ package glyph
 
 import (
 	"bytes"
+	"image"
+	"image/color"
+	"math"
 	"testing"
+
+	ot "github.com/go-text/typesetting/font/opentype"
+	"github.com/go-text/typesetting/font/opentype/tables"
+	"golang.org/x/image/vector"
 )
 
 // resolveTestGlyph loads the default font, shapes a single-glyph string, and
@@ -90,6 +97,157 @@ func TestRenderGlyphByIDStrokedMatchesShaped(t *testing.T) {
 	}
 	if !bytes.Equal(byID.data, shaped.data) {
 		t.Error("stroked pixel data mismatch between by-id and shaped")
+	}
+}
+
+// TestRenderGlyphByIDHugeStrokeRefuses checks that a stroke radius too large
+// to fit in an int (or infinite) refuses cleanly. The bounds are float64;
+// converting an out-of-range float to int is implementation-defined in Go
+// (it gives MinInt64 on amd64), so the raw w0/h0 math could wrap to a small
+// positive size and render garbage instead of refusing.
+func TestRenderGlyphByIDHugeStrokeRefuses(t *testing.T) {
+	path, size, gid := resolveTestGlyph(t, "H")
+	for _, sw := range []float64{math.Inf(1), 1e300, 1e12} {
+		if got := renderGlyphByID(nil, path, size, sw, 0, gid); got != nil {
+			t.Errorf("strokeWidth %g: got %dx%d bitmap, want refusal",
+				sw, got.w, got.h)
+		}
+	}
+}
+
+// TestRenderGlyphByIDOversizeDownscales checks that ink larger than
+// MaxGlyphSize is shrunk to fit, not cropped to the top-left 256px, and that
+// ink beyond maxNaturalGlyphDim refuses instead of allocating a huge buffer.
+func TestRenderGlyphByIDOversizeDownscales(t *testing.T) {
+	path, _, gid := resolveTestGlyph(t, "H")
+	for _, atlasOn := range []bool{false, true} {
+		var atlas *GlyphAtlas
+		if atlasOn {
+			a, err := NewGlyphAtlas(newMockBackend(), 64, 64)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer a.Free()
+			atlas = a
+		}
+		got := renderGlyphByID(atlas, path, 600, 0, 0, gid)
+		if got == nil {
+			t.Fatalf("atlas=%v: 600px H refused, want downscaled cell", atlasOn)
+		}
+		if got.w > MaxGlyphSize || got.h > MaxGlyphSize {
+			t.Errorf("atlas=%v: cell %dx%d exceeds MaxGlyphSize", atlasOn, got.w, got.h)
+		}
+		// A cropped H fills its 256px cell to the edge; a downscaled one
+		// keeps the aspect, so exactly one side reaches MaxGlyphSize.
+		if max(got.w, got.h) != MaxGlyphSize {
+			t.Errorf("atlas=%v: cell %dx%d, want longest side %d",
+				atlasOn, got.w, got.h, MaxGlyphSize)
+		}
+		if len(got.data) < got.w*got.h*4 {
+			t.Errorf("atlas=%v: data %d bytes, want >= %d", atlasOn,
+				len(got.data), got.w*got.h*4)
+		}
+	}
+	if got := renderGlyphByID(nil, path, 5000, 0, 0, gid); got != nil {
+		t.Errorf("5000px H: got %dx%d, want refusal past maxNaturalGlyphDim",
+			got.w, got.h)
+	}
+}
+
+// TestRenderGlyphByIDBadStrokeRendersFilled checks that a negative or NaN
+// stroke width renders the plain filled glyph, the same as width 0.
+func TestRenderGlyphByIDBadStrokeRendersFilled(t *testing.T) {
+	path, size, gid := resolveTestGlyph(t, "H")
+	want := renderGlyphByID(nil, path, size, 0, 0, gid)
+	if want == nil {
+		t.Fatal("filled H produced no ink")
+	}
+	for _, sw := range []float64{-2, math.NaN(), math.Inf(-1)} {
+		got := renderGlyphByID(nil, path, size, sw, 0, gid)
+		if got == nil || got.w != want.w || got.h != want.h ||
+			!bytes.Equal(got.data, want.data) {
+			t.Errorf("strokeWidth %g: output differs from the filled glyph", sw)
+		}
+	}
+}
+
+// TestRenderGlyphByIDInvalidSizeRefuses checks that zero, negative, NaN and
+// infinite font sizes refuse before they reach the shaping and raster math.
+func TestRenderGlyphByIDInvalidSizeRefuses(t *testing.T) {
+	path, _, gid := resolveTestGlyph(t, "H")
+	for _, s := range []float64{0, -12, math.NaN(), math.Inf(1)} {
+		if got := renderGlyphByID(nil, path, s, 0, 0, gid); got != nil {
+			t.Errorf("size %g: got %dx%d, want refusal", s, got.w, got.h)
+		}
+	}
+}
+
+// TestAddOutlineSkipsContourWithoutMoveTo checks that segments before the
+// first MoveTo (a malformed font) are dropped, not drawn from the origin.
+func TestAddOutlineSkipsContourWithoutMoveTo(t *testing.T) {
+	seg := func(op ot.SegmentOp, x, y float32) ot.Segment {
+		return ot.Segment{Op: op, Args: [3]ot.SegmentPoint{{X: x, Y: y}}}
+	}
+	mapPt := func(_ placedGlyph, fx, fy float32) (float64, float64) {
+		return float64(fx), float64(fy)
+	}
+	// Only stray LineTos: nothing may be drawn.
+	g := placedGlyph{segs: []ot.Segment{
+		seg(ot.SegmentOpLineTo, 8, 0),
+		seg(ot.SegmentOpLineTo, 8, 8),
+	}}
+	rz := vector.NewRasterizer(16, 16)
+	addOutline(rz, g, mapPt, 4, 4)
+	dst := image.NewAlpha(image.Rect(0, 0, 16, 16))
+	rz.Draw(dst, dst.Bounds(), image.Opaque, image.Point{})
+	for _, a := range dst.Pix {
+		if a != 0 {
+			t.Fatal("contour without MoveTo produced ink")
+		}
+	}
+}
+
+// TestLoadBoxGlyphFTInvalidDims checks that a degenerate box cell is a
+// no-op (empty result, no error, no panic) and that a cell too large to
+// allocate returns an error.
+func TestLoadBoxGlyphFTInvalidDims(t *testing.T) {
+	atlas, err := NewGlyphAtlas(newMockBackend(), 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atlas.Free()
+	for _, m := range []boxMetrics{{cp: 0x2500, cellW: 0, cellH: 10},
+		{cp: 0x2500, cellW: 10, cellH: -1}} {
+		res, err := loadBoxGlyphFT(atlas, m)
+		if err != nil || res != (LoadGlyphResult{}) {
+			t.Errorf("%dx%d: got (%+v, %v), want empty no-op", m.cellW, m.cellH, res, err)
+		}
+	}
+	huge := boxMetrics{cp: 0x2500, cellW: 1 << 20, cellH: 1 << 20}
+	if _, err := loadBoxGlyphFT(atlas, huge); err == nil {
+		t.Error("huge cell: want allocation error")
+	}
+}
+
+// TestPaletteColorForeground verifies the 0xFFFF "use text foreground"
+// COLR index resolves to the run's text color, falling back to opaque
+// black only when no color was set, and that real/out-of-range palette
+// indices resolve normally.
+func TestPaletteColorForeground(t *testing.T) {
+	fg := color.NRGBA{R: 10, G: 20, B: 30, A: 255}
+	if got := paletteColor(nil, 0xFFFF, fg); got != fg {
+		t.Errorf("0xFFFF = %+v, want fg %+v", got, fg)
+	}
+	if got := paletteColor(nil, 0xFFFF, color.NRGBA{}); got != (color.NRGBA{A: 255}) {
+		t.Errorf("transparent fg fallback = %+v, want opaque black", got)
+	}
+	pal := []tables.ColorRecord{{Red: 1, Green: 2, Blue: 3, Alpha: 4}}
+	want := color.NRGBA{R: 1, G: 2, B: 3, A: 4}
+	if got := paletteColor(pal, 0, fg); got != want {
+		t.Errorf("palette[0] = %+v, want %+v", got, want)
+	}
+	if got := paletteColor(pal, 7, fg); got != (color.NRGBA{A: 255}) {
+		t.Errorf("out-of-range index = %+v, want opaque black", got)
 	}
 }
 

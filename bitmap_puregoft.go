@@ -31,6 +31,12 @@ import (
 // ink bounds so anti-aliased edges are not clipped in the atlas.
 const glyphBitmapPad = 2
 
+// maxEmbeddedBitmapBytes caps the compressed size of an embedded CBDT/sbix
+// bitmap accepted for decoding. Real strikes are tens to hundreds of KB;
+// beyond this the entry is hostile or corrupt, and decoding it risks a
+// decompression bomb.
+const maxEmbeddedBitmapBytes = 16 << 20
+
 // Render-side singletons, populated by NewContext. They mirror the
 // singletons the cgo backend exposed so the shared renderer code is
 // unchanged.
@@ -76,7 +82,9 @@ func loadGlyphFT(atlas *GlyphAtlas, ch string, runText string,
 				res = r
 				break
 			}
-			if r, ok := renderCOLRGlyph(atlas, fp, fontSize, ch); ok {
+			fg := color.NRGBA{R: item.Color.R, G: item.Color.G,
+				B: item.Color.B, A: item.Color.A}
+			if r, ok := renderCOLRGlyph(atlas, fp, fontSize, ch, fg); ok {
 				res = r
 				break
 			}
@@ -354,8 +362,16 @@ func rasterizeGlyphs(atlas *GlyphAtlas, cf *cachedFace, size, strokeWidth float6
 	if len(glyphs) == 0 {
 		return nil, false
 	}
+	if cf == nil || !validRenderSize(size) {
+		return nil, false
+	}
 	scale := size / float64(nonZeroUpem(cf.upem))
+	// A negative or NaN stroke radius is meaningless; render filled.
+	// A huge or +Inf radius is refused by the span check below.
 	strokeR := strokeWidth
+	if !(strokeR >= 0) {
+		strokeR = 0
+	}
 
 	// Map a font-unit point (Y up) to baseline-relative device px (Y down).
 	mapPt := func(g placedGlyph, fx, fy float32) (dx, dy float64) {
@@ -385,33 +401,64 @@ func rasterizeGlyphs(atlas *GlyphAtlas, cf *cachedFace, size, strokeWidth float6
 		maxDx += strokeR
 		maxDy += strokeR
 	}
+	// Refuse in float space, before the int conversions below. Go gives an
+	// implementation-defined result when it converts an out-of-range float
+	// (such as the bounds of an +Inf or 1e300 stroke) to int. The
+	// resulting w0/h0 can wrap to a small positive size and pass the
+	// maxNaturalGlyphDim check. The negated <= also catches NaN.
+	if !(maxDx-minDx <= maxNaturalGlyphDim && maxDy-minDy <= maxNaturalGlyphDim) {
+		return nil, false
+	}
 
 	left := int(math.Floor(minDx)) - glyphBitmapPad
 	topEdge := int(math.Floor(minDy)) - glyphBitmapPad
-	w := int(math.Ceil(maxDx)) - left + glyphBitmapPad
-	h := int(math.Ceil(maxDy)) - topEdge + glyphBitmapPad
-	w, h = clampBitmapDim(w), clampBitmapDim(h)
+	w0 := int(math.Ceil(maxDx)) - left + glyphBitmapPad
+	h0 := int(math.Ceil(maxDy)) - topEdge + glyphBitmapPad
+
+	// One emit closure serves both paths below so the outline logic
+	// cannot drift between the fast and oversize renders.
+	emit := func(rz *vector.Rasterizer, offX, offY float64) {
+		for _, g := range glyphs {
+			if strokeR > 0 {
+				addStrokedOutline(rz, g, mapPt, offX, offY, strokeR)
+			} else {
+				addOutline(rz, g, mapPt, offX, offY)
+			}
+		}
+	}
+
+	// Oversized ink renders at natural size into local buffers and
+	// downscales to MaxGlyphSize, preserving the glyph instead of
+	// cropping to the top-left 256px.
+	if w0 > MaxGlyphSize || h0 > MaxGlyphSize {
+		return rasterizeGlyphsOversize(emit, left, topEdge, w0, h0)
+	}
+	w, h := clampBitmapDim(w0), clampBitmapDim(h0)
 
 	var rz *vector.Rasterizer
 	if atlas != nil {
 		rz = atlas.ensureRasterizer(w, h)
+		if rz == nil {
+			return nil, false
+		}
 	} else {
 		rz = vector.NewRasterizer(w, h)
 	}
 	rz.DrawOp = draw.Src
 	offX, offY := float64(-left), float64(-topEdge)
-	for _, g := range glyphs {
-		if strokeR > 0 {
-			addStrokedOutline(rz, g, mapPt, offX, offY, strokeR)
-		} else {
-			addOutline(rz, g, mapPt, offX, offY)
-		}
-	}
+	emit(rz, offX, offY)
 
 	if atlas != nil {
 		alpha := atlas.ensureAlpha(w, h)
+		if alpha == nil {
+			return nil, false
+		}
 		rz.Draw(alpha, alpha.Bounds(), image.Opaque, image.Point{})
-		data := atlas.ensureRGBA(w, h).Pix
+		rgba := atlas.ensureRGBA(w, h)
+		if rgba == nil {
+			return nil, false
+		}
+		data := rgba.Pix
 		for i, a := range alpha.Pix {
 			o := i * 4
 			data[o+0] = 255
@@ -436,6 +483,57 @@ func rasterizeGlyphs(atlas *GlyphAtlas, cf *cachedFace, size, strokeWidth float6
 	return &rasterResult{data: data, w: w, h: h, left: left, top: -topEdge}, false
 }
 
+// rasterizeGlyphsOversize renders ink larger than MaxGlyphSize at its
+// natural size into local buffers (never atlas scratch, which is
+// grow-only and must not absorb a one-off giant), then downscales to
+// fit. Bearings scale with the bitmap so the shrunken cell stays
+// aligned to its pen origin. Beyond maxNaturalGlyphDim it refuses with
+// (nil, false) — the caller caches a blank glyph instead of
+// allocating tens of MB for one glyph.
+func rasterizeGlyphsOversize(emit func(rz *vector.Rasterizer, offX, offY float64),
+	left, topEdge, w0, h0 int) (*rasterResult, bool) {
+
+	if w0 > maxNaturalGlyphDim || h0 > maxNaturalGlyphDim {
+		return nil, false
+	}
+	if _, err := checkAllocationSize(w0, h0, 4); err != nil {
+		return nil, false
+	}
+	rz := vector.NewRasterizer(w0, h0)
+	rz.DrawOp = draw.Src
+	offX, offY := float64(-left), float64(-topEdge)
+	emit(rz, offX, offY)
+
+	alpha := image.NewAlpha(image.Rect(0, 0, w0, h0))
+	rz.Draw(alpha, alpha.Bounds(), image.Opaque, image.Point{})
+
+	pix := make([]byte, w0*h0*4)
+	for i, a := range alpha.Pix {
+		o := i * 4
+		pix[o+0] = 255
+		pix[o+1] = 255
+		pix[o+2] = 255
+		pix[o+3] = a
+	}
+	out, dstW, dstH, s := downscaleGlyph(pix, w0, h0)
+	if out == nil {
+		return nil, false
+	}
+	return &rasterResult{data: out, w: dstW, h: dstH,
+		left: scaleOffset(left, s), top: scaleOffset(-topEdge, s)}, false
+}
+
+// downscaleGlyph shrinks a w0 x h0 RGBA buffer to fit MaxGlyphSize and
+// returns the new pixels, their size, and the applied scale (for the
+// bearings). The result is a fresh buffer, not atlas scratch: copying it
+// into scratch would only add a copy, because insertRaster copies it
+// again. A nil out means the scale failed.
+func downscaleGlyph(pix []byte, w0, h0 int) (out []byte, w, h int, s float64) {
+	w, h, s = fitGlyphDims(w0, h0)
+	out = ScaleBitmapBicubic(pix, w0, h0, w, h)
+	return out, w, h, s
+}
+
 // addOutline feeds one glyph's contours to the rasterizer, closing each
 // subpath (font outlines are implicitly closed).
 func addOutline(rz *vector.Rasterizer, g placedGlyph,
@@ -449,6 +547,12 @@ func addOutline(rz *vector.Rasterizer, g placedGlyph,
 	started := false
 	for si := range g.segs {
 		seg := g.segs[si]
+		// A contour without an opening MoveTo (malformed font) has no
+		// defined start point; dropping its segments beats drawing
+		// from the rasterizer origin.
+		if seg.Op != ot.SegmentOpMoveTo && !started {
+			continue
+		}
 		switch seg.Op {
 		case ot.SegmentOpMoveTo:
 			if started {
@@ -481,6 +585,9 @@ func addOutline(rz *vector.Rasterizer, g placedGlyph,
 // spike: the glyph is placed as a full-ascent cell (left=0, top=height);
 // the renderer scales it into the emoji cell.
 func renderColorGlyph(atlas *GlyphAtlas, path string, size float64, text string) (*rasterResult, bool) {
+	if !validRenderSize(size) {
+		return nil, false
+	}
 	cf := loadCachedFace(path)
 	if cf == nil {
 		return nil, false
@@ -496,35 +603,62 @@ func renderColorGlyph(atlas *GlyphAtlas, path string, size float64, text string)
 		return nil, false
 	}
 
-	// SetPpem selects the bitmap strike and mutates the shared face, so the
-	// SetPpem+GlyphData pair must be atomic against other color renders of
-	// the same cached face (possibly on another Context/goroutine).
-	ppem := uint16(size + 0.5)
-	if ppem == 0 {
-		ppem = 1
-	}
+	// SetPpem selects the bitmap strike and mutates the shared face, so
+	// the SetPpem+GlyphData pair runs under mu against concurrent
+	// renders of the same cached face from another Context. The bitmap
+	// bytes are copied under the same lock: GlyphData may alias face
+	// internals that the next SetPpem invalidates, so decoding must use
+	// the copy, outside the lock. ppem is clamped to the uint16 range
+	// instead of wrapping on absurd sizes.
+	ppem := uint16(min(size+0.5, 65535))
 	cf.mu.Lock()
 	cf.face.SetPpem(ppem, ppem)
 	gd := cf.face.GlyphData(gid)
+	var pngData []byte
+	if gb, ok := gd.(font.GlyphBitmap); ok && gb.Format == font.PNG &&
+		len(gb.Data) > 0 && len(gb.Data) <= maxEmbeddedBitmapBytes {
+		pngData = append([]byte(nil), gb.Data...)
+	}
 	cf.mu.Unlock()
-
-	gb, ok := gd.(font.GlyphBitmap)
-	if !ok || len(gb.Data) == 0 || gb.Format != font.PNG {
+	if pngData == nil {
 		return nil, false
 	}
-	img, err := png.Decode(bytes.NewReader(gb.Data))
+
+	// Read the header first. png.Decode allocates the full pixel buffer
+	// from the header dimensions, so a small hostile PNG that claims
+	// 65535x65535 would allocate ~16GB before the size check below runs.
+	cfg, err := png.DecodeConfig(bytes.NewReader(pngData))
+	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 ||
+		cfg.Width > maxNaturalGlyphDim || cfg.Height > maxNaturalGlyphDim {
+		return nil, false
+	}
+	img, err := png.Decode(bytes.NewReader(pngData))
 	if err != nil {
 		return nil, false
 	}
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
-	if w == 0 || h == 0 {
+	if w <= 0 || h <= 0 {
 		return nil, false
 	}
-	w, h = clampBitmapDim(w), clampBitmapDim(h)
+	// Oversized strikes downscale to MaxGlyphSize instead of cropping
+	// to the top-left 256px.
+	if w > MaxGlyphSize || h > MaxGlyphSize {
+		// DecodeConfig above already capped w and h at maxNaturalGlyphDim.
+		full := image.NewRGBA(image.Rect(0, 0, w, h))
+		draw.Draw(full, full.Bounds(), img, b.Min, draw.Src)
+		out, dstW, dstH, _ := downscaleGlyph(full.Pix, w, h)
+		if out == nil {
+			return nil, false
+		}
+		return &rasterResult{data: out, w: dstW, h: dstH, left: 0, top: dstH}, true
+	}
 	var rgba *image.RGBA
 	if atlas != nil {
 		rgba = atlas.ensureRGBA(w, h)
+		if rgba == nil {
+			return nil, false
+		}
 	} else {
 		rgba = image.NewRGBA(image.Rect(0, 0, w, h))
 	}
@@ -538,10 +672,16 @@ func renderColorGlyph(atlas *GlyphAtlas, path string, size float64, text string)
 // Windows' Segoe UI Emoji uses — for the first shaped glyph of text. Each
 // layer is an outline glyph filled with a solid color drawn from palette 0
 // of the CPAL table; layers paint bottom-to-top with source-over
-// compositing, yielding a premultiplied-alpha RGBA cell. Returns false when
-// the font has no COLR v0 entry for the glyph (bitmap or COLR v1 emoji, or a
-// plain text font), so the caller can try the next fallback.
-func renderCOLRGlyph(atlas *GlyphAtlas, path string, size float64, text string) (*rasterResult, bool) {
+// compositing, yielding a premultiplied-alpha RGBA cell. fg is the run's
+// text color, used for layers referencing the 0xFFFF "foreground" palette
+// index. Returns false when the font has no COLR v0 entry for the glyph
+// (bitmap or COLR v1 emoji, or a plain text font), so the caller can try
+// the next fallback.
+func renderCOLRGlyph(atlas *GlyphAtlas, path string, size float64, text string,
+	fg color.NRGBA) (*rasterResult, bool) {
+	if !validRenderSize(size) {
+		return nil, false
+	}
 	cf := loadCachedFace(path)
 	if cf == nil || cf.face.COLR == nil || len(cf.face.CPAL) == 0 {
 		return nil, false
@@ -582,7 +722,7 @@ func renderCOLRGlyph(atlas *GlyphAtlas, path string, size float64, text string) 
 		}
 		cls = append(cls, coloredLayer{
 			g:   placedGlyph{segs: out.Segments},
-			col: paletteColor(palette, layer.PaletteIndex),
+			col: paletteColor(palette, layer.PaletteIndex, fg),
 		})
 	}
 	if len(cls) == 0 {
@@ -613,24 +753,42 @@ func renderCOLRGlyph(atlas *GlyphAtlas, path string, size float64, text string) 
 
 	left := int(math.Floor(minDx)) - glyphBitmapPad
 	topEdge := int(math.Floor(minDy)) - glyphBitmapPad
-	w := int(math.Ceil(maxDx)) - left + glyphBitmapPad
-	h := int(math.Ceil(maxDy)) - topEdge + glyphBitmapPad
-	w, h = clampBitmapDim(w), clampBitmapDim(h)
+	w0 := int(math.Ceil(maxDx)) - left + glyphBitmapPad
+	h0 := int(math.Ceil(maxDy)) - topEdge + glyphBitmapPad
+	w, h := clampBitmapDim(w0), clampBitmapDim(h0)
+	// Oversized output renders at natural size into local buffers and
+	// downscales below, so ink is preserved instead of cropped. Beyond
+	// maxNaturalGlyphDim the glyph refuses (blank cell) rather than
+	// allocating tens of MB for one glyph.
+	oversize := w0 > MaxGlyphSize || h0 > MaxGlyphSize
+	if oversize {
+		if w0 > maxNaturalGlyphDim || h0 > maxNaturalGlyphDim {
+			return nil, false
+		}
+		w, h = w0, h0
+	}
+	local := atlas == nil || oversize
 
 	var acc *image.RGBA
-	if atlas != nil {
+	if !local {
 		acc = atlas.ensureRGBA(w, h)
+		if acc == nil {
+			return nil, false
+		}
 		clear(acc.Pix)
 	} else {
 		acc = image.NewRGBA(image.Rect(0, 0, w, h))
 	}
 	var rz *vector.Rasterizer
-	if atlas != nil {
+	if !local {
 		rz = atlas.ensureRasterizer(w, h)
+		if rz == nil {
+			return nil, false
+		}
 	}
 	offX, offY := float64(-left), float64(-topEdge)
 	for _, cl := range cls {
-		if atlas != nil {
+		if !local {
 			rz.Reset(w, h)
 		} else {
 			rz = vector.NewRasterizer(w, h)
@@ -638,8 +796,11 @@ func renderCOLRGlyph(atlas *GlyphAtlas, path string, size float64, text string) 
 		rz.DrawOp = draw.Src
 		addOutline(rz, cl.g, mapPt, offX, offY)
 		var mask *image.Alpha
-		if atlas != nil {
+		if !local {
 			mask = atlas.ensureAlpha(w, h)
+			if mask == nil {
+				return nil, false
+			}
 		} else {
 			mask = image.NewAlpha(image.Rect(0, 0, w, h))
 		}
@@ -647,14 +808,29 @@ func renderCOLRGlyph(atlas *GlyphAtlas, path string, size float64, text string) 
 		draw.DrawMask(acc, acc.Bounds(), image.NewUniform(cl.col),
 			image.Point{}, mask, image.Point{}, draw.Over)
 	}
+	if oversize {
+		out, dstW, dstH, s := downscaleGlyph(acc.Pix, w0, h0)
+		if out == nil {
+			return nil, false
+		}
+		return &rasterResult{data: out, w: dstW, h: dstH,
+			left: scaleOffset(left, s), top: scaleOffset(-topEdge, s)}, true
+	}
 	return &rasterResult{data: acc.Pix, w: w, h: h, left: left, top: -topEdge}, true
 }
 
 // paletteColor resolves a CPAL entry to a straight-alpha color. The special
-// index 0xFFFF ("use text foreground") has no standalone color; color emoji
-// rarely use it, so it falls back to opaque black.
-func paletteColor(palette []tables.ColorRecord, idx uint16) color.NRGBA {
-	if idx == 0xFFFF || int(idx) >= len(palette) {
+// index 0xFFFF ("use text foreground") resolves to fg, the run's text
+// color; a fully transparent fg means no color was set, so it falls back
+// to opaque black to keep the layer visible.
+func paletteColor(palette []tables.ColorRecord, idx uint16, fg color.NRGBA) color.NRGBA {
+	if idx == 0xFFFF {
+		if fg.A == 0 {
+			return color.NRGBA{A: 255}
+		}
+		return fg
+	}
+	if int(idx) >= len(palette) {
 		return color.NRGBA{A: 255}
 	}
 	rec := palette[idx]
@@ -664,19 +840,25 @@ func paletteColor(palette []tables.ColorRecord, idx uint16) color.NRGBA {
 // shapeWith shapes text with a harfbuzz font borrowed from the face pool,
 // scaled so positions are in 26.6 fixed-point pixels. The returned buffer is
 // pooled; callers hand it back with releaseShapeBuffer when done reading
-// Info/Pos (skipping the release is safe but forgoes reuse).
+// Info/Pos (skipping the release is safe but forgoes reuse). A nil return
+// means the size is unusable (see validRenderSize) or shaping produced
+// nothing; callers already nil-check.
 func shapeWith(cf *cachedFace, size float64, text string) *harfbuzz.Buffer {
+	if cf == nil || !validRenderSize(size) {
+		return nil
+	}
 	return shapeBuffer(cf, int32(math.Round(size*64)), text)
 }
 
-// clampBitmapDim keeps a bitmap dimension within the same 1..256 range
-// the cgo path enforced.
+// clampBitmapDim keeps a bitmap dimension within the 1..MaxGlyphSize
+// range. It is a backstop; the raster paths branch to downscaling
+// before it could clip.
 func clampBitmapDim(v int) int {
 	if v < 1 {
 		return 1
 	}
-	if v > 256 {
-		return 256
+	if v > MaxGlyphSize {
+		return MaxGlyphSize
 	}
 	return v
 }
@@ -693,7 +875,8 @@ type vec2 struct{ x, y float64 }
 
 // flattenTol is the maximum curve-to-chord deviation (device px) tolerated
 // before a Bézier segment is subdivided. discSegs sets the round join/cap
-// smoothness. flattenDepth caps subdivision recursion.
+// smoothness. flattenDepth caps subdivision recursion at 2^12 points per
+// curve, which bounds the stroke primitive count for any single contour.
 const (
 	flattenTol   = 0.2
 	discSegs     = 16
@@ -784,14 +967,15 @@ func emitSeg(rz *vector.Rasterizer, a, b vec2, radius float64) {
 }
 
 // emitDisc emits a regular polygon approximating a filled circle, used for
-// round joins and caps.
+// round joins and caps. The polygon lives on the stack: stroking emits one
+// disc per vertex, and a heap allocation per vertex showed up in profiles.
 func emitDisc(rz *vector.Rasterizer, c vec2, radius float64) {
-	poly := make([]vec2, discSegs)
-	for i := 0; i < discSegs; i++ {
+	var poly [discSegs]vec2
+	for i := range poly {
 		t := 2 * math.Pi * float64(i) / float64(discSegs)
 		poly[i] = vec2{c.x + radius*math.Cos(t), c.y + radius*math.Sin(t)}
 	}
-	emitPolygon(rz, poly)
+	emitPolygon(rz, poly[:])
 }
 
 // emitPolygon feeds one closed polygon to the rasterizer, forcing a positive

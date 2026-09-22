@@ -18,6 +18,7 @@ func loadBoxGlyphFT(atlas *GlyphAtlas, m boxMetrics) (LoadGlyphResult, error) {
 	// The scratch buffers are grow-only and reused across calls, so this
 	// path allocates nothing in steady state. ensureAlpha does not zero, and
 	// drawBoxGlyph only ever raises coverage, so clear first.
+	// The size checks above make the ensure calls non-nil.
 	cov := atlas.ensureAlpha(m.cellW, m.cellH).Pix
 	clear(cov)
 	drawBoxGlyph(cov, m)
