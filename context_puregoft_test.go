@@ -5,6 +5,7 @@ package glyph
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -28,11 +29,14 @@ func TestLinuxGenericAlias(t *testing.T) {
 		{"noto serif", "serif"},
 		{"some unknown font", ""},
 		{"", ""},
+		{"noto sans arabic", ""},
+		{"noto sans cjk jp", ""},
+		{"noto serif devanagari", ""},
 	}
 	for _, tt := range tests {
-		got := linuxGenericAlias(tt.family)
+		got, _, _ := platformAliases.lookup(tt.family)
 		if got != tt.want {
-			t.Errorf("linuxGenericAlias(%q) = %q, want %q",
+			t.Errorf("platformAliases.lookup(%q) = %q, want %q",
 				tt.family, got, tt.want)
 		}
 	}
@@ -528,5 +532,41 @@ func TestListFontFamiliesForwardReverse(t *testing.T) {
 	}
 	if got != 1 {
 		t.Errorf("Helvetica/HELVETICA folded to %d entries, want 1", got)
+	}
+}
+
+// TestLinuxFontDirs is the regression test for discovery walking relative
+// dirs when $HOME is unknown, and for ignoring the XDG Base Directory
+// variables (NixOS, Guix, and Flatpak put fonts outside /usr/share).
+func TestLinuxFontDirs(t *testing.T) {
+	tests := []struct {
+		name                     string
+		home, dataHome, dataDirs string
+		want                     []string
+	}{
+		{"defaults", "/h", "", "", []string{
+			"/h/.local/share/fonts", "/h/.fonts",
+			"/usr/local/share/fonts", "/usr/share/fonts"}},
+		{"no home", "", "", "", []string{
+			"/usr/local/share/fonts", "/usr/share/fonts"}},
+		{"xdg data home", "/h", "/x", "", []string{
+			"/x/fonts", "/h/.fonts",
+			"/usr/local/share/fonts", "/usr/share/fonts"}},
+		{"relative xdg data home ignored", "/h", "rel", "", []string{
+			"/h/.local/share/fonts", "/h/.fonts",
+			"/usr/local/share/fonts", "/usr/share/fonts"}},
+		{"xdg data dirs, deduped, relative dropped", "/h", "",
+			"/run/current-system/sw/share:rel::/usr/share/", []string{
+				"/h/.local/share/fonts", "/h/.fonts",
+				"/run/current-system/sw/share/fonts",
+				"/usr/share/fonts", "/usr/local/share/fonts"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := linuxFontDirs(tt.home, tt.dataHome, tt.dataDirs)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("linuxFontDirs = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

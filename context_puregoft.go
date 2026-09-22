@@ -5,6 +5,7 @@ package glyph
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -115,13 +116,11 @@ func NewContext(scaleFactor float32) (*Context, error) {
 		scaleFactor: scaleFactor,
 		scaleInv:    1.0 / scaleFactor,
 		metrics:     newMetricsCache(256),
-		fontPaths:   make(map[string]string),
-		fontWeights: make(map[string]font.Weight),
-		fontItalics: make(map[string]bool),
-		families:    make(map[string]string),
 		lang:        detectLang(),
 	}
 	setFTLib(ctx.ftLib)
+	// Fills fontPaths, fontWeights, fontItalics, families, colorPaths and
+	// fallbackPaths from the once-per-process system font scan.
 	ctx.discoverSystemFonts()
 	setFTFontPaths(ctx.fontPaths)
 	setFTScriptFallbacks(ctx.fallbackPaths)
@@ -416,27 +415,7 @@ func isEmojiFamily(lowerFamily string) bool {
 // isCJKFamily reports whether a lower-cased family name covers CJK
 // scripts, matching the common Linux CJK font packages.
 func isCJKFamily(lowerFamily string) bool {
-	// Needles are specific enough not to hit unrelated families: a bare
-	// "han" matched Khand and Chandas (Devanagari) and Hanuman (Khmer), and
-	// a bare "ipa" matched any name holding those letters, so those fonts
-	// landed in the CJK tier ahead of the script tier.
-	needles := []string{
-		"cjk", "source han", "han sans", "han serif",
-		"wenquanyi", "wqy", "uming", "ukai", "ar pl",
-		"noto sans jp", "noto serif jp",
-		"noto sans sc", "noto sans tc", "noto sans kr",
-		"droid sans fallback", "nanum",
-		"ipagothic", "ipamincho", "ipapgothic", "ipapmincho",
-		"ipaexgothic", "ipaexmincho", "ipa gothic", "ipa mincho",
-		"vl gothic", "takao",
-		"pingfang", "heiti", "hiragino",
-		"apple sd gothic neo", "applegothic",
-		"microsoft yahei", "microsoft jhenghei",
-		"malgun gothic", "meiryo", "yu gothic",
-		"batang", "simsun", "mingliu",
-		"ms gothic", "ms mincho",
-	}
-	for _, n := range needles {
+	for _, n := range cjkFamilyNeedles {
 		if strings.Contains(lowerFamily, n) {
 			return true
 		}
@@ -444,30 +423,56 @@ func isCJKFamily(lowerFamily string) bool {
 	return false
 }
 
+// cjkFamilyNeedles are the family-name substrings isCJKFamily matches. They
+// live at package level so each call does not rebuild the slice. Needles are
+// specific enough not to hit unrelated families: a bare "han" matched Khand
+// and Chandas (Devanagari) and Hanuman (Khmer), and a bare "ipa" matched any
+// name holding those letters, so those fonts landed in the CJK tier ahead of
+// the script tier.
+var cjkFamilyNeedles = []string{
+	"cjk", "source han", "han sans", "han serif",
+	"wenquanyi", "wqy", "uming", "ukai", "ar pl",
+	"noto sans jp", "noto serif jp",
+	"noto sans sc", "noto sans tc", "noto sans kr",
+	"droid sans fallback", "nanum",
+	"ipagothic", "ipamincho", "ipapgothic", "ipapmincho",
+	"ipaexgothic", "ipaexmincho", "ipa gothic", "ipa mincho",
+	"vl gothic", "takao",
+	"pingfang", "heiti", "hiragino",
+	"apple sd gothic neo", "applegothic",
+	"microsoft yahei", "microsoft jhenghei",
+	"malgun gothic", "meiryo", "yu gothic",
+	"batang", "simsun", "mingliu",
+	"ms gothic", "ms mincho",
+}
+
 // isScriptFamily reports whether a lower-cased family name belongs to a
 // font that covers one or more non-CJK, non-Latin scripts (Arabic, Hebrew,
 // Thai, Indic, etc.). These are collected as the lowest-priority fallback
 // tier so the layout engine can find glyphs the primary Latin font lacks.
 func isScriptFamily(lowerFamily string) bool {
-	needles := []string{
-		"arabic", "naskh", "geeza", "al nile",
-		"baghdad", "damascus", "kufi", "nadeem",
-		"hebrew", "corsiva", "peninim", "raanana",
-		"thai", "thonburi", "krungthep", "sathu", "silom",
-		"devanagari", "kohinoor", "sangam",
-		"gujarati", "gurmukhi", "kannada",
-		"malayalam", "oriya", "tamil", "telugu", "bengali",
-		"georgian", "armenian", "khmer", "lao",
-		"myanmar", "sinhala", "tibetan", "burmese",
-		"noto naskh", "noto sans arabic", "noto sans hebrew",
-		"noto sans thai", "noto sans devanagari", "noto sans tamil",
-	}
-	for _, n := range needles {
+	for _, n := range scriptFamilyNeedles {
 		if strings.Contains(lowerFamily, n) {
 			return true
 		}
 	}
 	return false
+}
+
+// scriptFamilyNeedles are the family-name substrings isScriptFamily
+// matches, kept at package level so each call does not rebuild the slice.
+var scriptFamilyNeedles = []string{
+	"arabic", "naskh", "geeza", "al nile",
+	"baghdad", "damascus", "kufi", "nadeem",
+	"hebrew", "corsiva", "peninim", "raanana",
+	"thai", "thonburi", "krungthep", "sathu", "silom",
+	"devanagari", "kohinoor", "sangam",
+	"gujarati", "gurmukhi", "kannada",
+	"malayalam", "oriya", "tamil", "telugu", "bengali",
+	"georgian", "armenian", "khmer", "lao",
+	"myanmar", "sinhala", "tibetan", "burmese",
+	"noto naskh", "noto sans arabic", "noto sans hebrew",
+	"noto sans thai", "noto sans devanagari", "noto sans tamil",
 }
 
 // fontScan accumulates discovery results across a directory walk. The
@@ -490,6 +495,10 @@ type fontScan struct {
 	// slots records where each family landed in a weight-preferring tier so a
 	// later, closer-to-Regular face of the same family can replace it in place.
 	slots map[string]*fallbackSlot
+	// aliasRank holds, per generic alias key, the aliasTable rank of the
+	// family now stored under that key. A family with a lower rank (more
+	// preferred) replaces it, whatever the walk order. See considerAlias.
+	aliasRank map[string]int
 }
 
 // fallbackSlot points at a family's entry in one fallback tier and remembers
@@ -508,14 +517,35 @@ func newFontScan(ctx *Context) *fontScan {
 		seenFallback: map[string]bool{},
 		seenColor:    map[string]bool{},
 		slots:        map[string]*fallbackSlot{},
+		aliasRank:    map[string]int{},
+	}
+}
+
+// walkDirs feeds every file under each dir to consider. Relative dirs are
+// skipped: an empty $HOME or %WINDIR% turns a dir such as "$HOME/.fonts"
+// into ".fonts", which resolves against the working directory, and discovery
+// would then parse whatever font files an attacker put there. Unreadable
+// dirs and entries are skipped silently; a missing font dir is normal.
+func (s *fontScan) walkDirs(dirs []string, aliases aliasTable) {
+	for _, dir := range dirs {
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			s.consider(path, aliases)
+			return nil
+		})
 	}
 }
 
 // consider examines one candidate path and records it: its family/style
-// path, a generic alias (via aliasFn, which maps a lower-cased family name
-// to "sans-serif"/"serif"/"monospace" or "" for none), and its color/CJK/
-// emoji fallback role. Non-font files are ignored.
-func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
+// path, a generic alias (via aliases, which maps a lower-cased family name
+// to "sans-serif"/"serif"/"monospace" or none), and its color/CJK/emoji
+// fallback role. Non-font files are ignored.
+func (s *fontScan) consider(path string, aliases aliasTable) {
 	lower := strings.ToLower(path)
 	// .ttc covers OpenType collections (Noto CJK ships this way).
 	if !strings.HasSuffix(lower, ".ttf") &&
@@ -524,13 +554,12 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 		return
 	}
 	for _, fc := range describeFontFaces(path) {
-		s.considerFace(fc, aliasFn)
+		s.considerFace(fc, aliases)
 	}
 }
 
 // considerFace records one face of a font file. See consider.
-func (s *fontScan) considerFace(fc faceInfo,
-	aliasFn func(lowerFam string) string) {
+func (s *fontScan) considerFace(fc faceInfo, aliases aliasTable) {
 
 	desc, path := fc.desc, fc.path
 	if desc.Family == "" {
@@ -556,15 +585,9 @@ func (s *fontScan) considerFace(fc faceInfo,
 	}
 
 	// Register the generic alias ("sans-serif", "monospace", …). The alias
-	// is the last-resort face for an unresolved family (genericFallback), so
-	// it must hold the plain Regular face. First-match-wins picked whatever
-	// sorted first in the walk: on Linux "DejaVuSans-Bold.ttf" sorts before
-	// "DejaVuSans.ttf" ('-' < '.'), so the alias drew in Bold. considerFontKey
-	// keeps the face closest to Regular weight, and upright on a tie.
-	if alias := aliasFn(lowerFam); alias != "" {
-		considerFontKey(s.ctx.fontPaths, s.ctx.fontWeights, s.ctx.fontItalics,
-			alias, desc.Aspect.Weight, desc.Aspect.Style == font.StyleItalic,
-			font.WeightNormal, path)
+	// is the last-resort face for an unresolved family (genericFallback).
+	if alias, rank, ok := aliases.lookup(lowerFam); ok {
+		s.considerAlias(alias, rank, desc.Aspect, path)
 	}
 
 	// Collection members after the first join the fallback tiers only for
@@ -577,6 +600,38 @@ func (s *fontScan) considerFace(fc faceInfo,
 		return
 	}
 	s.record(family, desc.Aspect, fc.color, path)
+}
+
+// considerAlias stores path under a generic alias key. Two rules pick the
+// face:
+//
+//  1. Family rank. The most preferred family in the aliasTable wins, in any
+//     walk order. First-match-wins let whatever sorted first take the key:
+//     on Android "NotoSansAdlam-VF.ttf" sorts before "Roboto-Regular.ttf",
+//     so a loose "noto sans" match made an Adlam font the sans-serif
+//     fallback for every unresolved family.
+//  2. Weight, inside one family. The alias must hold the plain Regular
+//     face: on Linux "DejaVuSans-Bold.ttf" sorts before "DejaVuSans.ttf"
+//     ('-' < '.'). considerFontKey keeps the face closest to Regular
+//     weight, and upright on a tie.
+func (s *fontScan) considerAlias(alias string, rank int,
+	aspect font.Aspect, path string) {
+
+	cur, seen := s.aliasRank[alias]
+	if seen && rank > cur {
+		return // a more preferred family already holds the key
+	}
+	if !seen || rank < cur {
+		// A more preferred family: drop the stored face so considerFontKey
+		// records this one without comparing weights across families.
+		delete(s.ctx.fontPaths, alias)
+		delete(s.ctx.fontWeights, alias)
+		delete(s.ctx.fontItalics, alias)
+		s.aliasRank[alias] = rank
+	}
+	considerFontKey(s.ctx.fontPaths, s.ctx.fontWeights, s.ctx.fontItalics,
+		alias, aspect.Weight, aspect.Style == font.StyleItalic,
+		font.WeightNormal, path)
 }
 
 // record files one already-parsed font into the fallback tiers. It is the
@@ -674,19 +729,6 @@ func betterRegular(w font.Weight, italic bool,
 		return nd < cd
 	}
 	return curItalic && !italic
-}
-
-// finish assembles the fallback lists in priority order and stores them on
-// the Context. Color emoji leads so colored glyphs win over monochrome
-// coverage; colorPaths also drives the render-side color path. Script fonts
-// (Arabic, Hebrew, etc.) trail CJK. General fonts (symbol/icon/Nerd Fonts,
-// etc.) are the last-resort fallback tier.
-func (s *fontScan) finish() {
-	s.ctx.colorPaths = s.colorPaths
-	cjk := orderCJKForLang(s.cjkPaths, s.cjkFams, s.ctx.lang)
-	s.ctx.fallbackPaths = append(s.ctx.fallbackPaths,
-		assembleFallbacks(s.colorPaths, s.emojiPaths, cjk,
-			s.scriptPaths, s.generalPaths)...)
 }
 
 // assembleFallbacks concatenates the tier slices into the final fallback
