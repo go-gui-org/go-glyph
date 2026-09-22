@@ -53,6 +53,19 @@ func setFTFontPaths(paths map[string]string) { ftFontPathsSingleton = paths }
 func setFTScriptFallbacks(paths []string)    { ftScriptFallbacksSingleton = paths }
 func setFTColorFallbacks(paths []string)     { ftColorFallbacksSingleton = paths }
 
+// renderFontPaths returns the font map a glyph load resolves names in:
+// the Renderer's own Context map when it has one, else the process-wide
+// map of the most recent Context. The per-Renderer map matters when a
+// process has more than one Context (one TextSystem per window): the
+// global map points at the newest Context only, so a font added to an
+// older Context resolved during layout but not during rendering.
+func renderFontPaths(own map[string]string) map[string]string {
+	if own != nil {
+		return own
+	}
+	return ftFontPathsSingleton
+}
+
 // rasterResult holds a rendered RGBA bitmap plus its atlas placement
 // offsets (left = x bearing from the pen origin, top = distance from the
 // baseline up to the top row).
@@ -65,12 +78,16 @@ type rasterResult struct {
 // loadGlyphFT rasterizes a grapheme cluster using the pure-Go pipeline.
 // When runText differs from ch it provides the surrounding text context
 // for correct Arabic shaping (initial/medial/final forms).
-func loadGlyphFT(atlas *GlyphAtlas, ch string, runText string,
-	targetRuneIdx int, item Item, subpixelBin int,
+//
+// fontPaths is the font map of the Context that laid the text out (see
+// Renderer.useContextFonts). nil selects the process-wide map of the most
+// recent Context (ftFontPathsSingleton).
+func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
+	ch string, runText string, targetRuneIdx int, item Item, subpixelBin int,
 	scaleFactor float32) (LoadGlyphResult, error) {
 
 	family, fontSize, bold, italic := resolveFTFontParams(item.Style, scaleFactor)
-	paths := fontFallbackPaths(ftFontPathsSingleton, family, bold, italic)
+	paths := fontFallbackPaths(renderFontPaths(fontPaths), family, bold, italic)
 	subpixelShift := float64(subpixelBin) / 4.0
 
 	var res *rasterResult
@@ -142,17 +159,19 @@ func orderedTextFallbackPaths(ch string) []string {
 }
 
 // loadStrokedGlyphFT renders a stroked cluster using the pure-Go stroker.
-func loadStrokedGlyphFT(atlas *GlyphAtlas, ch string, runText string,
-	targetRuneIdx int, item Item, strokeWidth float32, subpixelBin int,
+// fontPaths is as for loadGlyphFT.
+func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
+	ch string, runText string, targetRuneIdx int, item Item,
+	strokeWidth float32, subpixelBin int,
 	scaleFactor float32) (LoadGlyphResult, error) {
 
 	if strokeWidth <= 0 {
-		return loadGlyphFT(atlas, ch, runText, targetRuneIdx, item,
+		return loadGlyphFT(atlas, fontPaths, ch, runText, targetRuneIdx, item,
 			subpixelBin, scaleFactor)
 	}
 
 	family, fontSize, bold, italic := resolveFTFontParams(item.Style, scaleFactor)
-	paths := fontFallbackPaths(ftFontPathsSingleton, family, bold, italic)
+	paths := fontFallbackPaths(renderFontPaths(fontPaths), family, bold, italic)
 	subpixelShift := float64(subpixelBin) / 4.0
 	sw := float64(strokeWidth)
 

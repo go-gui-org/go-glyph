@@ -176,10 +176,10 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 		result, loadErr = loadGlyphByIDFT(r.atlas, item.FontPath,
 			g.GlyphID, item, strokeWidth, bin, r.scaleFactor)
 	case strokeWidth > 0:
-		result, loadErr = loadStrokedGlyphFT(r.atlas, ch, runText,
+		result, loadErr = loadStrokedGlyphFT(r.atlas, r.fontPaths, ch, runText,
 			targetRuneIdx, item, strokeWidth, bin, r.scaleFactor)
 	default:
-		result, loadErr = loadGlyphFT(r.atlas, ch, runText,
+		result, loadErr = loadGlyphFT(r.atlas, r.fontPaths, ch, runText,
 			targetRuneIdx, item, bin, r.scaleFactor)
 	}
 	if loadErr != nil {

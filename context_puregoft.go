@@ -55,9 +55,16 @@ type Context struct {
 	// font, size, and re-layouts. Caching the negative ("no font, render tofu")
 	// case is what removes the per-scroll rescan of every fallback font for
 	// unsupported scripts (Chakma, Javanese, …). resolveOrder is the FIFO key
-	// queue for bounded eviction (see fallbackResolveCap).
+	// queue for bounded eviction (see fallbackResolveCap). It grows by append
+	// until it holds fallbackResolveCap keys, then works as a ring buffer:
+	// resolveHead is the index of the oldest key, which the next insert
+	// overwrites. A ring keeps the backing array fixed at the cap. Popping
+	// the head with a reslice would shrink the capacity by one on each
+	// eviction and force append to copy the whole queue (about 4 MB of
+	// string headers) again and again.
 	fallbackResolve map[string]fbResolution
 	resolveOrder    []string
+	resolveHead     int
 }
 
 // fbResolution is a cached script-fallback decision for one cluster.
@@ -78,6 +85,9 @@ const fallbackResolveCap = 1 << 18
 // cacheFallback stores a resolution, lazily allocating and bounding the map.
 // Eviction is FIFO by first-probe order, preserving the recently probed hot
 // set that scrolling re-layouts actually consult.
+//
+// Invariant: resolveOrder holds each key of fallbackResolve exactly once,
+// so len(resolveOrder) == len(fallbackResolve).
 func (ctx *Context) cacheFallback(text string, res fbResolution) {
 	if ctx.fallbackResolve == nil {
 		ctx.fallbackResolve = make(map[string]fbResolution)
@@ -86,20 +96,20 @@ func (ctx *Context) cacheFallback(text string, res fbResolution) {
 		ctx.fallbackResolve[text] = res
 		return
 	}
-	if len(ctx.fallbackResolve) >= fallbackResolveCap {
-		oldest := ctx.resolveOrder[0]
-		ctx.resolveOrder = ctx.resolveOrder[1:]
-		delete(ctx.fallbackResolve, oldest)
+	if len(ctx.resolveOrder) >= fallbackResolveCap {
+		// Full: overwrite the oldest slot in place and advance the head.
+		delete(ctx.fallbackResolve, ctx.resolveOrder[ctx.resolveHead])
+		ctx.resolveOrder[ctx.resolveHead] = text
+		ctx.resolveHead = (ctx.resolveHead + 1) % len(ctx.resolveOrder)
+	} else {
+		ctx.resolveOrder = append(ctx.resolveOrder, text)
 	}
 	ctx.fallbackResolve[text] = res
-	ctx.resolveOrder = append(ctx.resolveOrder, text)
 }
 
 // NewContext creates a text context backed by go-text/typesetting.
 func NewContext(scaleFactor float32) (*Context, error) {
-	if !(scaleFactor > 0) {
-		scaleFactor = 1.0
-	}
+	scaleFactor = sanitizeScale(scaleFactor)
 
 	ctx := &Context{
 		scaleFactor: scaleFactor,
@@ -127,10 +137,23 @@ func NewContext(scaleFactor float32) (*Context, error) {
 	return ctx, nil
 }
 
-// Free releases resources.
+// Free releases resources. Every map, cache, and scratch buffer is
+// dropped, so a freed Context holds no font tables or cluster keys. The
+// render-side singletons keep their own references (see setFTFontPaths),
+// so a Renderer that shares this Context's font map still works.
+// AddFontFile after Free returns an error; it does not panic.
 func (ctx *Context) Free() {
 	ctx.metrics = metricsCache{}
 	ctx.fontPaths = nil
+	ctx.fontWeights = nil
+	ctx.fontItalics = nil
+	ctx.families = nil
+	ctx.fallbackPaths = nil
+	ctx.colorPaths = nil
+	ctx.scratch = layoutScratch{}
+	ctx.fallbackResolve = nil
+	ctx.resolveOrder = nil
+	ctx.resolveHead = 0
 }
 
 // ScaleFactor returns the DPI scale factor.
@@ -138,13 +161,20 @@ func (ctx *Context) ScaleFactor() float32 { return ctx.scaleFactor }
 
 // AddFontFile registers a font file, extracting its family name and
 // aspect (bold/italic) so it resolves through the normal path lookup.
+// Every face of a collection (.ttc) is registered.
 func (ctx *Context) AddFontFile(path string) error {
-	desc, _, ok := describeFontFile(path)
-	if !ok {
-		return fmt.Errorf("failed to parse font %q", path)
+	if ctx.fontPaths == nil {
+		// Free dropped the maps; writing to a nil map panics.
+		return fmt.Errorf("glyph: AddFontFile on freed Context")
 	}
-	registerFontPath(ctx.fontPaths, ctx.fontWeights, ctx.fontItalics,
-		ctx.families, desc.Family, desc.Aspect, path)
+	faces := describeFontFaces(path)
+	if len(faces) == 0 {
+		return fmt.Errorf("glyph: failed to parse font %q", path)
+	}
+	for _, fc := range faces {
+		registerFontPath(ctx.fontPaths, ctx.fontWeights, ctx.fontItalics,
+			ctx.families, fc.desc.Family, fc.desc.Aspect, fc.path)
+	}
 	return nil
 }
 
@@ -152,7 +182,7 @@ func (ctx *Context) AddFontFile(path string) error {
 func (ctx *Context) FontHeight(cfg TextConfig) (float32, error) {
 	font := newFTFont(ctx.ftLib, ctx.fontPaths, cfg.Style, ctx.scaleFactor)
 	if font.face == nil {
-		return 0, fmt.Errorf("failed to create font")
+		return 0, fmt.Errorf("glyph: no font resolves for %q", cfg.Style.FontName)
 	}
 	defer font.close()
 
@@ -164,7 +194,8 @@ func (ctx *Context) FontHeight(cfg TextConfig) (float32, error) {
 func (ctx *Context) FontMetrics(cfg TextConfig) (TextMetrics, error) {
 	font := newFTFont(ctx.ftLib, ctx.fontPaths, cfg.Style, ctx.scaleFactor)
 	if font.face == nil {
-		return TextMetrics{}, fmt.Errorf("failed to create font")
+		return TextMetrics{}, fmt.Errorf("glyph: no font resolves for %q",
+			cfg.Style.FontName)
 	}
 	defer font.close()
 
@@ -193,24 +224,42 @@ func (ctx *Context) createFTFont(style TextStyle) ftFont {
 	return newFTFont(ctx.ftLib, ctx.fontPaths, style, ctx.scaleFactor)
 }
 
-// describeFontFile reads a font's family/aspect and color-glyph flag
-// without building a full face. It opens the file lazily and lets the
-// loader read only the table directory and the few metadata tables it
-// needs (via ReadAt), rather than slurping the whole file — discovery
-// walks every system font, so this keeps startup I/O small.
-func describeFontFile(path string) (desc font.Description, color, ok bool) {
+// faceInfo describes one face of a font file.
+type faceInfo struct {
+	path  string // face path (see facePath); the plain path for face 0
+	index int    // face index within the file
+	desc  font.Description
+	color bool // has a color-glyph table
+}
+
+// describeFontFaces reads the family/aspect and color-glyph flag of every
+// face in a font file, without building full faces. A plain font gives one
+// face; a collection (.ttc) gives one per member. It opens the file lazily
+// and lets each loader read only the table directory and the few metadata
+// tables it needs (via ReadAt), rather than slurping the whole file —
+// discovery walks every system font, so this keeps startup I/O small.
+// Returns nil when the file cannot be opened or parsed.
+func describeFontFaces(path string) []faceInfo {
 	f, err := os.Open(path)
 	if err != nil {
-		return desc, false, false
+		return nil
 	}
 	defer f.Close()
 	loaders, err := ot.NewLoaders(f)
 	if err != nil || len(loaders) == 0 {
-		return desc, false, false
+		return nil
 	}
-	ld := loaders[0]
-	desc, _ = font.Describe(ld, nil)
-	return desc, hasColorTable(ld), true
+	faces := make([]faceInfo, 0, len(loaders))
+	for i, ld := range loaders {
+		desc, _ := font.Describe(ld, nil)
+		faces = append(faces, faceInfo{
+			path:  facePath(path, i),
+			index: i,
+			desc:  desc,
+			color: hasColorTable(ld),
+		})
+	}
+	return faces
 }
 
 // aspectBoldItalic maps a go-text Aspect to the bold/italic booleans the
@@ -367,12 +416,19 @@ func isEmojiFamily(lowerFamily string) bool {
 // isCJKFamily reports whether a lower-cased family name covers CJK
 // scripts, matching the common Linux CJK font packages.
 func isCJKFamily(lowerFamily string) bool {
+	// Needles are specific enough not to hit unrelated families: a bare
+	// "han" matched Khand and Chandas (Devanagari) and Hanuman (Khmer), and
+	// a bare "ipa" matched any name holding those letters, so those fonts
+	// landed in the CJK tier ahead of the script tier.
 	needles := []string{
-		"cjk", "han",
+		"cjk", "source han", "han sans", "han serif",
 		"wenquanyi", "wqy", "uming", "ukai", "ar pl",
 		"noto sans jp", "noto serif jp",
 		"noto sans sc", "noto sans tc", "noto sans kr",
-		"droid sans fallback", "nanum", "ipa", "vl gothic", "takao",
+		"droid sans fallback", "nanum",
+		"ipagothic", "ipamincho", "ipapgothic", "ipapmincho",
+		"ipaexgothic", "ipaexmincho", "ipa gothic", "ipa mincho",
+		"vl gothic", "takao",
 		"pingfang", "heiti", "hiragino",
 		"apple sd gothic neo", "applegothic",
 		"microsoft yahei", "microsoft jhenghei",
@@ -467,15 +523,23 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 		!strings.HasSuffix(lower, ".ttc") {
 		return
 	}
-	desc, isColorFace, ok := describeFontFile(path)
-	if !ok || desc.Family == "" {
+	for _, fc := range describeFontFaces(path) {
+		s.considerFace(fc, aliasFn)
+	}
+}
+
+// considerFace records one face of a font file. See consider.
+func (s *fontScan) considerFace(fc faceInfo,
+	aliasFn func(lowerFam string) string) {
+
+	desc, path := fc.desc, fc.path
+	if desc.Family == "" {
 		return
 	}
 	family := desc.Family
 	registerFontPath(s.ctx.fontPaths, s.ctx.fontWeights, s.ctx.fontItalics,
 		s.ctx.families, family, desc.Aspect, path)
 
-	// Register the generic alias on first match.
 	lowerFam := strings.ToLower(family)
 
 	// Apple's ".LastResort" font maps every codepoint to a placeholder
@@ -491,13 +555,28 @@ func (s *fontScan) consider(path string, aliasFn func(lowerFam string) string) {
 		return
 	}
 
+	// Register the generic alias ("sans-serif", "monospace", …). The alias
+	// is the last-resort face for an unresolved family (genericFallback), so
+	// it must hold the plain Regular face. First-match-wins picked whatever
+	// sorted first in the walk: on Linux "DejaVuSans-Bold.ttf" sorts before
+	// "DejaVuSans.ttf" ('-' < '.'), so the alias drew in Bold. considerFontKey
+	// keeps the face closest to Regular weight, and upright on a tie.
 	if alias := aliasFn(lowerFam); alias != "" {
-		if _, exists := s.ctx.fontPaths[alias]; !exists {
-			s.ctx.fontPaths[alias] = path
-		}
+		considerFontKey(s.ctx.fontPaths, s.ctx.fontWeights, s.ctx.fontItalics,
+			alias, desc.Aspect.Weight, desc.Aspect.Style == font.StyleItalic,
+			font.WeightNormal, path)
 	}
 
-	s.record(family, desc.Aspect, isColorFace, path)
+	// Collection members after the first join the fallback tiers only for
+	// CJK families, where several regional faces share one file (Noto Sans
+	// CJK, PingFang) and the locale reorder must be able to pick the reader's
+	// face. Other collections (Helvetica.ttc, emoji .ttc files) keep one
+	// fallback entry per file, as before: extra members add coverage probes
+	// and face-cache entries but no glyphs the first face lacks.
+	if fc.index > 0 && !isCJKFamily(lowerFam) {
+		return
+	}
+	s.record(family, desc.Aspect, fc.color, path)
 }
 
 // record files one already-parsed font into the fallback tiers. It is the
