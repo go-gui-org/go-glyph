@@ -20,7 +20,7 @@ func TestParseSizeFromFontName(t *testing.T) {
 		{"Sans Bold", 0},
 		{"Serif 0", 0},
 		{"Mono 100", 100},
-		{"Font 12.5", 12},
+		{"Font 12.5", 12.5}, // fractional sizes kept (shared parser)
 	}
 	for _, tt := range tests {
 		got := parseSizeFromFontName(tt.name)

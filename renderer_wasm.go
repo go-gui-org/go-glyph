@@ -40,10 +40,7 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32,
 	if err != nil {
 		return nil, err
 	}
-	safeScale := scaleFactor
-	if safeScale <= 0 {
-		safeScale = 1.0
-	}
+	safeScale := sanitizeScale(scaleFactor)
 	maxEntries := cfg.MaxGlyphCacheEntries
 	if maxEntries == 0 {
 		maxEntries = 4096
@@ -183,3 +180,6 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 }
 
 func (r *Renderer) Atlas() *GlyphAtlas { return r.atlas }
+
+// useContextFonts is a no-op under WASM: the browser resolves font names.
+func (r *Renderer) useContextFonts(_ *Context) {}

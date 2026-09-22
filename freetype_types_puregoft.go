@@ -5,7 +5,6 @@ package glyph
 import (
 	"container/list"
 	"math"
-	"os"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -272,26 +271,21 @@ func (c *faceLRU) evictIdle() (freed int64) {
 }
 
 func parseFace(path string) (cf *cachedFace, size int64) {
-	f, err := os.Open(path)
-	if err != nil {
+	// path is a face path (see facePath): a plain path selects face 0,
+	// matching FT_New_Face(path, 0); a collection face carries its index.
+	f, ld, ok := openFaceLoader(path)
+	if !ok {
 		return nil, 0
 	}
 	defer f.Close()
 	// The face retains its font's tables (the loader's table buffers and the
 	// lazy per-table parses), so the file size is the closest cheap proxy for
-	// resident bytes. Slight overestimate for .ttc collections (face 0 only),
+	// resident bytes. Overestimate for .ttc collections (one face of many),
 	// which evicts earlier — the safe direction. On parse failure the entry
 	// is a negative cache hit; it costs nothing, so it gets size 0.
 	if st, err := f.Stat(); err == nil {
 		size = st.Size()
 	}
-	// Use the first loader so single fonts and collections (.ttc) both
-	// resolve to face index 0, matching FT_New_Face(path, 0).
-	loaders, err := ot.NewLoaders(f)
-	if err != nil || len(loaders) == 0 {
-		return nil, 0
-	}
-	ld := loaders[0]
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -615,16 +609,11 @@ func loadCoverage(path string) *coverage {
 // Nothing retains the loader or file: coverage holds a parsed font.Cmap over
 // those heap copies, so closing on return is safe.
 func parseCoverage(path string) (cov *coverage) {
-	f, err := os.Open(path)
-	if err != nil {
+	f, ld, ok := openFaceLoader(path) // path is a face path (see facePath)
+	if !ok {
 		return nil
 	}
 	defer f.Close()
-	loaders, err := ot.NewLoaders(f)
-	if err != nil || len(loaders) == 0 {
-		return nil
-	}
-	ld := loaders[0]
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -818,14 +807,9 @@ func resolveFTFontParams(style TextStyle, scaleFactor float32) (
 ) {
 	family = resolveFontFamily(style.FontName)
 
-	rawSize := style.Size
-	if rawSize <= 0 {
-		rawSize = parseSizeFromFontName(style.FontName)
-	}
-	if rawSize <= 0 {
-		rawSize = 16
-	}
-	size = float64(rawSize) * float64(scaleFactor)
+	// resolveFontSize rejects NaN and infinite sizes, which would turn the
+	// 26.6 shaping scale (int32(size*64)) into an undefined conversion.
+	size = float64(resolveFontSize(style)) * float64(scaleFactor)
 
 	bold = style.Typeface == TypefaceBold ||
 		style.Typeface == TypefaceBoldItalic
@@ -929,53 +913,4 @@ func looksMonospace(family string) bool {
 		}
 	}
 	return false
-}
-
-// parseSizeFromFontName extracts trailing numeric size from Pango
-// font name like "Sans Bold 18".
-func parseSizeFromFontName(name string) float32 {
-	parts := strings.Fields(name)
-	if len(parts) == 0 {
-		return 0
-	}
-	last := parts[len(parts)-1]
-	var sz float32
-	for _, c := range last {
-		if c >= '0' && c <= '9' {
-			sz = sz*10 + float32(c-'0')
-		} else if c == '.' {
-			break
-		} else {
-			return 0
-		}
-	}
-	return sz
-}
-
-// parseFamilyFromFontName extracts the family portion from a Pango
-// font name, stripping trailing size and style keywords.
-func parseFamilyFromFontName(name string) string {
-	parts := strings.Fields(name)
-	if len(parts) == 0 {
-		return ""
-	}
-
-	end := len(parts)
-	if sz := parseSizeFromFontName(name); sz > 0 {
-		end--
-	}
-
-	styleWords := map[string]bool{
-		"bold": true, "italic": true, "oblique": true,
-		"light": true, "medium": true, "semibold": true,
-		"heavy": true, "ultrabold": true, "ultralight": true,
-		"condensed": true, "expanded": true, "regular": true,
-	}
-	for end > 0 && styleWords[strings.ToLower(parts[end-1])] {
-		end--
-	}
-	if end == 0 {
-		end = 1
-	}
-	return strings.Join(parts[:end], " ")
 }

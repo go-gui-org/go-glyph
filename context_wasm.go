@@ -3,9 +3,8 @@
 package glyph
 
 import (
-	"cmp"
+	"errors"
 	"fmt"
-	"strings"
 	"syscall/js"
 )
 
@@ -23,9 +22,7 @@ type Context struct {
 // NewContext creates a WASM text context using an offscreen canvas
 // for measureText calls.
 func NewContext(scaleFactor float32) (*Context, error) {
-	if scaleFactor <= 0 {
-		scaleFactor = 1.0
-	}
+	scaleFactor = sanitizeScale(scaleFactor)
 
 	doc := js.Global().Get("document")
 	var canvas js.Value
@@ -40,7 +37,7 @@ func NewContext(scaleFactor float32) (*Context, error) {
 
 	ctx2d := canvas.Call("getContext", "2d")
 	if ctx2d.IsNull() || ctx2d.IsUndefined() {
-		return nil, fmt.Errorf("failed to create 2d context for measurement")
+		return nil, fmt.Errorf("glyph: failed to create 2d context for measurement")
 	}
 
 	return &Context{
@@ -52,11 +49,16 @@ func NewContext(scaleFactor float32) (*Context, error) {
 	}, nil
 }
 
-// Free releases resources.
+// Free releases resources. FontHeight and FontMetrics on a freed
+// Context return an error instead of calling into an undefined JS value.
 func (ctx *Context) Free() {
 	ctx.canvas = js.Undefined()
 	ctx.ctx2d = js.Undefined()
+	ctx.metrics = metricsCache{}
 }
+
+// errFreedContext is returned by measurement calls after Free.
+var errFreedContext = errors.New("glyph: Context used after Free")
 
 // ScaleFactor returns the DPI scale factor.
 func (ctx *Context) ScaleFactor() float32 { return ctx.scaleFactor }
@@ -71,6 +73,9 @@ func (ctx *Context) listFontFamilies() []string { return nil }
 
 // FontHeight returns ascent + descent in logical pixels.
 func (ctx *Context) FontHeight(cfg TextConfig) (float32, error) {
+	if ctx.ctx2d.IsUndefined() {
+		return 0, errFreedContext
+	}
 	cssFont := buildCSSFont(cfg.Style)
 	ctx.ctx2d.Set("font", cssFont)
 
@@ -82,6 +87,9 @@ func (ctx *Context) FontHeight(cfg TextConfig) (float32, error) {
 
 // FontMetrics returns detailed font metrics.
 func (ctx *Context) FontMetrics(cfg TextConfig) (TextMetrics, error) {
+	if ctx.ctx2d.IsUndefined() {
+		return TextMetrics{}, errFreedContext
+	}
 	cssFont := buildCSSFont(cfg.Style)
 	ctx.ctx2d.Set("font", cssFont)
 
@@ -103,114 +111,4 @@ func (ctx *Context) FontMetrics(cfg TextConfig) (TextMetrics, error) {
 // ResolveFontName returns the input name unchanged under WASM.
 func (ctx *Context) ResolveFontName(name string) (string, error) {
 	return name, nil
-}
-
-// cssFontSize resolves the font size (logical px) for a style, falling back
-// to the size embedded in a Pango font name, then to 16.
-func cssFontSize(style TextStyle) float64 {
-	size := style.Size
-	if size <= 0 {
-		size = parseSizeFromFontName(style.FontName)
-	}
-	if size <= 0 {
-		size = 16
-	}
-	return float64(size)
-}
-
-// buildCSSFont constructs a CSS font string from TextStyle.
-func buildCSSFont(style TextStyle) string {
-	size := cssFontSize(style)
-
-	family := cmp.Or(parseFamilyFromFontName(style.FontName), "sans-serif")
-
-	var sb strings.Builder
-
-	// Style.
-	switch style.Typeface {
-	case TypefaceItalic, TypefaceBoldItalic:
-		sb.WriteString("italic ")
-	}
-
-	// Weight.
-	switch style.Typeface {
-	case TypefaceBold, TypefaceBoldItalic:
-		sb.WriteString("bold ")
-	}
-
-	// Also check FontName for "Bold"/"Italic".
-	lower := strings.ToLower(style.FontName)
-	if style.Typeface == TypefaceRegular {
-		if strings.Contains(lower, " bold") {
-			sb.WriteString("bold ")
-		}
-		if strings.Contains(lower, " italic") {
-			sb.WriteString("italic ")
-		}
-	}
-
-	fmt.Fprintf(&sb, "%gpx ", size)
-	sb.WriteString(mapFontFamily(family))
-	return sb.String()
-}
-
-// parseSizeFromFontName extracts trailing numeric size from Pango
-// font name like "Sans Bold 18".
-func parseSizeFromFontName(name string) float32 {
-	parts := strings.Fields(name)
-	if len(parts) == 0 {
-		return 0
-	}
-	last := parts[len(parts)-1]
-	var sz float32
-	if _, err := fmt.Sscanf(last, "%f", &sz); err == nil && sz > 0 {
-		return sz
-	}
-	return 0
-}
-
-// parseFamilyFromFontName extracts the family portion from a Pango
-// font name, stripping trailing size and style keywords.
-func parseFamilyFromFontName(name string) string {
-	parts := strings.Fields(name)
-	if len(parts) == 0 {
-		return ""
-	}
-
-	// Strip trailing number (size).
-	end := len(parts)
-	var sz float32
-	if _, err := fmt.Sscanf(parts[end-1], "%f", &sz); err == nil && sz > 0 {
-		end--
-	}
-
-	// Strip style keywords.
-	styleWords := map[string]bool{
-		"bold": true, "italic": true, "oblique": true,
-		"light": true, "medium": true, "semibold": true,
-		"heavy": true, "ultrabold": true, "ultralight": true,
-		"condensed": true, "expanded": true, "regular": true,
-	}
-	for end > 0 && styleWords[strings.ToLower(parts[end-1])] {
-		end--
-	}
-	if end == 0 {
-		end = 1 // Keep at least one word.
-	}
-	return strings.Join(parts[:end], " ")
-}
-
-// mapFontFamily maps generic Pango families to CSS equivalents.
-func mapFontFamily(family string) string {
-	switch strings.ToLower(family) {
-	case "sans", "sans-serif":
-		return "sans-serif"
-	case "serif":
-		return "serif"
-	case "monospace", "mono":
-		return "monospace"
-	default:
-		clean := strings.ReplaceAll(family, "'", "")
-		return "'" + clean + "', sans-serif"
-	}
 }

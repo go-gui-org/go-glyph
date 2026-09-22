@@ -40,6 +40,7 @@ func NewTextSystem(backend DrawBackend) (*TextSystem, error) {
 		ctx.Free()
 		return nil, err
 	}
+	renderer.useContextFonts(ctx)
 	return &TextSystem{
 		ctx:             ctx,
 		renderer:        renderer,
@@ -67,6 +68,7 @@ func NewTextSystemAtlasSize(backend DrawBackend, atlasW, atlasH int) (*TextSyste
 		ctx.Free()
 		return nil, err
 	}
+	renderer.useContextFonts(ctx)
 	return &TextSystem{
 		ctx:             ctx,
 		renderer:        renderer,

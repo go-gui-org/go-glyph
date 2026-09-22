@@ -27,6 +27,10 @@ type Renderer struct {
 	// scratchRects holds per-clause selection rects in DrawComposition,
 	// reused so drawing the IME preedit each frame does not allocate.
 	scratchRects []Rect
+	// fontPaths is the font map of the Context this Renderer draws for, set
+	// by useContextFonts. nil (a Renderer made without a TextSystem) falls
+	// back to the process-wide map; see renderFontPaths.
+	fontPaths map[string]string
 }
 
 // RendererConfig configures the Renderer.
@@ -46,10 +50,7 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32,
 	if err != nil {
 		return nil, err
 	}
-	safeScale := scaleFactor
-	if safeScale <= 0 {
-		safeScale = 1.0
-	}
+	safeScale := sanitizeScale(scaleFactor)
 	maxEntries := cfg.MaxGlyphCacheEntries
 	if maxEntries == 0 {
 		maxEntries = 4096
@@ -66,6 +67,14 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32,
 		scaleFactor:     safeScale,
 		scaleInv:        1.0 / safeScale,
 	}, nil
+}
+
+// useContextFonts makes the Renderer resolve font names in ctx's font
+// map, the same map ctx uses for layout, so fonts added to ctx with
+// AddFontFile render too. The map is shared, not copied: later additions
+// are seen without another call.
+func (r *Renderer) useContextFonts(ctx *Context) {
+	r.fontPaths = ctx.fontPaths
 }
 
 func (r *Renderer) Free() {
