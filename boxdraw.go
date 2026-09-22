@@ -21,7 +21,9 @@ import "math"
 //
 // This file is deliberately free of build tags: it takes a dense 8-bit
 // coverage buffer and touches nothing platform-specific, so the geometry is
-// testable everywhere and the WASM renderer can adopt it later.
+// testable everywhere. The native path writes it into atlas bitmaps
+// (boxdraw_raster.go) and the WASM path replays it as Canvas2D calls
+// (boxdraw_canvas_wasm.go).
 
 // Codepoint ranges drawn by this file.
 const (
@@ -102,6 +104,8 @@ func boxMetricsFor(item Item, g Glyph, cp rune, scale float32) (boxMetrics, bool
 	// of its E0Bx family. Only synthesize when the font had nothing:
 	// GlyphID 0 with Shaped set is an authoritative .notdef from this item's
 	// own face, so the alternative here is tofu, not a different look.
+	// WASM items carry no FontPath, so the gate never opens there and the
+	// browser draws the codepoint from the font (see drawBoxIfBuiltin).
 	if kind == boxKindPowerline {
 		if item.FontPath == "" || g.GlyphID != 0 || !g.Shaped {
 			return boxMetrics{}, false
@@ -236,15 +240,22 @@ func drawBoxGlyph(dst []byte, m boxMetrics) {
 	drawBoxGlyphTo(covSink{dst: dst, m: m}, m)
 }
 
-// drawBoxGlyphTo emits m's geometry into s.
+// drawBoxGlyphTo emits m's geometry into s. A kind that does not match
+// the codepoint draws nothing, so a bad caller cannot read past a table.
 func drawBoxGlyphTo(s boxSink, m boxMetrics) {
 	if m.cellW < 1 || m.cellH < 1 {
 		return
 	}
 	switch m.kind {
 	case boxKindLine:
+		if m.cp < boxLineLo || m.cp > boxLineHi {
+			return
+		}
 		drawBoxLine(s, m, boxLineTable[m.cp-boxLineLo])
 	case boxKindBlock:
+		if m.cp < boxBlockLo || m.cp > boxBlockHi {
+			return
+		}
 		drawBoxBlock(s, m, boxBlockTable[m.cp-boxBlockLo])
 	case boxKindPowerline:
 		drawPowerline(s, m)
@@ -300,8 +311,14 @@ func boxSnapOriginX(baseX, originX, cellW int) int {
 // The magnitude limit is far past any real canvas and only exists so a NaN
 // or absurd coordinate cannot make the conversion implementation-defined.
 func pxRoundOrigin(v float32) int {
+	return clampFloatToInt(math.Round(float64(v)))
+}
+
+// clampFloatToInt converts f to an int and saturates at plus or minus 2^24
+// instead of using an implementation-defined conversion. NaN maps to zero.
+// The limit is far past any real canvas.
+func clampFloatToInt(f float64) int {
 	const limit = 1 << 24
-	f := math.Round(float64(v))
 	switch {
 	case math.IsNaN(f):
 		return 0
@@ -781,8 +798,8 @@ func drawBoxArc(s boxSink, m boxMetrics, e uint16) {
 	s.strokeArcQuad(cx, cy, r, float32(m.light), ae != armNone, as != armNone)
 }
 
-func floorInt(v float32) int { return int(math.Floor(float64(v))) }
-func ceilInt(v float32) int  { return int(math.Ceil(float64(v))) }
+func floorInt(v float32) int { return clampFloatToInt(math.Floor(float64(v))) }
+func ceilInt(v float32) int  { return clampFloatToInt(math.Ceil(float64(v))) }
 
 // drawBoxDiagonal renders U+2571-2573 corner to corner. U+2573 is two
 // independent strokes rather than one distance field over both segments, so

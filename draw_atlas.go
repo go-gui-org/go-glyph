@@ -202,16 +202,28 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		cx := float32(item.X)
 		cy := float32(item.Y)
 
-		// Origin of this item's cell grid, in physical pixels. Only needed
-		// by the box-glyph snapping below, so it is derived once per item
-		// and only for items that declare a cell.
+		// Snap width for this item's cell grid, or 0 when snapping does not
+		// apply. Every box glyph in one item shares the same cell box: it
+		// derives from the item, not the glyph. Validate it once here
+		// instead of re-deriving it per glyph. The per-glyph kind check
+		// below stays, because the codepoint varies per glyph.
+		//
+		// Ask boxMetricsFor with a representative line codepoint (U+2500)
+		// so the gates (opt-out, stroke, cell size limits) live in one
+		// place. With CellWidth set, the glyph does not enter the line or
+		// block result, so an empty Glyph is enough.
+		snapCellW := 0
 		cellBaseX := 0
 		if item.Style.CellWidth > 0 {
-			baseX, _, _ := r.computeDrawOrigin(float32(item.X), 0)
-			// Through pxRoundOrigin, the same clamp boxCellOrigin applies to
-			// box origins: a NaN or absurd item.X must not fall into the
-			// implementation-defined float-to-int conversion.
-			cellBaseX = pxRoundOrigin(baseX)
+			if m, ok := boxMetricsFor(item, Glyph{}, boxLineLo,
+				r.scaleFactor); ok {
+				snapCellW = m.cellW
+				baseX, _, _ := r.computeDrawOrigin(float32(item.X), 0)
+				// Through pxRoundOrigin, the same clamp boxCellOrigin applies
+				// to box origins: a NaN or absurd item.X must not fall into
+				// the implementation-defined float-to-int conversion.
+				cellBaseX = pxRoundOrigin(baseX)
+			}
 		}
 
 		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
@@ -233,16 +245,25 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 			// tiles if the placement steps by that same integer. Inside a
 			// coalesced run the pen steps by the font's fractional advance
 			// instead, which opens 1px gaps in a rule (issue #102). Snap
-			// this cell onto the item's cell grid, taking the width from
-			// the same boxMetrics the bitmap came from so the two cannot
-			// disagree. Font glyphs in the same run are untouched.
-			if item.Style.CellWidth > 0 {
+			// this cell onto the item's cell grid. Line and block glyphs
+			// take the precomputed width, which equals what boxMetricsFor
+			// derives for them. Powerline stays on the full path, because
+			// its .notdef gate reads the glyph. Font glyphs in the same
+			// run are untouched.
+			if snapCellW > 0 {
 				ch := glyphText(layout.Text, g)
 				if cp, n := utf8.DecodeRuneInString(ch); n == len(ch) && n > 0 {
-					if m, ok := boxMetricsFor(item, g, cp,
-						r.scaleFactor); ok {
+					switch boxGlyphKind(cp) {
+					case boxKindLine, boxKindBlock:
 						drawOriginX = float32(boxSnapOriginX(
-							cellBaseX, pxRoundOrigin(drawOriginX), m.cellW))
+							cellBaseX, pxRoundOrigin(drawOriginX), snapCellW))
+					case boxKindPowerline:
+						if m, ok := boxMetricsFor(item, g, cp,
+							r.scaleFactor); ok {
+							drawOriginX = float32(boxSnapOriginX(
+								cellBaseX, pxRoundOrigin(drawOriginX), m.cellW))
+						}
+					case boxKindNone:
 					}
 				}
 			}

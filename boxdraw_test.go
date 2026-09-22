@@ -635,3 +635,97 @@ func TestBoxStyleFieldsReachTheRenderer(t *testing.T) {
 		}
 	}
 }
+
+// TestBoxDrawGlyphToRejectsMismatchedKind pins the bounds guard in
+// drawBoxGlyphTo: a kind that does not match the codepoint draws nothing
+// instead of reading past a table.
+func TestBoxDrawGlyphToRejectsMismatchedKind(t *testing.T) {
+	base := boxMetrics{cellW: 11, cellH: 23, light: 2, heavy: 4, gap: 2}
+	for _, m := range []boxMetrics{
+		{cp: '▌', kind: boxKindLine, cellW: base.cellW, cellH: base.cellH,
+			light: base.light, heavy: base.heavy, gap: base.gap},
+		{cp: '─', kind: boxKindBlock, cellW: base.cellW, cellH: base.cellH,
+			light: base.light, heavy: base.heavy, gap: base.gap},
+		{cp: '─', kind: boxKindNone, cellW: base.cellW, cellH: base.cellH,
+			light: base.light, heavy: base.heavy, gap: base.gap},
+		{cp: 0x2603, kind: boxKindLine, cellW: base.cellW, cellH: base.cellH,
+			light: base.light, heavy: base.heavy, gap: base.gap},
+		{cp: 0x2500, kind: boxKindLine, cellW: 0, cellH: 0,
+			light: base.light, heavy: base.heavy, gap: base.gap},
+	} {
+		rec := &recSink{m: m}
+		drawBoxGlyphTo(rec, m)
+		if rec.count() != 0 {
+			t.Errorf("kind %d cp %U: emitted %d primitives, want none",
+				m.kind, m.cp, rec.count())
+		}
+	}
+}
+
+// TestBoxSnapWidthMatchesMetrics pins the premise the atlas snap relies on:
+// for line and block glyphs in a cell-declaring item, boxMetricsFor derives
+// the same cell width the item precomputes, so snapped origins share the
+// bitmap grid. Powerline is glyph-gated and stays out of this check.
+func TestBoxSnapWidthMatchesMetrics(t *testing.T) {
+	item := Item{
+		Style:   TextStyle{CellWidth: 7.219, CellHeight: 20},
+		Ascent:  15,
+		Descent: 5,
+	}
+	g := Glyph{XAdvance: 7.219}
+	want := pxRound(item.Style.CellWidth * 2)
+	for cp := rune(boxLineLo); cp <= boxBlockHi; cp++ {
+		if cp > boxLineHi && cp < boxBlockLo {
+			continue
+		}
+		if boxGlyphKind(cp) == boxKindNone {
+			continue
+		}
+		m, ok := boxMetricsFor(item, g, cp, 2)
+		if !ok {
+			t.Fatalf("%U: boxMetricsFor rejected a drawable codepoint", cp)
+		}
+		if m.cellW != want {
+			t.Fatalf("%U: cellW = %d, want precomputed %d", cp, m.cellW, want)
+		}
+	}
+}
+
+// TestClampFloatToInt pins the saturation floorInt and ceilInt share with
+// pxRoundOrigin: hostile inputs land on clamps, ordinary values keep their
+// floor and ceiling meanings, and negative fractions keep their sign.
+func TestClampFloatToInt(t *testing.T) {
+	if got := floorInt(2.7); got != 2 {
+		t.Errorf("floorInt(2.7) = %d, want 2", got)
+	}
+	if got := ceilInt(2.2); got != 3 {
+		t.Errorf("ceilInt(2.2) = %d, want 3", got)
+	}
+	if got := floorInt(-0.5); got != -1 {
+		t.Errorf("floorInt(-0.5) = %d, want -1", got)
+	}
+	if got := ceilInt(-0.5); got != 0 {
+		t.Errorf("ceilInt(-0.5) = %d, want 0", got)
+	}
+	limit := 1 << 24
+	for _, tc := range []struct {
+		name string
+		got  int
+		want int
+	}{
+		{"floor NaN", floorInt(float32(math.NaN())), 0},
+		{"ceil NaN", ceilInt(float32(math.NaN())), 0},
+		{"floor +Inf", floorInt(float32(math.Inf(1))), limit},
+		{"ceil +Inf", ceilInt(float32(math.Inf(1))), limit},
+		{"floor -Inf", floorInt(float32(math.Inf(-1))), -limit},
+		{"ceil -Inf", ceilInt(float32(math.Inf(-1))), -limit},
+		{"floor huge", floorInt(1e10), limit},
+		{"ceil huge", ceilInt(1e10), limit},
+		{"floor very negative", floorInt(-1e10), -limit},
+		{"ceil very negative", ceilInt(-1e10), -limit},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("%s = %d, want %d", tc.name, tc.got, tc.want)
+		}
+	}
+}
