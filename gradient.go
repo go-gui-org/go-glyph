@@ -76,3 +76,34 @@ func GradientColorAt(stops []GradientStop, t float32) Color {
 	}
 	return last.Color
 }
+
+// gradientExtents is the box a gradient spans, in layout coords: the
+// top-left of the item boxes and the layout's visual size.
+type gradientExtents struct {
+	xOff, yOff float32
+	w, h       float32
+}
+
+// layoutGradientExtents measures the gradient box for layout. A zero
+// visual size falls back to 1, so the gradient t never divides by zero.
+func layoutGradientExtents(layout *Layout) gradientExtents {
+	e := gradientExtents{w: 1, h: 1}
+	if layout.VisualWidth > 0 {
+		e.w = layout.VisualWidth
+	}
+	if layout.VisualHeight > 0 {
+		e.h = layout.VisualHeight
+	}
+	for i := range layout.Items {
+		item := &layout.Items[i]
+		ix := float32(item.X)
+		iy := float32(item.Y) - float32(item.Ascent)
+		if i == 0 || ix < e.xOff {
+			e.xOff = ix
+		}
+		if i == 0 || iy < e.yOff {
+			e.yOff = iy
+		}
+	}
+	return e
+}

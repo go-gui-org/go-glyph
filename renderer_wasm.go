@@ -139,7 +139,7 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 		ctx2d.Set("font", cssFont)
 		ctx2d.Set("textBaseline", "alphabetic")
 		ctx2d.Set("globalAlpha", float64(c.A)/255.0)
-		ctx2d.Set("fillStyle", cssColorString(c))
+		ctx2d.Set("fillStyle", cssColorRGB(c))
 
 		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
 			if i < 0 || i >= len(layout.Glyphs) {
