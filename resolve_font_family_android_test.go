@@ -2,11 +2,7 @@
 
 package glyph
 
-import (
-	"testing"
-
-	"github.com/go-text/typesetting/font"
-)
+import "testing"
 
 func TestParseSizeFromFontName(t *testing.T) {
 	tests := []struct {
@@ -84,9 +80,8 @@ func TestAndroidGenericAlias(t *testing.T) {
 		want   string
 	}{
 		{"roboto", "sans-serif"},
-		{"roboto condensed", "sans-serif"},
-		{"noto sans kr", "sans-serif"},
 		{"droid sans", "sans-serif"},
+		{"noto sans", "sans-serif"},
 		{"roboto mono", "monospace"},
 		{"noto sans mono", "monospace"},
 		{"droid sans mono", "monospace"},
@@ -96,11 +91,14 @@ func TestAndroidGenericAlias(t *testing.T) {
 		{"droid serif", "serif"},
 		{"some unknown font", ""},
 		{"", ""},
+		{"noto sans adlam", ""},
+		{"noto sans kr", ""},
+		{"roboto serif", ""},
 	}
 	for _, tt := range tests {
-		got := androidGenericAlias(tt.family)
+		got, _, _ := platformAliases.lookup(tt.family)
 		if got != tt.want {
-			t.Errorf("androidGenericAlias(%q) = %q, want %q",
+			t.Errorf("platformAliases.lookup(%q) = %q, want %q",
 				tt.family, got, tt.want)
 		}
 	}
@@ -108,11 +106,8 @@ func TestAndroidGenericAlias(t *testing.T) {
 
 func TestEnsureAndroidDefaults(t *testing.T) {
 	// Empty maps: all three keys should be filled.
-	ctx := &Context{
-		fontPaths:   make(map[string]string),
-		fontWeights: make(map[string]font.Weight),
-	}
-	ctx.ensureAndroidDefaults()
+	ctx := &Context{fontPaths: make(map[string]string)}
+	ensurePlatformDefaults(ctx.fontPaths)
 	const roboto = "/system/fonts/Roboto-Regular.ttf"
 	if v := ctx.fontPaths["Roboto"]; v != roboto {
 		t.Errorf("Roboto = %q, want %q", v, roboto)
@@ -130,8 +125,8 @@ func TestEnsureAndroidDefaults(t *testing.T) {
 			"Roboto": "/custom/Roboto.ttf",
 		},
 	}
-	ctx2.ensureAndroidDefaults()
+	ensurePlatformDefaults(ctx2.fontPaths)
 	if v := ctx2.fontPaths["Roboto"]; v != "/custom/Roboto.ttf" {
-		t.Error("ensureAndroidDefaults overwrote existing Roboto key")
+		t.Error("ensurePlatformDefaults overwrote existing Roboto key")
 	}
 }

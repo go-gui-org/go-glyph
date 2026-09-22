@@ -67,28 +67,27 @@ func TestIsScriptFamily(t *testing.T) {
 
 func TestDarwinGenericAlias(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected string
+		family string
+		want   string
 	}{
-		{"menlo monospace", "menlo", "monospace"},
-		{"monaco monospace", "monaco", "monospace"},
-		{"sf mono", "sf mono", "monospace"},
-		{"helvetica sans-serif", "helvetica", "sans-serif"},
-		{"helvetica neue sans-serif", "helvetica neue", "sans-serif"},
-		{"times serif", "times", "serif"},
-		{"times new roman serif", "times new roman", "serif"},
-		{"generic unknown", "arial", ""},
-		{"empty", "", ""},
+		{"menlo", "monospace"},
+		{"monaco", "monospace"},
+		{"sf mono", "monospace"},
+		{"helvetica", "sans-serif"},
+		{"helvetica neue", "sans-serif"},
+		{"times", "serif"},
+		{"times new roman", "serif"},
+		{"arial", ""},
+		{"", ""},
+		{"stixgeneral times", ""},
+		{"menlo for powerline", ""},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := darwinGenericAlias(tt.input)
-			if got != tt.expected {
-				t.Errorf("darwinGenericAlias(%q) = %q, want %q",
-					tt.input, got, tt.expected)
-			}
-		})
+		got, _, _ := platformAliases.lookup(tt.family)
+		if got != tt.want {
+			t.Errorf("platformAliases.lookup(%q) = %q, want %q",
+				tt.family, got, tt.want)
+		}
 	}
 }
 

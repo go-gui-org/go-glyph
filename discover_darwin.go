@@ -5,71 +5,39 @@ package glyph
 import (
 	"os"
 	"path/filepath"
-	"strings"
 )
 
-func (ctx *Context) discoverSystemFonts() {
-	home, _ := os.UserHomeDir()
+// systemFontDirs lists the macOS font directories: system, local, and the
+// user's own (only when the home directory is known).
+func systemFontDirs() []string {
 	dirs := []string{
 		"/System/Library/Fonts",
 		"/Library/Fonts",
 	}
-	if home != "" {
+	if home, _ := os.UserHomeDir(); home != "" {
 		dirs = append(dirs, filepath.Join(home, "Library", "Fonts"))
 	}
-
-	scan := newFontScan(ctx)
-	for _, dir := range dirs {
-		_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				return nil
-			}
-			scan.consider(path, darwinGenericAlias)
-			return nil
-		})
-	}
-	scan.finish()
-	ctx.ensureDarwinDefaults()
+	return dirs
 }
 
-func darwinGenericAlias(lowerFam string) string {
-	switch {
-	case strings.Contains(lowerFam, "menlo") ||
-		strings.Contains(lowerFam, "monaco") ||
-		strings.Contains(lowerFam, "sf mono"):
-		return "monospace"
-	case strings.Contains(lowerFam, "times new roman") ||
-		strings.Contains(lowerFam, "times"):
-		return "serif"
-	case strings.Contains(lowerFam, "helvetica") ||
-		strings.Contains(lowerFam, "helvetica neue"):
-		return "sans-serif"
-	}
-	return ""
+// platformAliases lists the macOS families that may fill each generic
+// alias, most preferred first. See aliasTable.
+var platformAliases = aliasTable{
+	"monospace":  {"menlo", "sf mono", "monaco"},
+	"serif":      {"times new roman", "times"},
+	"sans-serif": {"helvetica", "helvetica neue"},
 }
 
-func (ctx *Context) ensureDarwinDefaults() {
-	const helvetica = "/System/Library/Fonts/Helvetica.ttc"
-	for _, k := range []string{"Helvetica", "sans-serif"} {
-		if _, ok := ctx.fontPaths[k]; !ok {
-			ctx.fontPaths[k] = helvetica
-		}
-	}
+// platformGenerics are the families the generic names resolve to on macOS.
+var platformGenerics = genericNames{
+	sans:  "Helvetica",
+	serif: "Times New Roman",
+	mono:  "Menlo",
 }
 
-func resolveFontFamily(fontName string) string {
-	family := parseFamilyFromFontName(fontName)
-	if family == "" {
-		return "Helvetica"
-	}
-	switch strings.ToLower(family) {
-	case "sans", "sans-serif", "system":
-		return "Helvetica"
-	case "serif":
-		return "Times New Roman"
-	case "monospace", "mono":
-		return "Menlo"
-	default:
-		return family
-	}
+// ensurePlatformDefaults makes sure a sans-serif face exists even when the
+// walk found none. Helvetica ships with every macOS release.
+func ensurePlatformDefaults(fontPaths map[string]string) {
+	fillDefaultKeys(fontPaths, "/System/Library/Fonts/Helvetica.ttc",
+		"Helvetica", "sans-serif")
 }

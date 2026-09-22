@@ -27,7 +27,7 @@ func newScanCtx() *Context {
 func TestGenericAliasPrefersRegular(t *testing.T) {
 	ctx := newScanCtx()
 	s := newFontScan(ctx)
-	alias := func(string) string { return "sans-serif" }
+	alias := aliasTable{"sans-serif": {"dejavu sans"}}
 	faces := []faceInfo{
 		{path: "/f/DejaVuSans-Bold.ttf", desc: font.Description{
 			Family: "DejaVu Sans", Aspect: font.Aspect{Weight: font.WeightBold}}},
@@ -54,7 +54,7 @@ func TestGenericAliasPrefersRegular(t *testing.T) {
 func TestCollectionMembersInFallbackTiers(t *testing.T) {
 	ctx := newScanCtx()
 	s := newFontScan(ctx)
-	none := func(string) string { return "" }
+	var none aliasTable
 	reg := font.Aspect{Weight: font.WeightNormal}
 	for i, fam := range []string{"Noto Sans CJK JP", "Noto Sans CJK SC"} {
 		s.considerFace(faceInfo{path: facePath("/cjk.ttc", i), index: i,
