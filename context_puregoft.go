@@ -97,6 +97,10 @@ func (ctx *Context) cacheFallback(text string, res fbResolution) {
 		ctx.fallbackResolve[text] = res
 		return
 	}
+	// text is a cluster sliced out of a caller's layout text. Stored as is,
+	// each entry would keep that whole text (up to MaxRichTextLength bytes)
+	// alive for as long as the entry lives. Copy only the cluster's bytes.
+	text = strings.Clone(text)
 	if len(ctx.resolveOrder) >= fallbackResolveCap {
 		// Full: overwrite the oldest slot in place and advance the head.
 		delete(ctx.fallbackResolve, ctx.resolveOrder[ctx.resolveHead])

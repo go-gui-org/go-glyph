@@ -1,29 +1,82 @@
 package glyph
 
-import "slices"
+import (
+	"slices"
+	"sort"
+)
 
 // maxDistance is a sentinel for "no match found" distance comparisons.
 const maxDistance float32 = 1e9
 
 // buildPositionCaches pre-sorts cursor and word boundary positions.
-// Called once after layout construction.
+// Called once after layout construction. One pass over the attribute map
+// and one sort fill all three lists.
 func (l *Layout) buildPositionCaches() {
-	l.cursorPositions = l.collectPositions(func(a LogAttr) bool { return a.IsCursorPosition })
-	l.wordStarts = l.collectPositions(func(a LogAttr) bool { return a.IsWordStart })
-	l.wordEnds = l.collectPositions(func(a LogAttr) bool { return a.IsWordEnd })
-}
-
-func (l *Layout) collectPositions(pred func(LogAttr) bool) []int {
-	positions := make([]int, 0, len(l.LogAttrByIndex))
+	keys := make([]int, 0, len(l.LogAttrByIndex))
+	nStarts, nEnds := 0, 0
 	for byteIdx, attrIdx := range l.LogAttrByIndex {
-		if attrIdx >= 0 && attrIdx < len(l.LogAttrs) {
-			if pred(l.LogAttrs[attrIdx]) {
-				positions = append(positions, byteIdx)
-			}
+		if attrIdx < 0 || attrIdx >= len(l.LogAttrs) {
+			continue
+		}
+		a := l.LogAttrs[attrIdx]
+		if a.IsWordStart {
+			nStarts++
+		}
+		if a.IsWordEnd {
+			nEnds++
+		}
+		keys = append(keys, byteIdx)
+	}
+	slices.Sort(keys)
+
+	// Filter the sorted keys. The cursor list is compacted into keys
+	// itself: it is written at w <= i, so no unread key is overwritten.
+	starts := make([]int, 0, nStarts)
+	ends := make([]int, 0, nEnds)
+	w := 0
+	for _, byteIdx := range keys {
+		a := l.LogAttrs[l.LogAttrByIndex[byteIdx]]
+		if a.IsWordStart {
+			starts = append(starts, byteIdx)
+		}
+		if a.IsWordEnd {
+			ends = append(ends, byteIdx)
+		}
+		if a.IsCursorPosition {
+			keys[w] = byteIdx
+			w++
 		}
 	}
-	slices.Sort(positions)
-	return positions
+	l.cursorPositions = keys[:w]
+	l.wordStarts = starts
+	l.wordEnds = ends
+}
+
+// lineRectRange returns the half-open range of CharRects that belong to
+// line. CharRects are stored line by line, and a line's rects all have
+// byte indices in [StartIndex, StartIndex+Length) — within the line they
+// are in visual order, so not sorted — which makes "Index >= x" monotone
+// across the whole slice for any line boundary x.
+func (l *Layout) lineRectRange(line Line) (int, int) {
+	lo := sort.Search(len(l.CharRects), func(i int) bool {
+		return l.CharRects[i].Index >= line.StartIndex
+	})
+	end := line.StartIndex + line.Length
+	hi := lo + sort.Search(len(l.CharRects)-lo, func(i int) bool {
+		return l.CharRects[lo+i].Index >= end
+	})
+	return lo, hi
+}
+
+// rectIsRTL reports whether CharRects[ri] is in a right-to-left run.
+func (l *Layout) rectIsRTL(ri int) bool {
+	return ri >= 0 && ri < len(l.charRTL) && l.charRTL[ri]
+}
+
+// isCursorStop reports whether byteIdx is a caret position.
+func (l *Layout) isCursorStop(byteIdx int) bool {
+	ai, ok := l.LogAttrByIndex[byteIdx]
+	return ok && ai >= 0 && ai < len(l.LogAttrs) && l.LogAttrs[ai].IsCursorPosition
 }
 
 // HitTestRect returns the bounding box of the character at (x, y)
@@ -86,52 +139,7 @@ func (l *Layout) GetClosestOffset(x, y float32) int {
 		}
 	}
 
-	targetLine := l.Lines[closestLineIdx]
-	lineEnd := targetLine.StartIndex + targetLine.Length
-
-	// Find closest char in line.
-	closestCharIdx := targetLine.StartIndex
-	minDistX := maxDistance
-	foundAny := false
-
-	for i := targetLine.StartIndex; i < lineEnd; i++ {
-		ri, ok := l.CharRectByIndex[i]
-		if !ok {
-			continue
-		}
-		cr := l.CharRects[ri]
-		mid := cr.Rect.X + cr.Rect.Width/2
-		dist := absF32(x - mid)
-		if dist < minDistX {
-			minDistX = dist
-			closestCharIdx = i
-			foundAny = true
-		}
-	}
-
-	// If x is past rightmost character, return line end.
-	if foundAny {
-		lastRight := -maxDistance
-		for i := targetLine.StartIndex; i < lineEnd; i++ {
-			ri, ok := l.CharRectByIndex[i]
-			if !ok {
-				continue
-			}
-			cr := l.CharRects[ri]
-			right := cr.Rect.X + cr.Rect.Width
-			lastRight = max(lastRight, right)
-		}
-		if lastRight > 0 && x > lastRight {
-			if _, ok := l.LogAttrByIndex[lineEnd]; ok {
-				return lineEnd
-			}
-		}
-	}
-
-	if !foundAny {
-		return targetLine.StartIndex
-	}
-	return closestCharIdx
+	return l.closestInLine(l.Lines[closestLineIdx], x)
 }
 
 // GetSelectionRects returns rectangles covering [start, end).
@@ -142,44 +150,45 @@ func (l *Layout) GetSelectionRects(start, end int) []Rect {
 // appendSelectionRects appends the rectangles covering [start, end) to
 // rects and returns the result. Draw paths pass a reused scratch slice
 // so per-frame selection geometry does not allocate.
+//
+// Each line gives one rectangle per visually contiguous piece of the
+// selection. In a bidi line, a logical range can be two or more pieces
+// on screen; one rectangle over all of them would also paint the
+// unselected text between them.
 func (l *Layout) appendSelectionRects(rects []Rect, start, end int) []Rect {
 	if start >= end || len(l.Lines) == 0 {
 		return rects
 	}
-	s := start
-	if s < 0 {
-		s = 0
-	}
-
 	for _, line := range l.Lines {
 		lineEnd := line.StartIndex + line.Length
-		overlapStart := max(s, line.StartIndex)
-		overlapEnd := min(end, lineEnd)
-		if overlapStart >= overlapEnd {
+		if max(start, line.StartIndex) >= min(end, lineEnd) {
 			continue
 		}
-
-		minX := maxDistance
-		maxX := -maxDistance
-		found := false
-		for i := overlapStart; i < overlapEnd; i++ {
-			ri, ok := l.CharRectByIndex[i]
-			if !ok {
+		lo, hi := l.lineRectRange(line)
+		inPiece := false
+		var minX, maxX float32
+		for ri := lo; ri < hi; ri++ {
+			cr := l.CharRects[ri]
+			if cr.Index < start || cr.Index >= end {
+				if inPiece {
+					rects = append(rects, Rect{X: minX, Y: line.Rect.Y,
+						Width: maxX - minX, Height: line.Rect.Height})
+					inPiece = false
+				}
 				continue
 			}
-			cr := l.CharRects[ri]
-			minX = min(minX, cr.Rect.X)
 			right := cr.Rect.X + cr.Rect.Width
+			if !inPiece {
+				minX, maxX = cr.Rect.X, right
+				inPiece = true
+				continue
+			}
+			minX = min(minX, cr.Rect.X)
 			maxX = max(maxX, right)
-			found = true
 		}
-		if found {
-			rects = append(rects, Rect{
-				X:      minX,
-				Y:      line.Rect.Y,
-				Width:  maxX - minX,
-				Height: line.Rect.Height,
-			})
+		if inPiece {
+			rects = append(rects, Rect{X: minX, Y: line.Rect.Y,
+				Width: maxX - minX, Height: line.Rect.Height})
 		}
 	}
 	return rects
@@ -217,16 +226,23 @@ func (l *Layout) GetCursorPos(byteIndex int) (CursorPosition, bool) {
 	// start of the next line, but the cursor belongs at the end
 	// of the current line (handled by the line-based fallback).
 	if byteIndex >= len(l.Text) || l.Text[byteIndex] != '\n' {
-		if r, ok := l.GetCharRect(byteIndex); ok {
+		if ri, ok := l.CharRectByIndex[byteIndex]; ok {
+			r := l.CharRects[ri].Rect
+			// The caret before a char sits on its leading edge: the
+			// left edge for LTR, the right edge for RTL.
+			x := r.X
+			if l.rectIsRTL(ri) {
+				x += r.Width
+			}
 			if line, ok := l.lineForByteIndex(byteIndex); ok {
 				return CursorPosition{
-					X:      r.X,
+					X:      x,
 					Y:      line.Rect.Y,
 					Height: line.Rect.Height,
 				}, true
 			}
 			return CursorPosition{
-				X:      r.X,
+				X:      x,
 				Y:      r.Y,
 				Height: r.Height,
 			}, true
@@ -308,10 +324,9 @@ func (l *Layout) MoveCursorLeft(byteIndex int) int {
 		return 0
 	}
 	positions := l.GetValidCursorPositions()
-	for i := len(positions) - 1; i >= 0; i-- {
-		if positions[i] < byteIndex {
-			return positions[i]
-		}
+	// Largest position strictly below byteIndex.
+	if i, _ := slices.BinarySearch(positions, byteIndex); i > 0 {
+		return positions[i-1]
 	}
 	return 0
 }
@@ -322,10 +337,13 @@ func (l *Layout) MoveCursorRight(byteIndex int) int {
 		return byteIndex
 	}
 	positions := l.GetValidCursorPositions()
-	for _, pos := range positions {
-		if pos > byteIndex {
-			return pos
-		}
+	// Smallest position strictly above byteIndex.
+	i, found := slices.BinarySearch(positions, byteIndex)
+	if found {
+		i++
+	}
+	if i < len(positions) {
+		return positions[i]
 	}
 	if len(positions) > 0 {
 		return positions[len(positions)-1]
@@ -537,6 +555,7 @@ func (l *Layout) GetWordAtIndex(byteIndex int) (int, int) {
 
 // GetParagraphAtIndex returns (start, end) byte indices for
 // paragraph containing index. Paragraph = text between \n\n.
+// text is normally l.Text; the parameter is kept for API compatibility.
 func (l *Layout) GetParagraphAtIndex(byteIndex int, text string) (int, int) {
 	if len(text) == 0 {
 		return 0, 0
@@ -578,30 +597,63 @@ func (l *Layout) GetFontNameAtIndex(index int) string {
 // findClosestIndexInLine returns the byte index closest to
 // targetX within the given line.
 func (l *Layout) findClosestIndexInLine(line Line, targetX float32) int {
-	lineEnd := line.StartIndex + line.Length
-	closestIdx := line.StartIndex
-	minDist := maxDistance
+	return l.closestInLine(line, targetX)
+}
 
-	for i := line.StartIndex; i < lineEnd; i++ {
-		ri, ok := l.CharRectByIndex[i]
-		if !ok {
+// closestInLine returns the caret position in line nearest to x. It finds
+// the char under x (or the nearest one), then picks the char's leading
+// edge or its trailing edge by which half of the char x is in. For an RTL
+// char the trailing half is the left one. A trailing hit gives the next
+// caret stop in logical order, or the line end after the line's last char,
+// which is also where a click past the line's last char lands.
+func (l *Layout) closestInLine(line Line, x float32) int {
+	lineEnd := line.StartIndex + line.Length
+	lo, hi := l.lineRectRange(line)
+	// A char absorbed into a ligature is not a caret stop. Only layouts
+	// that carry caret-stop attrs can say so; a hand-built layout without
+	// them treats every char as a stop.
+	haveStops := len(l.GetValidCursorPositions()) > 0
+	isStop := func(byteIdx int) bool {
+		return !haveStops || l.isCursorStop(byteIdx)
+	}
+	best := -1
+	bestDist := maxDistance
+	for ri := lo; ri < hi; ri++ {
+		cr := l.CharRects[ri]
+		if !isStop(cr.Index) {
 			continue
 		}
-		cr := l.CharRects[ri]
-		mid := cr.Rect.X + cr.Rect.Width/2
-		dist := absF32(targetX - mid)
-		if dist < minDist {
-			minDist = dist
-			closestIdx = i
+		var dist float32
+		switch left, right := cr.Rect.X, cr.Rect.X+cr.Rect.Width; {
+		case x < left:
+			dist = left - x
+		case x > right:
+			dist = x - right
+		}
+		if dist < bestDist {
+			best, bestDist = ri, dist
 		}
 	}
-
-	// Check if closer to end of line.
-	endX := line.Rect.X + line.Rect.Width
-	if absF32(targetX-endX) < minDist {
-		return lineEnd
+	if best < 0 {
+		return line.StartIndex
 	}
-	return closestIdx
+	cr := l.CharRects[best]
+	mid := cr.Rect.X + cr.Rect.Width/2
+	trailing := x > mid
+	if l.rectIsRTL(best) {
+		trailing = x < mid
+	}
+	if !trailing {
+		return cr.Index
+	}
+	// The next caret stop is the smallest stop index above this char's.
+	next := lineEnd
+	for ri := lo; ri < hi; ri++ {
+		if i := l.CharRects[ri].Index; i > cr.Index && i < next && isStop(i) {
+			next = i
+		}
+	}
+	return next
 }
 
 func absF32(v float32) float32 {

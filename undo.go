@@ -156,9 +156,12 @@ func (um *UndoManager) Undo(text string) *UndoResult {
 	op := um.undoStack[len(um.undoStack)-1]
 	um.undoStack = um.undoStack[:len(um.undoStack)-1]
 
-	// Bounds guard.
-	if op.RangeStart > len(text) || op.RangeEnd > len(text) ||
-		op.RangeStart > op.RangeEnd {
+	// Bounds guard. text is the text after op. A deletion's range is in
+	// the text before it (see MutationResult), so only its start must fit
+	// here; an insertion's or replacement's range is in this text.
+	if op.RangeStart < 0 || op.RangeStart > len(text) ||
+		op.RangeStart > op.RangeEnd ||
+		(op.OpType != OpDelete && op.RangeEnd > len(text)) {
 		return nil
 	}
 

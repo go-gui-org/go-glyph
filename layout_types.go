@@ -20,13 +20,18 @@ type Layout struct {
 	LogAttrs        []LogAttr
 
 	// Pre-sorted cursor/word boundary caches, built once.
-	cursorPositions []int   // Sorted valid cursor byte indices.
-	wordStarts      []int   // Sorted word-start byte indices.
-	wordEnds        []int   // Sorted word-end byte indices.
-	Width           float32 // Logical width.
-	Height          float32 // Logical height.
-	VisualWidth     float32 // Ink width.
-	VisualHeight    float32 // Ink height.
+	cursorPositions []int // Sorted valid cursor byte indices.
+	wordStarts      []int // Sorted word-start byte indices.
+	wordEnds        []int // Sorted word-end byte indices.
+	// charRTL[i] reports whether CharRects[i] is in a right-to-left bidi
+	// run. nil when the layout has no RTL run (and on backends without
+	// bidi), which means every char is LTR.
+	charRTL []bool
+
+	Width        float32 // Logical width.
+	Height       float32 // Logical height.
+	VisualWidth  float32 // Ink width.
+	VisualHeight float32 // Ink height.
 
 }
 

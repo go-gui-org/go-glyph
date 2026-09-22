@@ -3,6 +3,7 @@
 package glyph
 
 import (
+	"sort"
 	"strings"
 	"unicode/utf8"
 )
@@ -14,6 +15,9 @@ type charFontOverride struct {
 	yShift   float64 // Positive = up (superscript), negative = down.
 	xPad     float64 // Leading horizontal padding (pixels).
 	objWidth float64 // >0 when this char is an InlineObject placeholder.
+	// run is the rich-text run index plus one (0 = not a rich run). Items
+	// split where it changes, so each run keeps its own color and style.
+	run int
 }
 
 // LayoutText shapes and wraps text using Canvas2D measureText.
@@ -33,19 +37,18 @@ func (ctx *Context) LayoutText(text string, cfg TextConfig) (Layout, error) {
 }
 
 // LayoutRichText shapes multi-styled text.
+//
+// Each run is limited to MaxTextLength bytes and all runs together to
+// MaxRichTextLength. An empty run is allowed and contributes nothing.
 func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error) {
-	if len(rt.Runs) == 0 {
-		return Layout{}, nil
-	}
-	for _, run := range rt.Runs {
-		if err := ValidateTextInput(run.Text, MaxTextLength,
-			"LayoutRichText"); err != nil {
-			return Layout{}, err
-		}
+	total, err := validateRichRuns(rt)
+	if err != nil || total == 0 {
+		return Layout{}, err
 	}
 
 	// Build full text and per-run ranges.
 	var fullText strings.Builder
+	fullText.Grow(total)
 	type runRange struct {
 		start, end int
 		style      TextStyle // As given, for the "was it set" checks below.
@@ -57,6 +60,9 @@ func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error) 
 	runs := make([]runRange, 0, len(rt.Runs))
 	idx := 0
 	for _, run := range rt.Runs {
+		if run.Text == "" {
+			continue // an empty run owns no cluster and no item
+		}
 		merged := mergeStyles(cfg.Style, run.Style)
 		css := buildCSSFont(merged)
 		var yShift, xPad float64
@@ -95,62 +101,61 @@ func (ctx *Context) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error) 
 	}
 	text := fullText.String()
 
-	// Build per-byte font override map.
+	// Build the per-byte override map. Every byte of a rich run gets an
+	// entry, so items split at run boundaries even where the font does not
+	// change (a color-only run).
 	baseCSS := buildCSSFont(cfg.Style)
-	overrides := make(map[int]charFontOverride)
-	for _, r := range runs {
-		if r.cssFont != baseCSS || r.yShift != 0 {
-			for i := r.start; i < r.end; {
-				overrides[i] = charFontOverride{
-					cssFont: r.cssFont,
-					yShift:  r.yShift,
-					xPad:    r.xPad,
-				}
-				_, sz := utf8.DecodeRuneInString(text[i:])
-				i += sz
-			}
+	overrides := make(map[int]charFontOverride, total)
+	for ri, r := range runs {
+		ov := charFontOverride{
+			cssFont: r.cssFont,
+			yShift:  r.yShift,
+			xPad:    r.xPad,
+			run:     ri + 1,
 		}
 		if r.style.Object != nil {
-			for i := r.start; i < r.end; {
-				ov := overrides[i]
-				ov.objWidth = float64(r.style.Object.Width)
-				overrides[i] = ov
-				_, sz := utf8.DecodeRuneInString(text[i:])
-				i += sz
-			}
+			ov.objWidth = float64(r.style.Object.Width)
+		}
+		for i := r.start; i < r.end; {
+			overrides[i] = ov
+			_, sz := utf8.DecodeRuneInString(text[i:])
+			i += sz
 		}
 	}
 
 	clusters := segmentGraphemes(text)
 	layout := ctx.buildLayout(clusters, text, baseCSS, cfg, overrides)
 
-	// Apply per-run styles to items.
+	// Apply per-run styles to items. Runs are sorted and do not overlap, so
+	// the run holding an item's first byte is found by binary search.
 	for i := range layout.Items {
 		item := &layout.Items[i]
-		for _, r := range runs {
-			if item.StartIndex >= r.start && item.StartIndex < r.end {
-				if r.style.Color.A > 0 {
-					item.Color = r.style.Color
-				}
-				if r.style.BgColor.A > 0 {
-					item.BgColor = r.style.BgColor
-					item.HasBgColor = true
-				}
-				if r.style.Underline {
-					item.HasUnderline = true
-				}
-				if r.style.Strikethrough {
-					item.HasStrikethrough = true
-				}
-				if r.style.Object != nil {
-					item.IsObject = true
-					item.ObjectID = r.style.Object.ID
-				}
-				item.CSSFont = r.cssFont
-				item.Style = r.merged
-				break
-			}
+		k := sort.Search(len(runs), func(k int) bool {
+			return runs[k].end > item.StartIndex
+		})
+		if k == len(runs) || runs[k].start > item.StartIndex {
+			continue
 		}
+		r := runs[k]
+		if r.style.Color.A > 0 {
+			item.Color = r.style.Color
+		}
+		if r.style.BgColor.A > 0 {
+			item.BgColor = r.style.BgColor
+			item.HasBgColor = true
+		}
+		if r.style.Underline {
+			item.HasUnderline = true
+		}
+		if r.style.Strikethrough {
+			item.HasStrikethrough = true
+		}
+		if r.style.Object != nil {
+			item.IsObject = true
+			item.ObjectID = r.style.Object.ID
+		}
+		item.CSSFont = r.cssFont
+		item.Style = r.merged
 	}
 
 	return layout, nil
@@ -333,66 +338,17 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 		ctx.ctx2d.Set("font", cssFont)
 	}
 
-	// Word-wrap into lines.
+	// Word-wrap into lines, with the same UAX #14 break opportunities and
+	// wrap rules as the FreeType backend.
+	charText := func(i int) string { return chars[i].text }
+	charByte := func(i int) int { return chars[i].byteI }
+	canBreakBefore := lineBreakOpportunities(nil, text, len(chars), charByte)
 	wrapWidth := float64(-1)
 	if cfg.Block.Width > 0 {
 		wrapWidth = float64(cfg.Block.Width)
 	}
-
-	type lineInfo struct {
-		startChar, endChar int
-		width              float64
-	}
-	var lines []lineInfo
-	lineStart := 0
-	lineW := float64(0)
-	lastSpace := -1
-
-	for i, ch := range chars {
-		if ch.text == "\n" {
-			lines = append(lines, lineInfo{lineStart, i, lineW})
-			lineStart = i + 1
-			lineW = 0
-			lastSpace = -1
-			continue
-		}
-		if ch.text == " " {
-			lastSpace = i
-		}
-
-		newW := lineW + ch.width
-		if wrapWidth > 0 && newW > wrapWidth && i > lineStart {
-			if cfg.Block.Wrap == WrapNone {
-				lineW = newW
-				continue
-			}
-			if cfg.Block.Wrap == WrapWord || cfg.Block.Wrap == WrapWordChar {
-				if lastSpace >= lineStart {
-					lines = append(lines, lineInfo{
-						lineStart, lastSpace, lineW - ch.width,
-					})
-					lineStart = lastSpace + 1
-					lineW = 0
-					for j := lineStart; j <= i; j++ {
-						lineW += chars[j].width
-					}
-					lastSpace = -1
-					continue
-				}
-			}
-			if cfg.Block.Wrap == WrapChar || cfg.Block.Wrap == WrapWordChar {
-				lines = append(lines, lineInfo{lineStart, i, lineW})
-				lineStart = i
-				lineW = ch.width
-				lastSpace = -1
-				continue
-			}
-		}
-		lineW = newW
-	}
-	if lineStart <= len(chars) {
-		lines = append(lines, lineInfo{lineStart, len(chars), lineW})
-	}
+	lines := wrapLines(nil, len(chars), cfg.Block.Wrap, wrapWidth,
+		func(i int) float64 { return chars[i].width }, charText, canBreakBefore)
 
 	// Build Layout structures.
 	var allGlyphs []Glyph
@@ -460,6 +416,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 		itemStart := len(allGlyphs)
 		itemStartByte := startByteIdx
 		itemCSSFont := cssFont
+		itemRun := 0
 		itemX := cx
 
 		flushItem := func(endByte int) {
@@ -511,17 +468,20 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 				continue
 			}
 
-			// Split item at font boundary.
+			// Split the item at a font or rich-run boundary.
 			charFont := cssFont
+			charRun := 0
 			if overrides != nil {
 				if ov, ok := overrides[ch.byteI]; ok {
 					charFont = ov.cssFont
+					charRun = ov.run
 				}
 			}
-			if charFont != itemCSSFont {
+			if charFont != itemCSSFont || charRun != itemRun {
 				flushItem(ch.byteI)
 				itemStartByte = ch.byteI
 				itemCSSFont = charFont
+				itemRun = charRun
 				itemX = cx
 			}
 
@@ -588,21 +548,8 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 	}
 	totalHeight = lineY
 
-	// Newline bytes are never visited by the per-line char loop — each
-	// line's [startChar, endChar) range stops just before its terminating
-	// '\n' — but they are still caret stops: the byte index of a '\n' is
-	// the end of the current line, and in a "\n\n" run it is also the
-	// empty line separating paragraphs. Mirrors layout_ft.go.
-	for i := 0; i < len(text); i++ {
-		if text[i] == '\n' {
-			attrIdx := len(logAttrs)
-			logAttrs = append(logAttrs, LogAttr{
-				IsCursorPosition: true,
-				IsLineBreak:      true,
-			})
-			logAttrByIndex[i] = attrIdx
-		}
-	}
+	logAttrs = appendNewlineAttrs(text, logAttrs, logAttrByIndex)
+	logAttrs = appendWrapSpaceAttrs(lines, charText, charByte, logAttrs, logAttrByIndex)
 
 	endAttrIdx := len(logAttrs)
 	logAttrs = append(logAttrs, LogAttr{IsCursorPosition: true})
@@ -630,12 +577,15 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 
 // buildVerticalLayout produces a vertical (top-to-bottom) layout.
 // Each character occupies one row; XAdvance=0, YAdvance=-lineHeight.
+// Items split where the font or the rich run changes, so each rich run
+// keeps its own style.
 func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 	text, cssFont string,
 	cfg TextConfig, overrides map[int]charFontOverride,
 	fontAscent, fontDescent, lineHeight float64) Layout {
 
 	ctx.ctx2d.Set("font", cssFont)
+	currentFont := cssFont
 
 	baseColor := cfg.Style.Color
 	if baseColor.A == 0 {
@@ -644,15 +594,62 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 
 	var allGlyphs []Glyph
 	var charRects []CharRect
+	var items []Item
 	charRectByIndex := make(map[int]int, len(clusters))
-	var logAttrs []LogAttr
-	logAttrByIndex := make(map[int]int, len(clusters)+1)
+	newlineAttrs := strings.Count(text, "\n")
+	logAttrs := make([]LogAttr, 0, len(clusters)+1+newlineAttrs)
+	logAttrByIndex := make(map[int]int, len(clusters)+1+newlineAttrs)
 
 	penY := fontAscent // start at first baseline
+
+	// The open item: its first glyph, first byte, pen y, font and run.
+	itemStart, itemByte := 0, 0
+	itemY := penY
+	itemFont := cssFont
+	itemRun := 0
+	flush := func(endByte int) {
+		if len(allGlyphs) == itemStart {
+			return
+		}
+		items = append(items, Item{
+			Style:      cfg.Style,
+			CSSFont:    itemFont,
+			Width:      lineHeight,
+			X:          fontAscent,
+			Y:          itemY,
+			Ascent:     fontAscent,
+			Descent:    fontDescent,
+			GlyphStart: itemStart,
+			GlyphCount: len(allGlyphs) - itemStart,
+			StartIndex: itemByte,
+			Length:     endByte - itemByte,
+			Color:      baseColor,
+		})
+		itemStart = len(allGlyphs)
+	}
 
 	for _, cl := range clusters {
 		if cl.text == "\n" || cl.text == "\r" {
 			continue
+		}
+
+		charFont := cssFont
+		charRun := 0
+		if ov, ok := overrides[cl.byteI]; ok {
+			charFont = ov.cssFont
+			charRun = ov.run
+		}
+		if len(allGlyphs) > itemStart && (charFont != itemFont || charRun != itemRun) {
+			flush(cl.byteI)
+		}
+		if len(allGlyphs) == itemStart {
+			itemByte = cl.byteI
+			itemY = penY
+			itemFont, itemRun = charFont, charRun
+		}
+		if charFont != currentFont {
+			ctx.ctx2d.Set("font", charFont)
+			currentFont = charFont
 		}
 
 		// Measure char width for centering.
@@ -686,7 +683,12 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 
 		penY += lineHeight
 	}
+	flush(len(text))
+	if currentFont != cssFont {
+		ctx.ctx2d.Set("font", cssFont)
+	}
 
+	logAttrs = appendNewlineAttrs(text, logAttrs, logAttrByIndex)
 	// End-of-text attr.
 	endIdx := len(logAttrs)
 	logAttrs = append(logAttrs, LogAttr{IsCursorPosition: true})
@@ -694,26 +696,7 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 
 	applyWordAttrs(text, logAttrs, logAttrByIndex)
 
-	glyphCount := len(allGlyphs)
 	totalH := penY
-
-	var items []Item
-	if glyphCount > 0 {
-		items = append(items, Item{
-			Style:      cfg.Style,
-			CSSFont:    cssFont,
-			Width:      lineHeight,
-			X:          fontAscent,
-			Y:          fontAscent,
-			Ascent:     fontAscent,
-			Descent:    fontDescent,
-			GlyphStart: 0,
-			GlyphCount: glyphCount,
-			StartIndex: 0,
-			Length:     len(text),
-			Color:      baseColor,
-		})
-	}
 
 	lines := []Line{{
 		StartIndex: 0,
