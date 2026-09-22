@@ -181,14 +181,12 @@ const glyphAgeRefreshFrames = 64
 
 func (r *Renderer) evictOldestGlyph() {
 	var oldestKey uint64
-	oldestPage := 0
 	oldestAge := uint64(math.MaxUint64)
 	sampled := 0
 	for k, e := range r.cache {
 		if e.age < oldestAge {
 			oldestAge = e.age
 			oldestKey = k
-			oldestPage = e.Page
 		}
 		sampled++
 		if sampled >= evictSampleSize {
@@ -198,19 +196,50 @@ func (r *Renderer) evictOldestGlyph() {
 	if sampled == 0 {
 		return
 	}
-	r.removePageKey(oldestPage, oldestKey)
-	delete(r.cache, oldestKey)
+	r.dropGlyph(oldestKey)
 }
 
-func (r *Renderer) removePageKey(page int, key uint64) {
-	keys := r.pageKeys[page]
-	for i, k := range keys {
-		if k == key {
-			keys[i] = keys[len(keys)-1]
-			r.pageKeys[page] = keys[:len(keys)-1]
-			return
+// storeGlyph inserts e under key and, when e lives on an atlas page,
+// appends key to that page's list and records its slot there.
+func (r *Renderer) storeGlyph(key uint64, e cacheEntry) {
+	if e.Page >= 0 {
+		keys := r.pageKeys[e.Page]
+		e.slot = len(keys)
+		r.pageKeys[e.Page] = append(keys, key)
+	}
+	r.cache[key] = e
+}
+
+// dropGlyph removes key from the cache and from its page's list in O(1):
+// the page's last key moves into the freed slot and its entry's slot is
+// updated to match.
+func (r *Renderer) dropGlyph(key uint64) {
+	e, ok := r.cache[key]
+	if !ok {
+		return
+	}
+	delete(r.cache, key)
+	if e.Page < 0 {
+		return
+	}
+	keys := r.pageKeys[e.Page]
+	i := e.slot
+	if i < 0 || i >= len(keys) || keys[i] != key {
+		// The slot does not match; the page list was changed outside
+		// storeGlyph/dropGlyph. Leave it: a stale key in a page list
+		// only costs a no-op delete when that page resets.
+		return
+	}
+	last := len(keys) - 1
+	if i != last {
+		moved := keys[last]
+		keys[i] = moved
+		if m, ok := r.cache[moved]; ok {
+			m.slot = i
+			r.cache[moved] = m
 		}
 	}
+	r.pageKeys[e.Page] = keys[:last]
 }
 
 func (r *Renderer) touchPage(cg CachedGlyph) {

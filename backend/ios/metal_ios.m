@@ -159,6 +159,17 @@ void metalUpdateTex(MetalCtx *ctx, uint64_t tid,
 	       bytesPerRow:w * 4];
 }
 
+void metalUpdateTexRect(MetalCtx *ctx, uint64_t tid, void *data,
+                        int rowBytes, int x, int y, int w, int h) {
+	if (!ctx) return;
+	id<MTLTexture> tex = ctx->textures[@(tid)];
+	if (!tex) return;
+	[tex replaceRegion:MTLRegionMake2D(x, y, w, h)
+	       mipmapLevel:0
+	         withBytes:data
+	       bytesPerRow:rowBytes];
+}
+
 void metalDeleteTex(MetalCtx *ctx, uint64_t tid) {
 	if (!ctx) return;
 	[ctx->textures removeObjectForKey:@(tid)];

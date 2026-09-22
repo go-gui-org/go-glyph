@@ -18,6 +18,10 @@ MetalCtx* metalInit(void *metalLayer);
 uint64_t  metalNewTex(MetalCtx *ctx, int w, int h);
 void      metalUpdateTex(MetalCtx *ctx, uint64_t tid,
                          void *data, int w, int h);
+// metalUpdateTexRect uploads the (x, y, w, h) region of a texture. data
+// points at the region's first pixel; rows are rowBytes apart.
+void      metalUpdateTexRect(MetalCtx *ctx, uint64_t tid, void *data,
+                             int rowBytes, int x, int y, int w, int h);
 void      metalDeleteTex(MetalCtx *ctx, uint64_t tid);
 int       metalRender(MetalCtx *ctx,
                       void *verts, int vertCount,

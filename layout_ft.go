@@ -715,6 +715,10 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 	ascent, descent, leading := baseFont.metrics()
 	lineHeight := recommendedLineHeight(ascent, descent, leading, baseFont.size)
 	pixelScale := 1.0 / float64(ctx.scaleFactor)
+	// Underline and strikethrough come from the base font for every item,
+	// fallback and emoji items included, so a decorated line keeps one
+	// position and weight across font changes, as browsers draw it.
+	deco := baseFont.decorations()
 
 	if cfg.Orientation == OrientationVertical {
 		return ctx.buildVerticalLayout(clusters, text, baseFont, cfg,
@@ -1054,17 +1058,19 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 				FontScale:              itemFit,
 				Color:                  baseColor,
 				UseOriginalColor:       useOrig,
-				UnderlineOffset:        2.0,
-				UnderlineThickness:     1.0,
-				StrikethroughOffset:    ascent * 0.35 * pixelScale,
-				StrikethroughThickness: 1.0,
-				HasUnderline:           cfg.Style.Underline && !useOrig,
-				HasStrikethrough:       cfg.Style.Strikethrough && !useOrig,
-				HasBgColor:             cfg.Style.BgColor.A > 0,
-				BgColor:                cfg.Style.BgColor,
-				StrokeWidth:            cfg.Style.StrokeWidth,
-				StrokeColor:            cfg.Style.StrokeColor,
-				HasStroke:              cfg.Style.StrokeWidth > 0 && !useOrig,
+				UnderlineOffset:        deco.ulOffset * pixelScale,
+				UnderlineThickness:     deco.ulThick * pixelScale,
+				StrikethroughOffset:    deco.stOffset * pixelScale,
+				StrikethroughThickness: deco.stThick * pixelScale,
+				// Emoji items keep the line too: it runs under the whole
+				// decorated span, as on WASM and in browsers.
+				HasUnderline:     cfg.Style.Underline,
+				HasStrikethrough: cfg.Style.Strikethrough,
+				HasBgColor:       cfg.Style.BgColor.A > 0,
+				BgColor:          cfg.Style.BgColor,
+				StrokeWidth:      cfg.Style.StrokeWidth,
+				StrokeColor:      cfg.Style.StrokeColor,
+				HasStroke:        cfg.Style.StrokeWidth > 0 && !useOrig,
 			})
 			itemStart = len(allGlyphs)
 		}

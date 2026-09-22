@@ -14,10 +14,8 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 
 	// Resolve (rasterize) every glyph before emitting any quad, so a
 	// mid-call atlas reset cannot leave this call's quads sampling
-	// evicted texels (issue #89). Uploads are deferred to Commit — hosts
-	// call it after their draw pass and before the render pass samples
-	// the textures, and batching the dirty pages there costs one
-	// full-page upload per frame per page instead of one per draw call.
+	// evicted texels (issue #89). New glyphs go to the GPU through
+	// UploadDirtyRects below (rect-capable backends) or Commit (others).
 	// Skipped glyphs keep a zero CachedGlyph, discarded by the Width > 0
 	// check in the emit pass below. Reuses the fill scratch from
 	// drawLayoutImpl: DrawLayoutPlaced and drawLayoutImpl never nest, so
@@ -36,14 +34,24 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 				continue
 			}
 			placement := placements[i]
-			bin := r.computeSubpixelBin(placement.X, item.UseOriginalColor)
+			if !placement.finite() {
+				continue
+			}
+			// Same bin rule as emitPlacedQuad's snap: upright glyphs take
+			// the fraction of their pen x, rotated ones and emoji bin 0.
+			bin := 0
+			if placement.Angle == 0 {
+				bin = r.computeSubpixelBin(placement.X, item.UseOriginalColor)
+			}
 			cgs[i] = r.getOrLoadGlyph(layout.Text, item, g, bin, 0)
 			r.touchPage(cgs[i])
 		}
 	}
-	// Dirty pages are uploaded once per frame by Commit, never here: a
-	// per-call upload would transfer the whole page for every draw call
-	// that inserted a glyph (see the resolve-pass comment).
+	// Same mid-frame upload as drawLayoutImpl: on a RectTextureUpdater
+	// backend it puts new glyphs on the GPU before the quads below sample
+	// them, at a cost bounded by the new glyphs. Elsewhere it is a no-op
+	// and Commit uploads whole pages once per frame.
+	r.atlas.UploadDirtyRects()
 
 	for _, item := range layout.Items {
 		if item.HasStroke && item.Color.A == 0 {
@@ -63,6 +71,9 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 				continue
 			}
 			placement := placements[i]
+			if !placement.finite() {
+				continue
+			}
 			cg := cgs[i]
 			if cg.Width > 0 && cg.Height > 0 &&
 				cg.Page >= 0 && cg.Page < len(r.atlas.Pages) {
@@ -190,10 +201,10 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 		if len(r.cache) >= r.maxCacheEntries {
 			r.evictOldestGlyph()
 		}
-		r.cache[key] = cacheEntry{
+		r.storeGlyph(key, cacheEntry{
 			CachedGlyph: CachedGlyph{Page: -1},
 			age:         r.atlas.FrameCounter,
-		}
+		})
 		return CachedGlyph{}
 	}
 
@@ -208,12 +219,10 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 		r.evictOldestGlyph()
 	}
 
-	r.cache[key] = cacheEntry{
+	r.storeGlyph(key, cacheEntry{
 		CachedGlyph: result.Cached,
 		age:         r.atlas.FrameCounter,
-	}
-	r.pageKeys[result.Cached.Page] = append(
-		r.pageKeys[result.Cached.Page], key)
+	})
 	return result.Cached
 }
 

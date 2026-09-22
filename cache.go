@@ -15,4 +15,8 @@ func newMetricsCache(capacity int) metricsCache {
 type cacheEntry struct {
 	CachedGlyph
 	age uint64
+	// slot is the entry's index in its page's pageKeys list, so removing
+	// one key is O(1) instead of a scan of every key on the page. Unused
+	// for entries with no page (Page < 0) and on WASM.
+	slot int
 }

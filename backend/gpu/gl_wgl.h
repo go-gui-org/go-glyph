@@ -22,6 +22,10 @@ GLCtx*    glCtxInit(uintptr_t hwnd, float dpiScale);
 uint64_t  glCtxNewTex(GLCtx *ctx, int w, int h);
 void      glCtxUpdateTex(GLCtx *ctx, uint64_t tid,
                          void *data, int w, int h);
+// glCtxUpdateTexRect uploads the (x, y, w, h) region of a texture. data
+// points at the region's first pixel; rows are rowBytes apart.
+void      glCtxUpdateTexRect(GLCtx *ctx, uint64_t tid, void *data,
+                             int rowBytes, int x, int y, int w, int h);
 void      glCtxDeleteTex(GLCtx *ctx, uint64_t tid);
 int       glCtxRender(GLCtx *ctx,
                       void *verts, int vertCount,

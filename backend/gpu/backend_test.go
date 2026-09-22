@@ -227,3 +227,54 @@ func TestDrawFilledRectTransformed_DegenerateSizeNoOp(t *testing.T) {
 			len(b.batch.verts))
 	}
 }
+
+// --- UpdateTextureRect guard tests (no CGo) ---
+
+// The backend must advertise sub-rectangle uploads, or the atlas falls
+// back to a whole-page upload for every new glyph.
+var _ glyph.RectTextureUpdater = (*Backend)(nil)
+
+func TestValidTextureRect(t *testing.T) {
+	const texW, texH = 8, 4
+	const stride = texW * 4
+	full := stride * texH
+	for _, tc := range []struct {
+		name            string
+		dataLen, stride int
+		x, y, w, h      int
+		want            bool
+	}{
+		{"whole texture", full, stride, 0, 0, texW, texH, true},
+		{"inner region", full, stride, 2, 1, 3, 2, true},
+		{"last pixel", full, stride, texW - 1, texH - 1, 1, 1, true},
+		{"zero width", full, stride, 0, 0, 0, 1, false},
+		{"negative x", full, stride, -1, 0, 2, 2, false},
+		{"past right edge", full, stride, 7, 0, 2, 1, false},
+		{"past bottom edge", full, stride, 0, 3, 1, 2, false},
+		{"stride below row", full, 8, 0, 0, 3, 1, false},
+		{"stride not pixels", full, stride + 1, 0, 0, 1, 1, false},
+		{"short data", full - 1, stride, 0, 0, texW, texH, false},
+		{"huge region", full, stride, 0, 0, math.MaxInt, 1, false},
+	} {
+		got := validTextureRect(texW, texH, tc.dataLen, tc.stride,
+			tc.x, tc.y, tc.w, tc.h)
+		if got != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A rejected region must return before the CGo call; a nil gpu makes a
+// regressed guard panic.
+func TestUpdateTextureRect_InvalidNoOp(t *testing.T) {
+	const id = glyph.TextureID(7)
+	b := &Backend{
+		gpu:     nil,
+		widths:  map[glyph.TextureID]int{id: 4},
+		heights: map[glyph.TextureID]int{id: 4},
+	}
+	b.UpdateTextureRect(id, make([]byte, 8), 16, 0, 0, 4, 4)       // short
+	b.UpdateTextureRect(id, make([]byte, 64), 16, 2, 0, 4, 1)      // outside
+	b.UpdateTextureRect(glyph.TextureID(99), make([]byte, 64), 16, // unknown
+		0, 0, 1, 1)
+}

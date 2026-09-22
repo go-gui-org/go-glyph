@@ -128,6 +128,26 @@ func (b *Backend) UpdateTexture(id glyph.TextureID, data []byte) {
 	copy(td.data, data)
 }
 
+// UpdateTextureRect copies the (x, y, w, h) region of data, a whole
+// page with srcStride bytes per row, into a texture. It implements
+// glyph.RectTextureUpdater for parity with the native backends. Unknown
+// ids, invalid regions and short buffers are ignored.
+func (b *Backend) UpdateTextureRect(id glyph.TextureID, data []byte,
+	srcStride, x, y, w, h int) {
+
+	td, ok := b.textures[id]
+	if !ok || !validTextureRect(td.width, td.height, len(data),
+		srcStride, x, y, w, h) || len(td.data) < td.width*td.height*4 {
+		return
+	}
+	dstStride := td.width * 4
+	for row := range h {
+		src := (y+row)*srcStride + x*4
+		dst := (y+row)*dstStride + x*4
+		copy(td.data[dst:dst+w*4], data[src:src+w*4])
+	}
+}
+
 // DeleteTexture releases a texture.
 func (b *Backend) DeleteTexture(id glyph.TextureID) {
 	delete(b.textures, id)
@@ -241,4 +261,23 @@ func ftoa(f float64) string {
 	}
 	i := int(f * 100)
 	return "0." + uitoa(uint(i/10)) + uitoa(uint(i%10))
+}
+
+// validTextureRect reports whether the region (x, y, w, h) lies inside a
+// texW x texH texture and data, read with srcStride bytes per row, holds
+// every pixel of it. int64 math keeps huge inputs from wrapping past the
+// checks.
+func validTextureRect(texW, texH, dataLen, srcStride, x, y, w, h int) bool {
+	if w <= 0 || h <= 0 || x < 0 || y < 0 || srcStride <= 0 ||
+		srcStride%4 != 0 {
+		return false
+	}
+	if int64(x)+int64(w) > int64(texW) || int64(y)+int64(h) > int64(texH) {
+		return false
+	}
+	if (int64(x)+int64(w))*4 > int64(srcStride) {
+		return false
+	}
+	end := (int64(y)+int64(h)-1)*int64(srcStride) + (int64(x)+int64(w))*4
+	return end <= int64(dataLen)
 }

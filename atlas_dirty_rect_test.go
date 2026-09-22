@@ -187,14 +187,6 @@ func TestAtlasIncrementalUploadsAccumulate(t *testing.T) {
 		t.Errorf("second glyph texel = %v, want {0 200 0 255}", got)
 	}
 
-	// And the staging buffers agree with each other, so the next
-	// incremental upload starts from a consistent page.
-	for i := range page.StagingFront {
-		if page.StagingFront[i] != page.StagingBack[i] {
-			t.Fatalf("staging buffers diverged at byte %d: front=%d back=%d",
-				i, page.StagingFront[i], page.StagingBack[i])
-		}
-	}
 	// StagingBack is the rasterization target other code reads; it must
 	// still hold the first glyph.
 	off := first.Y*stride + first.X*4
@@ -261,9 +253,8 @@ func TestAtlasDirtyBoolAloneUploadsWholePage(t *testing.T) {
 }
 
 // TestAtlasGrowPageMarksWholePageDirty covers the reallocation path:
-// growPage hands the page a brand-new texture and a zeroed StagingFront,
-// so anything short of a full-page region would leave the GPU copy and
-// the two staging buffers disagreeing.
+// growPage hands the page a brand-new, empty texture, so anything short of
+// a full-page region would leave the preserved glyphs off the GPU copy.
 func TestAtlasGrowPageMarksWholePageDirty(t *testing.T) {
 	backend := newRectMockBackend()
 	atlas, err := NewGlyphAtlas(backend, 64, 64)
@@ -291,18 +282,12 @@ func TestAtlasGrowPageMarksWholePageDirty(t *testing.T) {
 		t.Errorf("DirtyRect after growPage = %v, want %v", page.DirtyRect, want)
 	}
 
-	// The upload must carry the preserved glyph onto the new texture and
-	// leave both staging buffers identical again.
+	// The upload must carry the preserved glyph onto the new texture.
 	atlas.UploadDirtyRects()
 	stride := page.Width * 4
 	if got := backend.texelAt(page.TextureID, stride,
 		atlasGlyphPadding, atlasGlyphPadding); got[0] != 200 {
 		t.Errorf("texel on grown texture = %v, want red 200", got)
-	}
-	for i := range page.StagingFront {
-		if page.StagingFront[i] != page.StagingBack[i] {
-			t.Fatalf("staging buffers diverged at byte %d after upload", i)
-		}
 	}
 }
 

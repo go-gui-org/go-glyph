@@ -18,9 +18,17 @@ const atlasGlyphPadding = 1
 
 // AtlasPage is a single texture page in a multi-page glyph atlas.
 type AtlasPage struct {
-	Shelves      []Shelf
-	StagingFront []byte // GPU upload source.
-	StagingBack  []byte // CPU rasterization target.
+	Shelves []Shelf
+	// StagingFront is no longer used and stays nil.
+	//
+	// Deprecated: pages keep one staging buffer, StagingBack. Every
+	// backend copies the pixels during UpdateTexture (glTexSubImage2D,
+	// replaceRegion, WritePixels or copy), so a second buffer only
+	// doubled the atlas heap.
+	StagingFront []byte
+	// StagingBack is the page's staging buffer: the CPU rasterization
+	// target and the GPU upload source.
+	StagingBack []byte
 	// DirtyRect is the half-open pixel box rasterized into since the last
 	// upload, in page coordinates. Meaningful only while Dirty is set; an
 	// empty rect alongside Dirty is read as "all of it", so a caller that
@@ -42,7 +50,7 @@ func (page *AtlasPage) markDirty(x, y, w, h int) {
 }
 
 // pendingUpload returns the region to upload, clamped both to the page's
-// declared bounds and to the rows the staging buffers actually hold. An
+// declared bounds and to the rows the staging buffer actually holds. An
 // empty DirtyRect means the whole page (see the field comment).
 //
 // The clamp is not paranoia about our own writers: AtlasPage's fields are
@@ -56,10 +64,8 @@ func (page *AtlasPage) pendingUpload() image.Rectangle {
 	if rowBytes <= 0 || rows <= 0 {
 		return image.Rectangle{}
 	}
-	// A short buffer caps the region at whole rows we can address in
-	// both buffers; the shorter of the two governs, since uploadPage
-	// touches each of them over the same span.
-	if n := min(len(page.StagingFront), len(page.StagingBack)) / rowBytes; n < rows {
+	// A short buffer caps the region at whole rows we can address.
+	if n := len(page.StagingBack) / rowBytes; n < rows {
 		rows = n
 	}
 	full := image.Rect(0, 0, page.Width, rows)
@@ -93,6 +99,10 @@ type GlyphAtlas struct {
 	// callers with their own bitmaps.
 	MaxGlyphDimension int
 	LastFrame         uint64
+
+	// initialHeight is the height the first page was created with. Reset
+	// shrinks a grown first page back to it, so a purge gives back memory.
+	initialHeight int
 
 	// scratchAlpha and scratchRGBA are grow-only byte buffers reused
 	// across rasterization calls to eliminate per-glyph allocations.
@@ -147,22 +157,46 @@ func NewGlyphAtlas(backend DrawBackend, w, h int) (*GlyphAtlas, error) {
 		MaxPages:          4,
 		CurrentPage:       0,
 		MaxGlyphDimension: 4096,
+		initialHeight:     h,
 	}, nil
 }
 
-// Reset clears all atlas pages (shelves, staging buffers) without
-// deleting GPU textures. Use it to reclaim atlas space mid-session
-// while keeping the TextSystem alive.
+// Reset clears the atlas and gives back the memory it grew into. It
+// keeps only the first page, cleared and shrunk to its initial height.
+// Use it to reclaim atlas space mid-session while keeping the TextSystem
+// alive.
+//
+// The textures of dropped or shrunk pages go to Garbage, not straight to
+// DeleteTexture: quads already emitted this frame can still refer to
+// them. The next Cleanup with a new frame number deletes them.
 //
 // Reset invalidates every CachedGlyph handed out before the call.
 // Do not draw with old coordinates after Reset. To clear the
 // Renderer cache at the same time, call PurgeGlyphCache instead
 // of calling Reset directly.
 func (atlas *GlyphAtlas) Reset() {
-	for i := range atlas.Pages {
-		atlas.resetPage(i)
+	if len(atlas.Pages) == 0 {
+		return
 	}
-	atlas.Garbage = atlas.Garbage[:0]
+	for i := 1; i < len(atlas.Pages); i++ {
+		atlas.Garbage = append(atlas.Garbage, atlas.Pages[i].TextureID)
+		atlas.Pages[i] = AtlasPage{} // drop the staging buffer now
+	}
+	atlas.Pages = atlas.Pages[:1]
+	atlas.CurrentPage = 0
+
+	page := &atlas.Pages[0]
+	if h := atlas.initialHeight; h > 0 && page.Height > h && atlas.Backend != nil {
+		// A new, smaller texture replaces the grown one. On allocation
+		// failure keep the grown page; resetPage below still clears it.
+		if size, err := checkAllocationSize(page.Width, h, 4); err == nil {
+			atlas.Garbage = append(atlas.Garbage, page.TextureID)
+			page.TextureID = atlas.Backend.NewTexture(page.Width, h)
+			page.Height = h
+			page.StagingBack = make([]byte, size)
+		}
+	}
+	atlas.resetPage(0)
 }
 
 // Free releases all atlas textures. It is safe to call Free twice.
@@ -329,7 +363,8 @@ func (atlas *GlyphAtlas) rectUpdater() RectTextureUpdater {
 	return ru
 }
 
-// SwapAndUpload swaps staging buffers and uploads dirty pages to the GPU.
+// SwapAndUpload uploads dirty pages to the GPU. The name predates the
+// single staging buffer; nothing is swapped any more.
 // Called at the frame boundary by (*Renderer).Commit, which is what makes
 // it the backstop: whatever a mid-frame UploadDirtyRects left pending — or
 // everything, on a backend without RectTextureUpdater — is sent here.
@@ -381,23 +416,15 @@ func (atlas *GlyphAtlas) uploadPage(page *AtlasPage) {
 		return
 	}
 
-	// Swap front/back so the upload source is the buffer just rasterized
-	// into, then restore the invariant that both buffers hold identical
-	// pixels. The two can only differ inside the pending region, so the
-	// copy-back is bounded by what changed rather than by page size —
-	// which is what makes a mid-frame upload affordable. Rows are copied
-	// whole; a glyph-tall band is negligible beside a 1024-row page.
-	page.StagingFront, page.StagingBack = page.StagingBack, page.StagingFront
+	// Upload straight from the one staging buffer. Every backend copies
+	// the pixels before UpdateTexture/UpdateTextureRect returns, so the
+	// buffer is free to take the next glyph at once.
 	rowBytes := page.Width * 4
-	lo := region.Min.Y * rowBytes
-	hi := region.Max.Y * rowBytes
-	copy(page.StagingBack[lo:hi], page.StagingFront[lo:hi])
-
 	if ru := atlas.rectUpdater(); ru != nil {
-		ru.UpdateTextureRect(page.TextureID, page.StagingFront, rowBytes,
+		ru.UpdateTextureRect(page.TextureID, page.StagingBack, rowBytes,
 			region.Min.X, region.Min.Y, region.Dx(), region.Dy())
 	} else {
-		atlas.Backend.UpdateTexture(page.TextureID, page.StagingFront)
+		atlas.Backend.UpdateTexture(page.TextureID, page.StagingBack)
 	}
 
 	page.Dirty = false
@@ -420,11 +447,10 @@ func newAtlasPage(backend DrawBackend, w, h int) (AtlasPage, error) {
 	}
 	texID := backend.NewTexture(w, h)
 	return AtlasPage{
-		TextureID:    texID,
-		Width:        w,
-		Height:       h,
-		StagingFront: make([]byte, size),
-		StagingBack:  make([]byte, size),
+		TextureID:   texID,
+		Width:       w,
+		Height:      h,
+		StagingBack: make([]byte, size),
 	}, nil
 }
 
@@ -497,9 +523,8 @@ func (atlas *GlyphAtlas) resetPage(pageIdx int) {
 	page.UsedPixels = 0
 	page.Age = atlas.FrameCounter
 
-	// Zero out staging buffers. The whole page is now dirty: the GPU copy
-	// still holds the evicted glyphs and must be cleared with it.
-	clear(page.StagingFront)
+	// Zero out the staging buffer. The whole page is now dirty: the GPU
+	// copy still holds the evicted glyphs and must be cleared with it.
 	clear(page.StagingBack)
 	page.DirtyRect = image.Rectangle{}
 	page.markDirty(0, 0, page.Width, page.Height)
@@ -519,18 +544,16 @@ func (atlas *GlyphAtlas) growPage(pageIdx, newHeight int) error {
 	}
 	oldSize := int64(page.Width) * int64(page.Height) * 4
 
-	// Reallocate staging buffers, preserving existing data.
-	newFront := make([]byte, newSize)
+	// Reallocate the staging buffer, preserving existing data.
 	newBack := make([]byte, newSize)
-	// The staging buffers are exported, so outside code can shrink
-	// them. Copy only what the old buffer still holds. When it is
-	// short, the old pixels are already lost and the full-page dirty
-	// mark below still makes the GPU copy match the new buffers.
+	// The staging buffer is exported, so outside code can shrink it.
+	// Copy only what the old buffer still holds. When it is short, the
+	// old pixels are already lost and the full-page dirty mark below
+	// still makes the GPU copy match the new buffer.
 	if int64(len(page.StagingBack)) >= oldSize {
 		copy(newBack, page.StagingBack[:oldSize])
 	}
 
-	page.StagingFront = newFront
 	page.StagingBack = newBack
 	page.Height = newHeight
 
@@ -538,9 +561,8 @@ func (atlas *GlyphAtlas) growPage(pageIdx, newHeight int) error {
 	atlas.Garbage = append(atlas.Garbage, page.TextureID)
 	page.TextureID = atlas.Backend.NewTexture(page.Width, newHeight)
 	// The whole (larger) page is dirty: the replacement texture is
-	// untouched, and StagingFront was reallocated to zeros, so only a
-	// full-page region restores the front/back equality that uploadPage
-	// relies on.
+	// untouched, so only a full-page upload puts the preserved glyphs
+	// on it.
 	page.DirtyRect = image.Rectangle{}
 	page.markDirty(0, 0, page.Width, newHeight)
 	return nil

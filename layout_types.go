@@ -96,7 +96,14 @@ type Item struct {
 	StartIndex int
 	Length     int
 
-	// Decoration metrics.
+	// Decoration metrics, in logical pixels. They come from the base
+	// font's post and OS/2 tables (em-based fallbacks when missing; always
+	// em-based on WASM) and are at least one device pixel thick.
+	// UnderlineOffset is the distance from the baseline down to the bottom
+	// of the underline: its top is at Y + UnderlineOffset -
+	// UnderlineThickness. StrikethroughOffset is the distance from the
+	// baseline up to the top of the strikethrough plus its thickness: its
+	// top is at Y - StrikethroughOffset + StrikethroughThickness.
 	UnderlineOffset        float64
 	UnderlineThickness     float64
 	StrikethroughOffset    float64
@@ -140,6 +147,13 @@ type GlyphPlacement struct {
 	X     float32 // Absolute screen x.
 	Y     float32 // Absolute screen y (baseline).
 	Angle float32 // Rotation in radians, 0 = upright.
+}
+
+// finite reports whether every field is a finite number. A NaN or Inf
+// placement would reach the backend as a NaN quad or matrix, so the
+// renderers skip it.
+func (p GlyphPlacement) finite() bool {
+	return finiteF32(p.X) && finiteF32(p.Y) && finiteF32(p.Angle)
 }
 
 // GlyphInfo provides the absolute position and advance of a glyph

@@ -46,11 +46,31 @@ func (b *Backend) NewTexture(width, height int) glyph.TextureID {
 	return id
 }
 
-// UpdateTexture uploads RGBA data to an existing texture.
+// UpdateTexture uploads RGBA data to an existing texture. A short
+// buffer or an unknown id is ignored: the C side reads w*h*4 bytes, so a
+// smaller slice would read out of bounds. int64 math avoids overflow.
 func (b *Backend) UpdateTexture(id glyph.TextureID, data []byte) {
 	w := b.widths[id]
 	h := b.heights[id]
+	if w <= 0 || h <= 0 || int64(len(data)) < int64(w)*int64(h)*4 {
+		return
+	}
 	b.gpu.updateTexture(uint64(id), data, w, h)
+}
+
+// UpdateTextureRect uploads the (x, y, w, h) region of a texture from
+// data, a whole page with srcStride bytes per row. It implements
+// glyph.RectTextureUpdater, so the atlas sends only newly rasterized
+// glyphs instead of the whole page. An invalid region or a short buffer
+// is ignored.
+func (b *Backend) UpdateTextureRect(id glyph.TextureID, data []byte,
+	srcStride, x, y, w, h int) {
+
+	if !validTextureRect(b.widths[id], b.heights[id], len(data),
+		srcStride, x, y, w, h) {
+		return
+	}
+	b.gpu.updateTextureRect(uint64(id), data, srcStride, x, y, w, h)
 }
 
 // DeleteTexture releases a texture.
@@ -212,4 +232,24 @@ func (b *Backend) Destroy() {
 	b.gpu.destroy()
 	b.widths = nil
 	b.heights = nil
+}
+
+// validTextureRect reports whether the region (x, y, w, h) lies inside a
+// texW x texH texture and data, read with srcStride bytes per row, holds
+// every pixel of it. The C side reads exactly that span, so anything
+// less would read out of bounds. int64 math keeps huge inputs from
+// wrapping past the checks.
+func validTextureRect(texW, texH, dataLen, srcStride, x, y, w, h int) bool {
+	if w <= 0 || h <= 0 || x < 0 || y < 0 || srcStride <= 0 ||
+		srcStride%4 != 0 {
+		return false
+	}
+	if int64(x)+int64(w) > int64(texW) || int64(y)+int64(h) > int64(texH) {
+		return false
+	}
+	if (int64(x)+int64(w))*4 > int64(srcStride) {
+		return false
+	}
+	end := (int64(y)+int64(h)-1)*int64(srcStride) + (int64(x)+int64(w))*4
+	return end <= int64(dataLen)
 }

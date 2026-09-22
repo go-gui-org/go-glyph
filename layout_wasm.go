@@ -176,6 +176,11 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 	fontDescent := mRef.Get("fontBoundingBoxDescent").Float()
 	lineHeight := recommendedLineHeight(
 		fontAscent, fontDescent, 0, cssFontSize(cfg.Style))
+	// Canvas2D does not report the font's underline or strikeout metrics,
+	// so use the em-based fallbacks the native path applies to fonts that
+	// lack them, with the same one-device-pixel minimum thickness.
+	deco := newDecorationMetrics(0, 0, 0, 0, cssFontSize(cfg.Style),
+		float64(ctx.scaleInv))
 
 	// Everything below is in logical units, which is also what measureText
 	// and the CSS font size are in: the canvas' base transform carries the
@@ -447,10 +452,10 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 				StartIndex:             itemStartByte,
 				Length:                 endByte - itemStartByte,
 				Color:                  baseColor,
-				UnderlineOffset:        2.0,
-				UnderlineThickness:     1.0,
-				StrikethroughOffset:    fontAscent * 0.35,
-				StrikethroughThickness: 1.0,
+				UnderlineOffset:        deco.ulOffset,
+				UnderlineThickness:     deco.ulThick,
+				StrikethroughOffset:    deco.stOffset,
+				StrikethroughThickness: deco.stThick,
 				HasUnderline:           cfg.Style.Underline,
 				HasStrikethrough:       cfg.Style.Strikethrough,
 				HasBgColor:             cfg.Style.BgColor.A > 0,

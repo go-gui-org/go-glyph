@@ -781,6 +781,23 @@ func (f ftFont) metrics() (ascent, descent, leading float64) {
 	return ascent, descent, leading
 }
 
+// decorations returns the underline and strikethrough geometry of the
+// font at its size, read from the post and OS/2 tables (em-based
+// fallbacks when a table lacks them), in physical pixels. The lines are
+// at least one physical pixel thick.
+func (f ftFont) decorations() decorationMetrics {
+	if f.face == nil {
+		return newDecorationMetrics(0, 0, 0, 0, f.size, 1)
+	}
+	s := f.size / float64(nonZeroUpem(f.upem))
+	return newDecorationMetrics(
+		float64(f.face.LineMetric(font.UnderlinePosition))*s,
+		float64(f.face.LineMetric(font.UnderlineThickness))*s,
+		float64(f.face.LineMetric(font.StrikethroughPosition))*s,
+		float64(f.face.LineMetric(font.StrikethroughThickness))*s,
+		f.size, 1)
+}
+
 // measureString returns the shaped advance width of text in pixels.
 func (f ftFont) measureString(text string) float64 {
 	buf := f.shape(text)
