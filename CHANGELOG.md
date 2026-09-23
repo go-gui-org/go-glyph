@@ -8,14 +8,65 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.26.0] - 2026-09-23
+
 ### Added
 
 - **`Renderer.DrawCompositionTransformed`.** Draws the IME preedit underlines
   and cursor through an affine transform. Use it with `DrawLayoutTransformed` so
   the feedback stays on the rotated glyphs.
+- **Affine transform helpers.** `IsIdentity`, `IsFinite`, `AffineScale`,
+  `Inverse`, and `AffineRotationAround`, with non-finite transform guards.
+  Backgrounds and decorations now rotate with glyphs through the new
+  `TransformedFillBackend` (#134).
+- **Shared font-name parsing.** Native and WASM Pango font-name parsing is one
+  implementation (`fontname.go`), with a shared WASM CSS font builder and a
+  face-path encoding plus TTC loader (`facepath_puregoft.go`) (#139).
+- **Shared wrap and draw helpers.** Wrapping logic is unified into
+  `layout_wrap_shared.go` for both FreeType and WASM, and background,
+  decoration, and gradient-extent computation is shared (`draw_fill_shared.go`,
+  `gradient.go`) so the atlas and WASM paths cannot drift apart (#141, #142).
 
 ### Fixed
 
+- **Render path correctness, atlas memory, and decorations (#143).**
+  `DrawLayoutPlaced` no longer applies the subpixel bin twice; upright
+  placements snap to the device pixel grid and rotated ones rasterize at bin
+  0. Strokes use the fill's subpixel bin. `GlyphAtlas.Reset` deletes queued
+  textures and drops extra pages, and `PurgeGlyphCache` reclaims GPU and heap
+  memory. Non-finite placements are skipped on both paths. The draw origin is
+  folded in before snapping. Atlas heap use is halved (one staging buffer),
+  every backend implements `RectTextureUpdater` (`UpdateTextureRect`), and
+  cache eviction is O(1). Underlines and strikethroughs use the font's post
+  and OS-2 metrics with em-based fallbacks on both paths.
+- **Layout correctness, undo/redo, bidi ordering, and WASM parity (#142).**
+  Wrapped-line width uses the correct prefix width, with shared UAX #14 (CJK)
+  line-break support on WASM. `DeleteBackward` and `DeleteSelection` report
+  the range convention `UndoManager` expects, and all public mutation helpers
+  clamp out-of-range cursors and stale layouts. `LayoutRichText` accepts empty
+  runs and bounds total length with `MaxRichTextLength`. Clicks on a
+  character's trailing half move the caret past it. Bidi implements UAX #9
+  rule L2 with per-paragraph direction, correct RTL caret edges, and one
+  selection rectangle per visually contiguous piece. Letter spacing skips
+  ligature interiors, and word attributes stay paired inside grapheme
+  clusters.
+- **Draw path correctness (#141).** WASM no longer applies fill alpha twice,
+  diagonal gradients get a fill style, and vertical gradient spans stop
+  double-counting the draw origin. Atlas gradient strips sample each glyph's
+  own top, leave color-emoji bitmaps unmultiplied, and place scaled emoji
+  through the shared `emojiQuadBox`.
+- **Font discovery against script-font aliasing and relative dirs (#140).**
+  Generic aliases match whole family names through a ranked table, relative
+  directories are never walked, Windows falls back through `%SystemRoot%`,
+  Linux reads `XDG_DATA_HOME` and `XDG_DATA_DIRS`, and discovery results are
+  cached per process with per-`Context` copies.
+- **Context review findings (#139).** Generic aliases prefer the
+  Regular-weight upright face, every `.ttc` face is registered, the renderer
+  resolves names through its own `Context`, NaN and Inf scales and sizes are
+  rejected, CJK needles no longer match Devanagari and Khmer families, the
+  fallback eviction queue is a fixed-capacity ring buffer, and `Context.Free`
+  clears every cache.
+- **IME composition review findings (#138).**
 - **An empty preedit now ends IME composition.** `HandleMarkedText("")` was
   rejected by input validation, so the old preedit stayed on screen after the
   user deleted it.
@@ -28,19 +79,28 @@ and this project adheres to
   Negative clause starts shrink the clause, negative `Start` positions clamp to
   0, and empty clauses are dropped.
 - **`HandleClause` sets `SelectedClause`** for a selected clause.
+- **Bitmap raster hardening (#136).** Allocation limits, oversize downscale,
+  and COLR foreground handling.
+- **Glyph atlas hardening (#135).** Bounds checks, nil-backend guards, and
+  overflow fixes with saturated sizing and documented `Reset` invalidation.
+- **Box drawing review findings (#137).** `drawBoxGlyphTo` guards kind and
+  codepoint mismatches, saturating int conversion, with per-item validation
+  hoisted out of the fill loop.
 - **Dead key + space gives the accent alone.** Added ý, Ý and Ÿ.
 - **`DrawComposition` keeps the cursor color's alpha** and scales it by about
   70%. Before, it replaced the alpha with 178. It no longer allocates per frame.
 
-### Changed (breaking)
+### Changed
 
 These break the v1 API on purpose. go-gui and its sibling repos are the only
 clients, and none of them call these functions.
 
-- `CompositionState.HandleMarkedText` returns `error`, and `HandleInsertText`
-  returns `(string, error)`. Before, invalid input was dropped with no signal.
-- `CompositionState.CompositionBounds` and `GetClauseRects` take `*Layout`, like
-  the other layout query methods. A nil layout gives no result.
+- **BREAKING: `CompositionState.HandleMarkedText` returns `error`, and
+  `HandleInsertText` returns `(string, error)`.** Before, invalid input was
+  dropped with no signal.
+- **BREAKING: `CompositionState.CompositionBounds` and `GetClauseRects` take
+  `*Layout`, like the other layout query methods.** A nil layout gives no
+  result.
 
 ### Removed
 
