@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/go-text/typesetting/font"
 	ot "github.com/go-text/typesetting/font/opentype"
@@ -697,8 +698,28 @@ func warmFallbackCoverage(fallbackPaths []string) {
 // coverage (rankIconFallbacks): tier order is meaningless for PUA, where the
 // first covering font is routinely a text face that maps the slot to an
 // unrelated glyph.
-func orderTextFallbacks(fallbackPaths []string, text string) (mono, color []string) {
+//
+// base is the default sans face (Context.fallbackBase), or "" for none. For
+// Latin, Greek, Cyrillic and script-neutral text (usesBaseFallback) it goes
+// first in mono when it covers the text. Without it, a letter the primary face
+// lacks (an icon face lacks all letters) resolves to the first tier that covers
+// it: a CJK collection, whose tables stay tens of MB resident in faceCache for
+// one Latin glyph (#146). Other scripts ignore base and keep tier order. The
+// default sans often covers Arabic or Hebrew too (DejaVu Sans, Segoe UI), and
+// the script tier holds the face made for that script.
+func orderTextFallbacks(fallbackPaths []string, base, text string) (mono, color []string) {
+	useBase := base != "" && usesBaseFallback(text)
+	if useBase {
+		if cov := loadCoverage(base); cov != nil && !cov.color && cov.covers(text) {
+			mono = append(mono, base)
+		} else {
+			useBase = false // base does not cover text; keep plain tier order
+		}
+	}
 	for _, path := range fallbackPaths {
+		if useBase && path == base {
+			continue // already first in mono
+		}
 		cov := loadCoverage(path)
 		if cov == nil || !cov.covers(text) {
 			continue
@@ -710,6 +731,21 @@ func orderTextFallbacks(fallbackPaths []string, text string) (mono, color []stri
 		}
 	}
 	return rankIconFallbacks(mono, text), color
+}
+
+// usesBaseFallback reports whether every rune of text is Latin, Greek,
+// Cyrillic, Common (digits, punctuation, symbols) or Inherited (combining
+// marks). Only such text may use the default sans face ahead of the tier list
+// (see orderTextFallbacks). Private Use Area runes are script Unknown, so icon
+// clusters keep their own ranking (rankIconFallbacks).
+func usesBaseFallback(text string) bool {
+	for _, r := range text {
+		if !unicode.In(r, unicode.Latin, unicode.Greek, unicode.Cyrillic,
+			unicode.Common, unicode.Inherited) {
+			return false
+		}
+	}
+	return text != ""
 }
 
 // isDefaultIgnorable reports whether r is a Unicode default-ignorable code

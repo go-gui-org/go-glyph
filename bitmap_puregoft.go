@@ -43,6 +43,7 @@ const maxEmbeddedBitmapBytes = 16 << 20
 var (
 	ftFontPathsSingleton       map[string]string
 	ftScriptFallbacksSingleton []string
+	ftFallbackBaseSingleton    string // default sans face (Context.fallbackBase)
 	ftColorFallbacksSingleton  []string
 )
 
@@ -50,8 +51,10 @@ var (
 // exists so shared setup code (NewContext) can call it uniformly.
 func setFTLib(_ FTLibrary)                   {}
 func setFTFontPaths(paths map[string]string) { ftFontPathsSingleton = paths }
-func setFTScriptFallbacks(paths []string)    { ftScriptFallbacksSingleton = paths }
-func setFTColorFallbacks(paths []string)     { ftColorFallbacksSingleton = paths }
+func setFTScriptFallbacks(paths []string, base string) {
+	ftScriptFallbacksSingleton, ftFallbackBaseSingleton = paths, base
+}
+func setFTColorFallbacks(paths []string) { ftColorFallbacksSingleton = paths }
 
 // renderFontPaths returns the font map a glyph load resolves names in:
 // the Renderer's own Context map when it has one, else the process-wide
@@ -152,7 +155,7 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 // same cluster, instead of the raw tier order that let a color/emoji font
 // shadow a monochrome one here.
 func orderedTextFallbackPaths(ch string) []string {
-	mono, color := orderTextFallbacks(ftScriptFallbacksSingleton, ch)
+	mono, color := orderTextFallbacks(ftScriptFallbacksSingleton, ftFallbackBaseSingleton, ch)
 	// mono is freshly allocated by orderTextFallbacks (not shared), so
 	// appending color onto it in place saves a third slice allocation.
 	return append(mono, color...)

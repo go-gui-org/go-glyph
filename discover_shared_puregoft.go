@@ -133,6 +133,10 @@ func scanSystemFonts() *systemFonts {
 // glyphs win over monochrome coverage; colorPaths also drives the
 // render-side color path. Script fonts (Arabic, Hebrew, etc.) come after
 // CJK. General fonts (symbol/icon/Nerd Fonts, etc.) are the last tier.
+//
+// fallbackBase is the default sans face, kept out of the tier list. The
+// text selector (orderTextFallbacks) tries it first, but only for Latin,
+// Greek, Cyrillic and script-neutral text (see usesBaseFallback).
 func (ctx *Context) discoverSystemFonts() {
 	sf := cachedSystemFonts()
 	ctx.fontPaths = maps.Clone(sf.fontPaths)
@@ -145,6 +149,9 @@ func (ctx *Context) discoverSystemFonts() {
 	cjk := orderCJKForLang(sf.cjk, sf.cjkFams, ctx.lang)
 	ctx.fallbackPaths = assembleFallbacks(sf.color, sf.emoji, cjk,
 		sf.script, sf.general)
+	// The sans-serif alias is the same face genericFallback uses for an
+	// unresolved family. It is "" only when no sans family was found.
+	ctx.fallbackBase = sf.fontPaths["sans-serif"]
 }
 
 // fillDefaultKeys sets each key to path when discovery did not set it, so

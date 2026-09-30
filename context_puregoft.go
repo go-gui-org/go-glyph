@@ -29,6 +29,7 @@ type Context struct {
 	fontWeights   map[string]font.Weight // weight backing each fontPaths key
 	fontItalics   map[string]bool        // italic flag backing each fontPaths key
 	fallbackPaths []string               // script fallback fonts (CJK, Arabic, etc.)
+	fallbackBase  string                 // default sans face; see orderTextFallbacks
 	colorPaths    []string               // color-emoji fonts (CBDT/CBLC), render side
 
 	// families is a case-folded set of collected family names
@@ -127,7 +128,7 @@ func NewContext(scaleFactor float32) (*Context, error) {
 	// fallbackPaths from the once-per-process system font scan.
 	ctx.discoverSystemFonts()
 	setFTFontPaths(ctx.fontPaths)
-	setFTScriptFallbacks(ctx.fallbackPaths)
+	setFTScriptFallbacks(ctx.fallbackPaths, ctx.fallbackBase)
 	setFTColorFallbacks(ctx.colorPaths)
 	// Idle eviction decays the face cache after a burst session (the render
 	// thread alone could never trigger it: an idle terminal performs no
@@ -152,6 +153,7 @@ func (ctx *Context) Free() {
 	ctx.fontItalics = nil
 	ctx.families = nil
 	ctx.fallbackPaths = nil
+	ctx.fallbackBase = ""
 	ctx.colorPaths = nil
 	ctx.scratch = layoutScratch{}
 	ctx.fallbackResolve = nil
