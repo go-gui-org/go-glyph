@@ -287,7 +287,7 @@ func (ctx *Context) probeFallback(text string, wantColor bool,
 	// that lives solely in a color font still renders instead of going tofu.
 	// The same ordering drives the render-side text path (loadGlyphFT), so a
 	// cluster resolved here and one rasterized there pick the same font.
-	mono, color := orderTextFallbacks(ctx.fallbackPaths, text)
+	mono, color := orderTextFallbacks(ctx.fallbackPaths, ctx.fallbackBase, text)
 	if len(mono) > 0 {
 		return mono[0], false
 	}

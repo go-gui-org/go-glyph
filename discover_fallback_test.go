@@ -89,6 +89,21 @@ func TestAssembleFallbacksOrder(t *testing.T) {
 	}
 }
 
+// TestDiscoverFallbackBase is the #146 guard on the host: discovery must set
+// fallbackBase to the sans-serif alias. Without it a Latin letter the primary
+// face lacks resolves to the first tier that covers it, a CJK collection.
+func TestDiscoverFallbackBase(t *testing.T) {
+	sans, ok := cachedSystemFonts().fontPaths["sans-serif"]
+	if !ok {
+		t.Skip("host has no sans-serif alias")
+	}
+	ctx := &Context{}
+	ctx.discoverSystemFonts()
+	if ctx.fallbackBase != sans {
+		t.Errorf("fallbackBase = %q, want sans-serif %q", ctx.fallbackBase, sans)
+	}
+}
+
 func aspect(w font.Weight, italic bool) font.Aspect {
 	a := font.Aspect{Weight: w, Style: font.StyleNormal}
 	if italic {
