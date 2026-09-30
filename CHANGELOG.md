@@ -8,6 +8,16 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.26.1] - 2026-09-30
+
+### Fixed
+
+- **Latin fallback uses the default sans face before CJK (#147).** A Latin
+  letter the primary face lacks resolved to the first monochrome font that
+  covers it: the CJK collection, keeping about 30 MB resident for one glyph.
+  The default sans face is now tried first for Latin, Greek, Cyrillic, and
+  script-neutral text it covers. Other scripts keep tier order.
+
 ## [v1.26.0] - 2026-09-23
 
 ### Added
