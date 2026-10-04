@@ -1,13 +1,16 @@
-.PHONY: docs docs-serve check test-race coverage vet lint lint-pin nocgo \
+.PHONY: docs docs-serve check test-race coverage vet lint lint-bin nocgo \
 	cross-build build-modules prepush
 
-# golangci-lint version pinned by CI (.github/workflows/ci.yml).
-LINT_VERSION := v2.12.2
+# Repo-local bin for the pinned linter. The pinned VERSION itself lives in
+# tools/lint/go.mod -- see the $(LINT_BIN) rule below. `make lint` and CI
+# both build from that file, so a local pass and a CI pass run one version.
+LINT_DIR = $(CURDIR)/.bin
+LINT_BIN = $(LINT_DIR)/golangci-lint
 
 # golangci-lint honours go.work the same way the toolchain does. This repo
 # ships no workspace file, but a developer may add one to point at a
 # sibling checkout; the gate should still validate what CI builds.
-LINT := GOWORK=off golangci-lint
+LINT := GOWORK=off $(LINT_BIN)
 
 ## docs: generate docs/api/API.md via gomarkdoc
 docs:
@@ -17,11 +20,11 @@ docs:
 docs-serve:
 	pkgsite -open .
 
-## check: run tests, vet, and lint (requires golangci-lint)
-check:
+## check: run tests, vet, and lint
+check: $(LINT_BIN)
 	go test ./...
 	go vet ./...
-	golangci-lint run ./...
+	$(LINT) run ./...
 
 ## test-race: run tests with the Go race detector enabled
 test-race:
@@ -36,16 +39,22 @@ coverage:
 vet:
 	go vet ./...
 
-## lint-pin: verify golangci-lint matches the version CI installs, so a
-## local pass and a CI pass mean the same thing.
-lint-pin:
-	@golangci-lint --version | grep -q "$(LINT_VERSION:v%=%)" || \
-	  { echo "::error::golangci-lint $(LINT_VERSION) required. Run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(LINT_VERSION)"; exit 1; }
+## lint-bin: build the pinned golangci-lint into .bin/. It rebuilds only
+## when tools/lint/go.mod or go.sum change. GOWORK=off keeps a local
+## go.work out of the build. GOOS/GOARCH/CGO_ENABLED are cleared so a
+## caller that sets them to pick a lint target does not cross-compile
+## the linter itself into a binary this host cannot run.
+$(LINT_BIN): tools/lint/go.mod tools/lint/go.sum
+	GOWORK=off GOOS= GOARCH= CGO_ENABLED=0 GOFLAGS= GOBIN=$(LINT_DIR) \
+	  go -C tools/lint install \
+	  github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+
+lint-bin: $(LINT_BIN)
 
 ## lint: lint the packages CI lints. Note the scope is narrower than the
 ## `check` target's ./... — CI passes this explicit list, and this target
 ## exists to reproduce CI exactly. Run `make check` for the wider sweep.
-lint: lint-pin
+lint: $(LINT_BIN)
 	$(LINT) run . ./accessibility ./backend/gpu ./ime
 
 ## nocgo: the cgo-free gate CI enforces on the root package. The root is

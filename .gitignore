@@ -34,6 +34,9 @@ libglyph.h
 # Output
 *.out
 
+# Pinned linter binary, built by `make lint` from tools/lint.
+/.bin/
+
 # Go workspace
 go.work
 go.work.sum

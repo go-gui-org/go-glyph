@@ -117,14 +117,10 @@ jobs:
             fonts-noto-color-emoji \
             pkg-config
 
+      # Builds the linter pinned in tools/lint/go.mod, the same binary
+      # `make lint` runs locally.
       - name: Run golangci-lint
-        env:
-          GOLANGCI_LINT_VERSION: v2.12.2
-        run: |
-          curl -sSfL https://github.com/golangci/golangci-lint/releases/download/${GOLANGCI_LINT_VERSION}/golangci-lint-${GOLANGCI_LINT_VERSION#v}-linux-amd64.tar.gz | \
-            tar xz -C /tmp
-          /tmp/golangci-lint-${GOLANGCI_LINT_VERSION#v}-linux-amd64/golangci-lint run \
-            . ./accessibility ./backend/gpu ./ime
+        run: make lint
 
   test-wasm:
     runs-on: ubuntu-latest
