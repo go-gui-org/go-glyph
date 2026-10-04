@@ -3,7 +3,8 @@
 ## Prerequisites
 
 - Go 1.26+
-- [golangci-lint](https://golangci-lint.run/)
+- [golangci-lint](https://golangci-lint.run/) does not need to be installed.
+  `make lint` builds the version pinned in `tools/lint/go.mod` into `.bin/`.
 - SDL2 (for GPU examples only; not needed for the `glyph` package itself)
 
 ## Build and Test
