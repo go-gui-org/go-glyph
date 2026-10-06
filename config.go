@@ -2,11 +2,17 @@ package glyph
 
 // TextConfig holds configuration for text layout and rendering.
 type TextConfig struct {
-	Style        TextStyle
-	Gradient     *GradientConfig // nil = no gradient.
-	Block        BlockStyle
-	Orientation  TextOrientation
-	UseMarkup    bool
+	Style       TextStyle
+	Gradient    *GradientConfig // nil = no gradient.
+	Block       BlockStyle
+	Orientation TextOrientation
+	UseMarkup   bool
+	// NoHitTesting builds the layout without hit-test data: CharRects,
+	// LogAttrs, their index maps and the cursor and word caches stay nil, so
+	// cursor, selection and hit-test queries find nothing. Set it when a
+	// layout is only drawn or measured. TextWidth, TextHeight, DrawText and
+	// InkBounds already skip the data on their own. Only native horizontal
+	// layouts honor it; vertical and web layouts still build the data.
 	NoHitTesting bool
 }
 

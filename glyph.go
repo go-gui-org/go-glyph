@@ -12,6 +12,10 @@ import (
 type cachedLayout struct {
 	layout     Layout
 	lastAccess int64 // Unix milliseconds.
+	// hitTest reports whether layout carries hit-test data. Draw and measure
+	// calls cache a layout without it; LayoutTextCached rebuilds the entry
+	// with it on first use.
+	hitTest bool
 }
 
 // TextSystem is the main entry point for text rendering. It owns
@@ -98,7 +102,7 @@ func (ts *TextSystem) Free() {
 // DrawText renders text at (x, y) using configuration.
 // Uses layout cache for repeated calls.
 func (ts *TextSystem) DrawText(x, y float32, text string, cfg TextConfig) error {
-	item, err := ts.getOrCreateLayout(text, cfg)
+	item, err := ts.getOrCreateLayout(text, cfg, false)
 	if err != nil {
 		return err
 	}
@@ -112,7 +116,7 @@ func (ts *TextSystem) DrawText(x, y float32, text string, cfg TextConfig) error 
 
 // TextWidth returns the width (pixels) of text if rendered with cfg.
 func (ts *TextSystem) TextWidth(text string, cfg TextConfig) (float32, error) {
-	item, err := ts.getOrCreateLayout(text, cfg)
+	item, err := ts.getOrCreateLayout(text, cfg, false)
 	if err != nil {
 		return 0, err
 	}
@@ -121,7 +125,7 @@ func (ts *TextSystem) TextWidth(text string, cfg TextConfig) (float32, error) {
 
 // TextHeight returns the visual height (pixels) of text.
 func (ts *TextSystem) TextHeight(text string, cfg TextConfig) (float32, error) {
-	item, err := ts.getOrCreateLayout(text, cfg)
+	item, err := ts.getOrCreateLayout(text, cfg, false)
 	if err != nil {
 		return 0, err
 	}
@@ -227,7 +231,7 @@ func (ts *TextSystem) LayoutText(text string, cfg TextConfig) (Layout, error) {
 
 // LayoutTextCached retrieves a cached layout or creates a new one.
 func (ts *TextSystem) LayoutTextCached(text string, cfg TextConfig) (Layout, error) {
-	item, err := ts.getOrCreateLayout(text, cfg)
+	item, err := ts.getOrCreateLayout(text, cfg, true)
 	if err != nil {
 		return Layout{}, err
 	}
@@ -302,13 +306,24 @@ func (ts *TextSystem) Context() *Context { return ts.ctx }
 
 // --- internal helpers ---
 
-func (ts *TextSystem) getOrCreateLayout(text string, cfg TextConfig) (*cachedLayout, error) {
+// getOrCreateLayout returns the cached layout of text, building it on a
+// miss. hitTest asks for a layout with hit-test data (char rects, log attrs);
+// draw and measure calls pass false, since over half of a layout's
+// allocations are that data and they never read it. A cached entry without
+// the data is rebuilt in place when a hit-testing caller asks for it.
+func (ts *TextSystem) getOrCreateLayout(text string, cfg TextConfig,
+	hitTest bool) (*cachedLayout, error) {
 	if err := ValidateTextInput(text, MaxTextLength, "getOrCreateLayout"); err != nil {
 		return nil, err
 	}
 
+	// An explicit NoHitTesting from the caller wins over hitTest.
+	hitTest = hitTest && !cfg.NoHitTesting
+	cfg.NoHitTesting = !hitTest
+
 	key := ts.getCacheKey(text, cfg)
-	if item, ok := ts.cache[key]; ok {
+	item, ok := ts.cache[key]
+	if ok && (item.hitTest || !hitTest) {
 		item.lastAccess = time.Now().UnixMilli()
 		return item, nil
 	}
@@ -317,9 +332,16 @@ func (ts *TextSystem) getOrCreateLayout(text string, cfg TextConfig) (*cachedLay
 	if err != nil {
 		return nil, err
 	}
-	item := &cachedLayout{
+	if ok {
+		item.layout = layout
+		item.hitTest = true
+		item.lastAccess = time.Now().UnixMilli()
+		return item, nil
+	}
+	item = &cachedLayout{
 		layout:     layout,
 		lastAccess: time.Now().UnixMilli(),
+		hitTest:    hitTest,
 	}
 	if ts.maxCacheEntries > 0 && len(ts.cache) >= ts.maxCacheEntries {
 		ts.evictOldestLayouts()
@@ -365,9 +387,9 @@ func (ts *TextSystem) getCacheKey(text string, cfg TextConfig) uint64 {
 	if cfg.UseMarkup {
 		packed |= 1 << 14
 	}
-	if cfg.NoHitTesting {
-		packed |= 1 << 15
-	}
+	// NoHitTesting is left out on purpose: one entry serves both the lean
+	// and the full layout of the same text. cachedLayout.hitTest tells
+	// them apart.
 	// Bit 24 keeps clear of Orientation, which occupies bits 16 and up.
 	if cfg.Style.NoBuiltinBoxGlyphs {
 		packed |= 1 << 24
