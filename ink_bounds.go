@@ -21,7 +21,7 @@ func (ts *TextSystem) InkBounds(text string, cfg TextConfig) (Rect, bool) {
 	if cfg.Orientation == OrientationVertical {
 		return Rect{}, false
 	}
-	item, err := ts.getOrCreateLayout(text, cfg)
+	item, err := ts.getOrCreateLayout(text, cfg, false)
 	if err != nil || item == nil {
 		return Rect{}, false
 	}

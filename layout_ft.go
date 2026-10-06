@@ -938,21 +938,32 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 	// Build Layout structures. allGlyphs/charRects/logAttrs run about one
 	// entry per cluster, so presize to avoid append regrowth reallocation.
 	allGlyphs := make([]Glyph, 0, len(chars))
-	charRects := make([]CharRect, 0, len(chars))
-	// The maps get one entry per processed char (plus the end-of-text attr),
-	// so presize to allocate their buckets once instead of growing through
-	// several rehashes while filling.
-	charRectByIndex := make(map[int]int, len(chars))
+	// Hit-test data (char rects, log attrs, their index maps, charRTL) is
+	// over half of what a layout allocates, and only cursor and selection
+	// queries read it. NoHitTesting skips all of it; the renderer and the
+	// measure calls read only glyphs, items, lines and sizes.
+	hitTest := !cfg.NoHitTesting
+	var charRects []CharRect
+	var charRectByIndex map[int]int
+	var logAttrs []LogAttr
+	var logAttrByIndex map[int]int
+	if hitTest {
+		charRects = make([]CharRect, 0, len(chars))
+		// The maps get one entry per processed char (plus the end-of-text
+		// attr), so presize to allocate their buckets once instead of growing
+		// through several rehashes while filling.
+		charRectByIndex = make(map[int]int, len(chars))
+		// +1: the end-of-text attr appended after the line loop must not
+		// force a regrowth copy of an exactly-sized slice. The newline attrs
+		// appended by the post-pass below add one entry per '\n' byte.
+		newlineAttrs := strings.Count(text, "\n")
+		logAttrs = make([]LogAttr, 0, len(chars)+1+newlineAttrs)
+		logAttrByIndex = make(map[int]int, len(chars)+1+newlineAttrs)
+	}
 	// Exactly one Line per wrapped line, and at least one Item per line
 	// (more when font/color/style splits occur mid-line).
 	layoutLines := make([]Line, 0, len(lines))
 	items := make([]Item, 0, len(lines))
-	// +1: the end-of-text attr appended after the line loop must not force a
-	// regrowth copy of an exactly-sized slice. The newline attrs appended by
-	// the post-pass below add one entry per '\n' byte.
-	newlineAttrs := strings.Count(text, "\n")
-	logAttrs := make([]LogAttr, 0, len(chars)+1+newlineAttrs)
-	logAttrByIndex := make(map[int]int, len(chars)+1+newlineAttrs)
 
 	var totalWidth, totalHeight float64
 	lineY := float64(0)
@@ -1167,6 +1178,10 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 				})
 			}
 
+			if !hitTest {
+				cx += ch.width
+				return
+			}
 			crIdx := len(charRects)
 			charRects = append(charRects, CharRect{
 				Rect: Rect{
@@ -1233,14 +1248,16 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 	}
 	totalHeight = lineY
 
-	logAttrs = appendNewlineAttrs(text, logAttrs, logAttrByIndex)
-	logAttrs = appendWrapSpaceAttrs(lines, charText, charByte, logAttrs, logAttrByIndex)
+	if hitTest {
+		logAttrs = appendNewlineAttrs(text, logAttrs, logAttrByIndex)
+		logAttrs = appendWrapSpaceAttrs(lines, charText, charByte, logAttrs, logAttrByIndex)
 
-	endAttrIdx := len(logAttrs)
-	logAttrs = append(logAttrs, LogAttr{IsCursorPosition: true})
-	logAttrByIndex[len(text)] = endAttrIdx
+		endAttrIdx := len(logAttrs)
+		logAttrs = append(logAttrs, LogAttr{IsCursorPosition: true})
+		logAttrByIndex[len(text)] = endAttrIdx
 
-	applyWordAttrs(text, logAttrs, logAttrByIndex)
+		applyWordAttrs(text, logAttrs, logAttrByIndex)
+	}
 
 	// Hand the working buffers back to the Context for the next layout.
 	// Nothing below reads them, and none of their contents were retained by
@@ -1266,7 +1283,9 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 		VisualWidth:     float32(totalWidth * pixelScale),
 		VisualHeight:    float32(totalHeight * pixelScale),
 	}
-	result.buildPositionCaches()
+	if hitTest {
+		result.buildPositionCaches()
+	}
 	return result
 }
 
