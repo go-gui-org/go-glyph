@@ -8,6 +8,20 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.26.2] - 2026-10-06
+
+### Changed
+
+- **Draw and measure calls cache layouts without hit-test data (#151).**
+  `DrawText`, `TextWidth`, `TextHeight`, and `InkBounds` never read character
+  rects, log attrs, or the cursor and word caches, which were over half of what
+  a layout build allocated. Their cached layouts now skip that data.
+  `LayoutTextCached` rebuilds such an entry in place with the data when it needs
+  it. In a terminal redraw stress test, peak footprint fell about 30% and bytes
+  allocated by half.
+- **golangci-lint is pinned in a `tools/lint` module (#150).** Local lint and CI
+  use the same version.
+
 ## [v1.26.1] - 2026-09-30
 
 ### Fixed
