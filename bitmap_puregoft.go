@@ -90,7 +90,9 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	scaleFactor float32) (LoadGlyphResult, error) {
 
 	family, fontSize, bold, italic := resolveFTFontParams(item.Style, scaleFactor)
-	paths := fontFallbackPaths(renderFontPaths(fontPaths), family, bold, italic)
+	var pathBuf [maxFallbackPaths]string
+	paths := fontFallbackPaths(pathBuf[:0], renderFontPaths(fontPaths), family,
+		bold, italic)
 	subpixelShift := float64(subpixelBin) / 4.0
 
 	var res *rasterResult
@@ -174,7 +176,9 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	}
 
 	family, fontSize, bold, italic := resolveFTFontParams(item.Style, scaleFactor)
-	paths := fontFallbackPaths(renderFontPaths(fontPaths), family, bold, italic)
+	var pathBuf [maxFallbackPaths]string
+	paths := fontFallbackPaths(pathBuf[:0], renderFontPaths(fontPaths), family,
+		bold, italic)
 	subpixelShift := float64(subpixelBin) / 4.0
 	sw := float64(strokeWidth)
 

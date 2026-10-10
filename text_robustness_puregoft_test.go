@@ -4,6 +4,7 @@ package glyph
 
 import (
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -101,6 +102,43 @@ func TestGenericFallback(t *testing.T) {
 
 	if got := genericFallback(map[string]string{}, "Menlo"); got != "" {
 		t.Errorf("genericFallback(empty) = %q, want empty", got)
+	}
+}
+
+// TestFontFallbackPaths verifies the fallback order (styled face, regular face,
+// generic alias, with no repeats) and that a caller-owned buffer keeps the call
+// free of heap allocations. It runs once per layout and once per glyph load.
+func TestFontFallbackPaths(t *testing.T) {
+	fontPaths := map[string]string{
+		"Arial-Bold":    "/arial-bold.ttf",
+		"Arial-Regular": "/arial.ttf",
+		"sans-serif":    "/sans.ttf",
+	}
+	cases := []struct {
+		family string
+		bold   bool
+		want   []string
+	}{
+		{"Arial", true, []string{"/arial-bold.ttf", "/arial.ttf", "/sans.ttf"}},
+		{"Arial", false, []string{"/arial.ttf", "/sans.ttf"}},
+		// An unknown family resolves to the alias itself; it is not repeated.
+		{"Nope", false, []string{"/sans.ttf"}},
+	}
+	for _, c := range cases {
+		var buf [maxFallbackPaths]string
+		got := fontFallbackPaths(buf[:0], fontPaths, c.family, c.bold, false)
+		if !slices.Equal(got, c.want) {
+			t.Errorf("fontFallbackPaths(%q, bold=%v) = %q, want %q",
+				c.family, c.bold, got, c.want)
+		}
+	}
+
+	allocs := testing.AllocsPerRun(100, func() {
+		var buf [maxFallbackPaths]string
+		_ = fontFallbackPaths(buf[:0], fontPaths, "Arial", true, false)
+	})
+	if allocs != 0 {
+		t.Errorf("fontFallbackPaths allocs = %v, want 0", allocs)
 	}
 }
 
@@ -333,7 +371,7 @@ func BenchmarkMeasureString(b *testing.B) {
 	defer ctx.Free()
 	var item Item
 	family, size, bold, italic := resolveFTFontParams(item.Style, 1.0)
-	paths := fontFallbackPaths(ftFontPathsSingleton, family, bold, italic)
+	paths := fontFallbackPaths(nil, ftFontPathsSingleton, family, bold, italic)
 	if len(paths) == 0 {
 		b.Skip("no font installed")
 	}
