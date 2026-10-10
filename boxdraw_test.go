@@ -623,7 +623,7 @@ func TestBoxStyleFieldsReachTheRenderer(t *testing.T) {
 	}
 
 	// Orientation occupies bits 16 and up in the same packed word.
-	for o := TextOrientation(0); o < 4; o++ {
+	for o := range TextOrientation(4) {
 		on := base
 		on.Orientation = o
 		on.Style.NoBuiltinBoxGlyphs = true

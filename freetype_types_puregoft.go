@@ -6,6 +6,7 @@ import (
 	"container/list"
 	"math"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -312,10 +313,8 @@ func parseFace(path string) (cf *cachedFace, size int64) {
 func hasColorTable(ld *ot.Loader) bool {
 	tables := ld.Tables()
 	for _, want := range colorTableTags {
-		for _, have := range tables {
-			if have == want {
-				return true
-			}
+		if slices.Contains(tables, want) {
+			return true
 		}
 	}
 	return false

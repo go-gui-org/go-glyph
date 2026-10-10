@@ -28,7 +28,7 @@ import (
 	"go/format"
 	"net/http"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -65,7 +65,7 @@ func run() error {
 			cps = append(cps, r)
 		}
 	}
-	sort.Slice(cps, func(i, j int) bool { return cps[i] < cps[j] })
+	slices.Sort(cps)
 
 	// Coalesce contiguous codepoints into inclusive ranges.
 	type rng struct{ lo, hi rune }

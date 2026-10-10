@@ -1,6 +1,7 @@
 package accessibility
 
 import (
+	"maps"
 	"testing"
 )
 
@@ -29,9 +30,7 @@ type textFieldRecord struct {
 
 func (b *recordingAccBackend) UpdateTree(nodes map[int]Node, rootID int) {
 	b.lastTree = make(map[int]Node, len(nodes))
-	for k, v := range nodes {
-		b.lastTree[k] = v
-	}
+	maps.Copy(b.lastTree, nodes)
 	b.lastRootID = rootID
 }
 
