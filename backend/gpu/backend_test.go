@@ -52,7 +52,7 @@ func TestBatchAppendMultipleQuads(t *testing.T) {
 	var b batch
 	zero := Vertex{}
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		b.append6(uint64(i), zero, zero, zero, zero)
 	}
 	if len(b.verts) != 18 {

@@ -125,7 +125,7 @@ func TestCacheFallbackBounded(t *testing.T) {
 	// Fill exactly to the cap: no eviction happens until an insert sees
 	// len==cap.
 	ctx2 := &Context{}
-	for i := 0; i < fallbackResolveCap; i++ {
+	for i := range fallbackResolveCap {
 		ctx2.cacheFallback(strconv.Itoa(i), fbResolution{})
 	}
 	if len(ctx2.fallbackResolve) != fallbackResolveCap {

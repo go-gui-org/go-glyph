@@ -39,7 +39,7 @@ func TestHasComplexShaping(t *testing.T) {
 func prefixMeasure(deltas []float64) func(int) float64 {
 	return func(n int) float64 {
 		var w float64
-		for i := 0; i < n; i++ {
+		for i := range n {
 			w += deltas[i]
 		}
 		return w
