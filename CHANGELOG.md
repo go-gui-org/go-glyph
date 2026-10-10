@@ -8,6 +8,18 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.26.3] - 2026-10-10
+
+### Changed
+
+- **Two fewer heap allocations per layout and per glyph load (#154).** The font
+  fallback path list is built in a buffer the caller keeps on the stack, and the
+  monospace check matches case without making a lowercase copy of the font name.
+  `BenchmarkLayoutText` goes from 34 to 32 allocations per op.
+- **`golang.org/x/image` and `golang.org/x/text` are bumped, and `go fix`
+  modernizers are applied (#153).** A module that builds against go-glyph picks
+  up the newer `x/image`, `x/sys`, `x/text` and `x/tools` versions.
+
 ## [v1.26.2] - 2026-10-06
 
 ### Changed
@@ -28,8 +40,8 @@ and this project adheres to
 
 - **Latin fallback uses the default sans face before CJK (#147).** A Latin
   letter the primary face lacks resolved to the first monochrome font that
-  covers it: the CJK collection, keeping about 30 MB resident for one glyph.
-  The default sans face is now tried first for Latin, Greek, Cyrillic, and
+  covers it: the CJK collection, keeping about 30 MB resident for one glyph. The
+  default sans face is now tried first for Latin, Greek, Cyrillic, and
   script-neutral text it covers. Other scripts keep tier order.
 
 ## [v1.26.0] - 2026-09-23
@@ -55,41 +67,39 @@ and this project adheres to
 
 - **Render path correctness, atlas memory, and decorations (#143).**
   `DrawLayoutPlaced` no longer applies the subpixel bin twice; upright
-  placements snap to the device pixel grid and rotated ones rasterize at bin
-  0. Strokes use the fill's subpixel bin. `GlyphAtlas.Reset` deletes queued
+  placements snap to the device pixel grid and rotated ones rasterize at bin 0.
+  Strokes use the fill's subpixel bin. `GlyphAtlas.Reset` deletes queued
   textures and drops extra pages, and `PurgeGlyphCache` reclaims GPU and heap
   memory. Non-finite placements are skipped on both paths. The draw origin is
   folded in before snapping. Atlas heap use is halved (one staging buffer),
-  every backend implements `RectTextureUpdater` (`UpdateTextureRect`), and
-  cache eviction is O(1). Underlines and strikethroughs use the font's post
-  and OS-2 metrics with em-based fallbacks on both paths.
+  every backend implements `RectTextureUpdater` (`UpdateTextureRect`), and cache
+  eviction is O(1). Underlines and strikethroughs use the font's post and OS-2
+  metrics with em-based fallbacks on both paths.
 - **Layout correctness, undo/redo, bidi ordering, and WASM parity (#142).**
   Wrapped-line width uses the correct prefix width, with shared UAX #14 (CJK)
-  line-break support on WASM. `DeleteBackward` and `DeleteSelection` report
-  the range convention `UndoManager` expects, and all public mutation helpers
-  clamp out-of-range cursors and stale layouts. `LayoutRichText` accepts empty
-  runs and bounds total length with `MaxRichTextLength`. Clicks on a
-  character's trailing half move the caret past it. Bidi implements UAX #9
-  rule L2 with per-paragraph direction, correct RTL caret edges, and one
-  selection rectangle per visually contiguous piece. Letter spacing skips
-  ligature interiors, and word attributes stay paired inside grapheme
-  clusters.
+  line-break support on WASM. `DeleteBackward` and `DeleteSelection` report the
+  range convention `UndoManager` expects, and all public mutation helpers clamp
+  out-of-range cursors and stale layouts. `LayoutRichText` accepts empty runs
+  and bounds total length with `MaxRichTextLength`. Clicks on a character's
+  trailing half move the caret past it. Bidi implements UAX #9 rule L2 with
+  per-paragraph direction, correct RTL caret edges, and one selection rectangle
+  per visually contiguous piece. Letter spacing skips ligature interiors, and
+  word attributes stay paired inside grapheme clusters.
 - **Draw path correctness (#141).** WASM no longer applies fill alpha twice,
   diagonal gradients get a fill style, and vertical gradient spans stop
-  double-counting the draw origin. Atlas gradient strips sample each glyph's
-  own top, leave color-emoji bitmaps unmultiplied, and place scaled emoji
-  through the shared `emojiQuadBox`.
+  double-counting the draw origin. Atlas gradient strips sample each glyph's own
+  top, leave color-emoji bitmaps unmultiplied, and place scaled emoji through
+  the shared `emojiQuadBox`.
 - **Font discovery against script-font aliasing and relative dirs (#140).**
   Generic aliases match whole family names through a ranked table, relative
-  directories are never walked, Windows falls back through `%SystemRoot%`,
-  Linux reads `XDG_DATA_HOME` and `XDG_DATA_DIRS`, and discovery results are
-  cached per process with per-`Context` copies.
-- **Context review findings (#139).** Generic aliases prefer the
-  Regular-weight upright face, every `.ttc` face is registered, the renderer
-  resolves names through its own `Context`, NaN and Inf scales and sizes are
-  rejected, CJK needles no longer match Devanagari and Khmer families, the
-  fallback eviction queue is a fixed-capacity ring buffer, and `Context.Free`
-  clears every cache.
+  directories are never walked, Windows falls back through `%SystemRoot%`, Linux
+  reads `XDG_DATA_HOME` and `XDG_DATA_DIRS`, and discovery results are cached
+  per process with per-`Context` copies.
+- **Context review findings (#139).** Generic aliases prefer the Regular-weight
+  upright face, every `.ttc` face is registered, the renderer resolves names
+  through its own `Context`, NaN and Inf scales and sizes are rejected, CJK
+  needles no longer match Devanagari and Khmer families, the fallback eviction
+  queue is a fixed-capacity ring buffer, and `Context.Free` clears every cache.
 - **IME composition review findings (#138).**
 - **An empty preedit now ends IME composition.** `HandleMarkedText("")` was
   rejected by input validation, so the old preedit stayed on screen after the
@@ -103,8 +113,8 @@ and this project adheres to
   Negative clause starts shrink the clause, negative `Start` positions clamp to
   0, and empty clauses are dropped.
 - **`HandleClause` sets `SelectedClause`** for a selected clause.
-- **Bitmap raster hardening (#136).** Allocation limits, oversize downscale,
-  and COLR foreground handling.
+- **Bitmap raster hardening (#136).** Allocation limits, oversize downscale, and
+  COLR foreground handling.
 - **Glyph atlas hardening (#135).** Bounds checks, nil-backend guards, and
   overflow fixes with saturated sizing and documented `Reset` invalidation.
 - **Box drawing review findings (#137).** `drawBoxGlyphTo` guards kind and
