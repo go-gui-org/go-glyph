@@ -27,7 +27,7 @@ func resolveTestGlyph(t *testing.T, ch string) (path string, size float64, gid u
 
 	var item Item
 	family, fontSize, bold, italic := resolveFTFontParams(item.Style, 1.0)
-	paths := fontFallbackPaths(ftFontPathsSingleton, family, bold, italic)
+	paths := fontFallbackPaths(nil, ftFontPathsSingleton, family, bold, italic)
 	if len(paths) == 0 {
 		t.Skip("no font installed; skipping by-id render test")
 	}

@@ -343,7 +343,9 @@ func newFTFont(_ FTLibrary, fontPaths map[string]string,
 	style TextStyle, scaleFactor float32) ftFont {
 
 	family, size, bold, italic := resolveFTFontParams(style, scaleFactor)
-	for _, path := range fontFallbackPaths(fontPaths, family, bold, italic) {
+	var pathBuf [maxFallbackPaths]string
+	for _, path := range fontFallbackPaths(pathBuf[:0], fontPaths, family,
+		bold, italic) {
 		if f := openFTFont(path, size); f.face != nil {
 			return f
 		}
@@ -879,13 +881,22 @@ func resolveFTFontParams(style TextStyle, scaleFactor float32) (
 	return family, size, bold, italic
 }
 
+// maxFallbackPaths is the most paths fontFallbackPaths appends: the styled face,
+// the regular face, and the generic alias.
+const maxFallbackPaths = 3
+
 // fontFallbackPaths returns a list of font paths to try in order:
 // requested style → regular variant → sans-serif fallback.
-func fontFallbackPaths(fontPaths map[string]string,
+//
+// The paths are appended to dst and the extended slice is returned, as with
+// strconv.Append*. At most maxFallbackPaths are appended, so a caller can pass
+// buf[:0] from a local [maxFallbackPaths]string and the call does not allocate.
+// It runs once per layout and once per glyph load, so this matters.
+func fontFallbackPaths(dst []string, fontPaths map[string]string,
 	family string, bold, italic bool) []string {
 
 	primary := resolveFontPath(fontPaths, family, bold, italic)
-	paths := []string{primary}
+	paths := append(dst, primary)
 
 	if bold || italic {
 		regular := resolveFontPath(fontPaths, family, false, false)
@@ -958,9 +969,21 @@ func genericFallback(fontPaths map[string]string, family string) string {
 // fixed-width font, so an unresolved lookup falls back to the "monospace"
 // generic alias rather than proportional "sans-serif".
 func looksMonospace(family string) bool {
-	l := strings.ToLower(family)
-	for _, s := range []string{"mono", "consol", "courier", "menlo", "fixed"} {
-		if strings.Contains(l, s) {
+	for _, s := range [...]string{"mono", "consol", "courier", "menlo", "fixed"} {
+		if containsFoldASCII(family, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// containsFoldASCII reports whether sub occurs in s, ignoring case. It does the
+// same job as strings.Contains(strings.ToLower(s), sub) but without the copy
+// that ToLower makes. That copy was a heap allocation on every layout. sub must
+// be lowercase ASCII.
+func containsFoldASCII(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if strings.EqualFold(s[i:i+len(sub)], sub) {
 			return true
 		}
 	}
