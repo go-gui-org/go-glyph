@@ -100,7 +100,6 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	if item.UseOriginalColor {
 		for _, fp := range ftColorFallbacksSingleton {
 			if r, ok := renderColorGlyph(atlas, fp, fontSize, ch); ok {
-				r.top = max(0, int(float64(r.h)-float64(item.Descent)*float64(scaleFactor)/2))
 				res = r
 				break
 			}
@@ -645,6 +644,10 @@ func renderColorGlyph(atlas *GlyphAtlas, path string, size float64, text string)
 		len(gb.Data) > 0 && len(gb.Data) <= maxEmbeddedBitmapBytes {
 		pngData = append([]byte(nil), gb.Data...)
 	}
+	// The extents depend on the strike SetPpem chose, so they are read
+	// under the same lock. They are in font units, already converted from
+	// the strike's pixels and its origin offsets.
+	ext, extOK := cf.face.GlyphExtents(gid)
 	cf.mu.Unlock()
 	if pngData == nil {
 		return nil, false
@@ -667,18 +670,91 @@ func renderColorGlyph(atlas *GlyphAtlas, path string, size float64, text string)
 	if w <= 0 || h <= 0 {
 		return nil, false
 	}
-	// Oversized strikes downscale to MaxGlyphSize instead of cropping
-	// to the top-left 256px.
-	if w > MaxGlyphSize || h > MaxGlyphSize {
-		// DecodeConfig above already capped w and h at maxNaturalGlyphDim.
-		full := image.NewRGBA(image.Rect(0, 0, w, h))
-		draw.Draw(full, full.Bounds(), img, b.Min, draw.Src)
-		out, dstW, dstH, _ := downscaleGlyph(full.Pix, w, h)
+	// The strike is the nearest one the font has (Apple Color Emoji: 20,
+	// 26, … 160 px), not the requested size. Scale it to the glyph's box at
+	// the requested size and place it by the font's bearings, so the emoji
+	// is drawn the size and height a browser draws it. Without usable
+	// extents the strike keeps its own size, top edge on the ascent line.
+	box, ok := colorGlyphBox(ext, extOK, size, cf.upem, cf.sbix)
+	if !ok {
+		box = colorBox{w: w, h: h, left: 0, top: h}
+	}
+	fits := box.w <= MaxGlyphSize && box.h <= MaxGlyphSize
+	if box.w == w && box.h == h && fits {
+		return colorGlyphCopy(atlas, img, box)
+	}
+	// DecodeConfig above already capped w and h at maxNaturalGlyphDim,
+	// and colorGlyphBox capped the box the same way.
+	full := image.NewRGBA(image.Rect(0, 0, w, h))
+	draw.Draw(full, full.Bounds(), img, b.Min, draw.Src)
+	out := full.Pix
+	if box.w != w || box.h != h {
+		out = ScaleBitmapBicubic(out, w, h, box.w, box.h)
 		if out == nil {
 			return nil, false
 		}
-		return &rasterResult{data: out, w: dstW, h: dstH, left: 0, top: dstH}, true
 	}
+	if !fits {
+		// Oversized boxes downscale to MaxGlyphSize instead of cropping
+		// to the top-left 256px, as monochrome glyphs do.
+		var s float64
+		out, box.w, box.h, s = downscaleGlyph(out, box.w, box.h)
+		if out == nil {
+			return nil, false
+		}
+		box.left, box.top = scaleOffset(box.left, s), scaleOffset(box.top, s)
+	}
+	return &rasterResult{data: out, w: box.w, h: box.h, left: box.left, top: box.top}, true
+}
+
+// sbixBaselineDrop is how far below the sbix table's bearings CoreText draws
+// an Apple Color Emoji glyph, as a fraction of the em. The table puts the
+// 1 em bitmap with its bottom on the baseline (originOffsetY 0); CoreText,
+// and so Safari and Chrome on macOS, draws it from 0.125 em below the
+// baseline to 0.875 em above it (CTFontGetBoundingRectsForGlyphs at 28 px
+// and larger, and the ink of a drawn glyph). No table field gives this
+// offset, so it is the measured value.
+const sbixBaselineDrop = 0.125
+
+// colorBox is where a color glyph bitmap goes at a given size, in pixels:
+// its size and its bearings (left from the pen origin, top up from the
+// baseline).
+type colorBox struct {
+	w, h, left, top int
+}
+
+// colorGlyphBox converts a color glyph's extents (font units) to its box at
+// size pixels per em. ok is false when the extents are missing or empty, or
+// the box is not a usable size.
+func colorGlyphBox(ext font.GlyphExtents, extOK bool, size float64,
+	upem uint16, sbix bool) (colorBox, bool) {
+
+	if !extOK || !(ext.Width > 0) || !(ext.Height < 0) {
+		return colorBox{}, false
+	}
+	k := size / float64(nonZeroUpem(upem))
+	top := float64(ext.YBearing) * k
+	if sbix {
+		top -= sbixBaselineDrop * size
+	}
+	box := colorBox{
+		w:    int(math.Round(float64(ext.Width) * k)),
+		h:    int(math.Round(-float64(ext.Height) * k)),
+		left: int(math.Round(float64(ext.XBearing) * k)),
+		top:  int(math.Round(top)),
+	}
+	if box.w <= 0 || box.h <= 0 ||
+		box.w > maxNaturalGlyphDim || box.h > maxNaturalGlyphDim {
+		return colorBox{}, false
+	}
+	return box, true
+}
+
+// colorGlyphCopy copies a decoded color bitmap that is already box's size
+// (at most MaxGlyphSize) into RGBA storage, with box's bearings.
+func colorGlyphCopy(atlas *GlyphAtlas, img image.Image, box colorBox) (*rasterResult, bool) {
+	b := img.Bounds()
+	w, h := box.w, box.h
 	var rgba *image.RGBA
 	if atlas != nil {
 		rgba = atlas.ensureRGBA(w, h)
@@ -691,7 +767,7 @@ func renderColorGlyph(atlas *GlyphAtlas, path string, size float64, text string)
 	draw.Draw(rgba, rgba.Bounds(), img, b.Min, draw.Src)
 	// data aliases atlas scratch storage when atlas is set. The
 	// caller must pass it to insertRaster before the next render.
-	return &rasterResult{data: rgba.Pix, w: w, h: h, left: 0, top: h}, true
+	return &rasterResult{data: rgba.Pix, w: w, h: h, left: box.left, top: box.top}, true
 }
 
 // renderCOLRGlyph rasterizes a COLR v0 (layered) color glyph — the format

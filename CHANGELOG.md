@@ -8,6 +8,17 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- **Color emoji take the emoji font's own width, size and baseline, as in a
+  browser (#156).** A color emoji used to take one line height of the text font
+  as its advance (1.18 em with SF), and its bitmap was stretched over the text
+  font's line box. This left a gap after each emoji and drew it too low. Now the
+  advance comes from the color font (1 em for Apple Color Emoji). The bitmap is
+  scaled to the em and placed by the font's bearings. Apple Color Emoji also
+  drops 0.125 em, where CoreText draws it. Grid callers that set `EmojiBoxWidth`
+  keep their cell.
+
 ## [v1.26.3] - 2026-10-10
 
 ### Changed
