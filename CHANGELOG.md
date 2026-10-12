@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.26.4] - 2026-10-12
+
 ### Fixed
 
 - **Color emoji take the emoji font's own width, size and baseline, as in a
