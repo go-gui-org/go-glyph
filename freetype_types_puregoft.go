@@ -18,12 +18,15 @@ import (
 	"github.com/go-text/typesetting/harfbuzz"
 )
 
+// sbixTag is Apple's color bitmap table (Apple Color Emoji).
+var sbixTag = ot.MustNewTag("sbix")
+
 // Color-glyph table tags. FreeType sets FT_FACE_FLAG_COLOR when a face
 // carries any of these; the pure-Go path mirrors that by inspecting the
 // table directory.
 var colorTableTags = []ot.Tag{
 	ot.MustNewTag("CBDT"), // color bitmap data (Noto Color Emoji)
-	ot.MustNewTag("sbix"), // Apple color bitmaps
+	sbixTag,               // Apple color bitmaps
 	ot.MustNewTag("COLR"), // layered color vector glyphs
 	ot.MustNewTag("SVG "), // OpenType-SVG color glyphs
 }
@@ -39,6 +42,9 @@ type cachedFace struct {
 	face  *font.Face
 	upem  uint16
 	color bool
+	// sbix marks an Apple sbix bitmap font. CoreText draws its glyphs
+	// lower than the table's bearings say (see sbixBaselineDrop).
+	sbix bool
 	// cap is the face's cap height in em units, measured lazily by capEm for
 	// the fallback fit scale; capMeasured distinguishes "not yet measured"
 	// from "measured, this face has no cap height".
@@ -305,6 +311,7 @@ func parseFace(path string) (cf *cachedFace, size int64) {
 		face:  face,
 		upem:  face.Upem(),
 		color: hasColorTable(ld),
+		sbix:  slices.Contains(ld.Tables(), sbixTag),
 	}, size
 }
 

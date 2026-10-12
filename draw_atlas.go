@@ -262,7 +262,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 				glyphW := float32(cg.Width) * scaleInv
 				glyphH := float32(cg.Height) * scaleInv
 
-				// GPU emoji scaling: fit the line box, or the grid cell
+				// Emoji geometry: the bitmap's own box, or the grid cell
 				// when the caller reserved one.
 				if item.UseOriginalColor {
 					dx, dy, w, h := emojiQuadBox(cg, scaleInv,
@@ -399,7 +399,7 @@ func (r *Renderer) emitPlacedQuad(cg CachedGlyph,
 	w := float32(cg.Width) * scaleInv
 	h := float32(cg.Height) * scaleInv
 
-	// GPU emoji scaling, with the same geometry as drawLayoutImpl. No
+	// Emoji geometry, the same as drawLayoutImpl. No
 	// grid box: placed glyphs have no cell to fill.
 	if useOriginalColor {
 		dx, dy, w, h = emojiQuadBox(cg, scaleInv, ascent, descent, 0,
@@ -431,9 +431,10 @@ func (r *Renderer) emitPlacedQuad(cg CachedGlyph,
 
 // emojiQuadBox returns where a color emoji quad goes, relative to the
 // glyph's pen origin, in logical units: the offset (dx, dy) of its top-left
-// corner and its size (w, h). A bitmap whose height is not the line height
-// ascent+descent is scaled to it, centered vertically in the line box, and
-// held to the advance so it does not overlap the next glyph. With boxW > 0
+// corner and its size (w, h). The rasterizer already sized the bitmap to the
+// em and set its bearings from the font (renderColorGlyph), so it is drawn
+// as is, as a browser draws it. A bitmap wider than the advance shrinks
+// about the pen origin so it does not overlap the next glyph. With boxW > 0
 // (a grid caller's reserved cell) it fills boxW × line height instead,
 // centered on both axes, so wide glyphs (flags) and square glyphs (people)
 // fill the same width instead of the font's narrower advance.
@@ -444,28 +445,22 @@ func emojiQuadBox(cg CachedGlyph, scaleInv, ascent, descent, boxW,
 	dy = -float32(cg.Top) * scaleInv
 	w = float32(cg.Width) * scaleInv
 	h = float32(cg.Height) * scaleInv
-	if h <= 0 {
+	if h <= 0 || w <= 0 {
 		return dx, dy, w, h
 	}
-	targetH := ascent + descent
-	switch {
-	case boxW > 0 && w > 0:
+	if boxW > 0 {
+		targetH := ascent + descent
 		s := min(boxW/w, targetH/h)
 		w *= s
 		h *= s
 		dx = (boxW - w) * 0.5
-	case h != targetH:
-		s := targetH / h
-		if xAdvance > 0 && w*s > xAdvance {
-			s = xAdvance / w
-		}
-		w *= s
-		h *= s
-		dx = float32(cg.Left) * s * scaleInv
-	default:
+		dy = -ascent + (targetH-h)*0.5
 		return dx, dy, w, h
 	}
-	dy = -ascent + (targetH-h)*0.5
+	if xAdvance > 0 && w > xAdvance {
+		s := xAdvance / w
+		dx, dy, w, h = dx*s, dy*s, w*s, h*s
+	}
 	return dx, dy, w, h
 }
 

@@ -297,6 +297,58 @@ func (ctx *Context) probeFallback(text string, wantColor bool,
 	return "", false
 }
 
+// emojiAdvance returns the advance, in pixels at em size em, of a color-emoji
+// cluster in the first color fallback font that draws all of it. ok is false
+// when no color font does. It reads the font's own advance, not the line
+// height, so an emoji takes the width a browser gives it.
+//
+// The fallback font of the cluster is not always a color font: rich text
+// marks emoji clusters color but keeps the run's text font (see
+// LayoutRichText). So the color font is looked up here, in the same order
+// probeFallback uses, with the cheap cmap coverage cache first.
+func (ctx *Context) emojiAdvance(text string, em float64) (float64, bool) {
+	if !(em > 0) {
+		return 0, false
+	}
+	for _, path := range ctx.fallbackPaths {
+		cov := loadCoverage(path)
+		if cov == nil || !cov.color || !cov.covers(text) {
+			continue
+		}
+		f := openFTFont(path, em)
+		buf := f.shape(text)
+		if buf == nil {
+			continue
+		}
+		// Every glyph must be real: a ZWJ sequence the font cannot join
+		// shapes to its parts, and a .notdef among them means this font
+		// does not draw the cluster.
+		w, ok := 0.0, len(buf.Info) > 0
+		for i := range buf.Info {
+			if buf.Info[i].Glyph == 0 {
+				ok = false
+				break
+			}
+			w += float64(buf.Pos[i].XAdvance) / 64.0
+		}
+		releaseShapeBuffer(buf)
+		if ok && w > 0 {
+			return w, true
+		}
+	}
+	return 0, false
+}
+
+// emSize returns the em size f was asked for, before the cap-height fit
+// scale of a fallback face. Browsers do not fit emoji to the text font's
+// cap height, so emoji metrics use this size.
+func emSize(f ftFont) float64 {
+	if f.fit > 0 {
+		return f.size / f.fit
+	}
+	return f.size
+}
+
 // singleCodepoint reports whether text carries exactly one non-ignorable
 // codepoint, counting variation selectors, joiners and bidi marks as
 // ignorable. Such clusters are decidable by cmap coverage alone. A cluster of
@@ -795,11 +847,20 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 			continue
 		}
 		if ch.isColor {
-			// Color-bitmap fonts report advances at their fixed strike size
-			// (e.g. 136px), which would blow up the layout. Emoji are square
-			// by convention, so reserve one line-height cell; the renderer
-			// scales the bitmap to fit.
-			chars[ri].width = lineHeight + ch.xPad*scale
+			// A color emoji advances by the color font's own advance at the
+			// em size, as browsers do (Apple Color Emoji: 1 em). The text
+			// font's line height (1.18 em for SF) left a gap after each
+			// emoji. A grid caller (EmojiBoxWidth) keeps the line-height
+			// cell it was built against, and so does a cluster no color
+			// font draws.
+			w, ok := 0.0, false
+			if cfg.Style.EmojiBoxWidth <= 0 {
+				w, ok = ctx.emojiAdvance(ch.text, emSize(charFonts[ri]))
+			}
+			if !ok {
+				w = lineHeight
+			}
+			chars[ri].width = w + ch.xPad*scale
 			ri++
 			continue
 		}
