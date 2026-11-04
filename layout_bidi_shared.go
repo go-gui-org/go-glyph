@@ -31,11 +31,11 @@ func isPureLTR(text string) bool {
 // paragraphDirection returns the base direction of the paragraph that
 // starts at text: the direction of its first strong character (UAX #9 rules
 // P2 and P3), or LeftToRight when it has none. The scan stops at the first
-// '\n', which ends the paragraph. Isolate content is not skipped, which is a
-// simplification of P2.
+// hard line break, which ends the paragraph. Isolate content is not skipped,
+// which is a simplification of P2.
 func paragraphDirection(text string) xbidi.Direction {
 	for _, r := range text {
-		if r == '\n' {
+		if r == '\n' || r == '\r' {
 			break
 		}
 		if r < 0x0590 {

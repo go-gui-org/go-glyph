@@ -41,7 +41,7 @@ func (a *Announcer) AnnounceCharacter(ch rune) string {
 		msg = "space"
 	case '\t':
 		msg = "tab"
-	case '\n':
+	case '\n', '\r':
 		msg = "newline"
 	case '.':
 		msg = "period"

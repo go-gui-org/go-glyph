@@ -14,8 +14,8 @@ type lineInfo struct {
 // wrapLines splits n measured clusters into lines and appends them to dst.
 // Both backends call it, so they wrap the same text the same way.
 //
-// width(i) is cluster i's advance. text(i) is its text; only "\n" (a hard
-// break) and " " (a word-wrap point) are special. canBreak, when not nil,
+// width(i) is cluster i's advance. text(i) is its text; hard line breaks and
+// " " (a word-wrap point) are special. canBreak, when not nil,
 // holds UAX #14 break opportunities: canBreak[i] means a line may start at
 // cluster i. A wrapWidth of zero or less disables wrapping.
 //
@@ -46,7 +46,7 @@ func wrapLines(dst []lineInfo, n int, mode WrapMode, wrapWidth float64,
 
 	for i := range n {
 		t := text(i)
-		if t == "\n" {
+		if isHardLineBreak(t) {
 			dst = append(dst, lineInfo{lineStart, i, lineW})
 			lineStart = i + 1
 			lineW = 0
@@ -94,6 +94,33 @@ func wrapLines(dst []lineInfo, n int, mode WrapMode, wrapWidth float64,
 	return append(dst, lineInfo{lineStart, n, lineW})
 }
 
+// isHardLineBreak reports whether s is one hard line-break grapheme. Unicode
+// grapheme segmentation keeps CRLF together, while lone CR and LF each form
+// their own cluster.
+func isHardLineBreak(s string) bool {
+	return s == "\n" || s == "\r" || s == "\r\n"
+}
+
+// hardLineBreakLenAt returns the byte length of the hard line break starting
+// at byte index i, or zero when i is not at one. CRLF is one break so callers
+// never expose a caret stop between its two bytes.
+func hardLineBreakLenAt(text string, i int) int {
+	if i < 0 || i >= len(text) {
+		return 0
+	}
+	switch text[i] {
+	case '\n':
+		return 1
+	case '\r':
+		if i+1 < len(text) && text[i+1] == '\n' {
+			return 2
+		}
+		return 1
+	default:
+		return 0
+	}
+}
+
 // lineBreakOpportunities fills dst[i] with whether a UAX #14 line break is
 // allowed before cluster i, for n clusters whose byte offsets byteI(i)
 // increase. dst is reused when it is large enough.
@@ -136,26 +163,28 @@ func lineBreakOpportunities(dst []bool, text string, n int,
 	return dst
 }
 
-// appendNewlineAttrs appends a caret stop for every '\n' byte of text.
-// Newline bytes are never visited by the per-line char loops — each line's
-// [startChar, endChar) range stops just before its terminating '\n' — but
-// they are still caret stops: the byte index of a '\n' is the end of the
-// current line, and in a "\n\n" run it is also the empty line separating
-// paragraphs. Without an entry, clicks past a paragraph's last line land on
-// its final character, arrow keys skip from the end of a paragraph straight
-// to the next paragraph (never visiting the empty line), and grapheme
-// deletes swallow the newline run.
-func appendNewlineAttrs(text string, logAttrs []LogAttr,
+// appendHardLineBreakAttrs appends a caret stop at every hard line break.
+// Break clusters are never visited by the per-line char loops: each line's
+// [startChar, endChar) range stops just before its terminating break. CRLF is
+// one grapheme and gets one stop at the CR, never one between CR and LF.
+// Without these entries, clicks past a paragraph's last line land on its final
+// character, arrow keys skip empty lines, and grapheme deletes swallow runs of
+// line breaks.
+func appendHardLineBreakAttrs(text string, logAttrs []LogAttr,
 	logAttrByIndex map[int]int) []LogAttr {
 
-	for i := 0; i < len(text); i++ {
-		if text[i] == '\n' {
-			logAttrByIndex[i] = len(logAttrs)
-			logAttrs = append(logAttrs, LogAttr{
-				IsCursorPosition: true,
-				IsLineBreak:      true,
-			})
+	for i := 0; i < len(text); {
+		size := hardLineBreakLenAt(text, i)
+		if size == 0 {
+			i++
+			continue
 		}
+		logAttrByIndex[i] = len(logAttrs)
+		logAttrs = append(logAttrs, LogAttr{
+			IsCursorPosition: true,
+			IsLineBreak:      true,
+		})
+		i += size
 	}
 	return logAttrs
 }
