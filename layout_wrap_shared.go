@@ -104,6 +104,12 @@ func isHardLineBreak(s string) bool {
 // hardLineBreakLenAt returns the byte length of the hard line break starting
 // at byte index i, or zero when i is not at one. CRLF is one break so callers
 // never expose a caret stop between its two bytes.
+//
+// The function looks only forward. At the LF inside a CRLF it returns 1, so
+// the result is a break start only when a linear scan reaches i by stepping
+// over each earlier break with the returned length. A point probe at an
+// arbitrary index must check text[i-1] == '\r' itself if the CRLF interior
+// matters to it.
 func hardLineBreakLenAt(text string, i int) int {
 	if i < 0 || i >= len(text) {
 		return 0
