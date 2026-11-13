@@ -203,3 +203,77 @@ func TestClampIndex(t *testing.T) {
 		t.Errorf("clampIndex(5,10) = %d", got)
 	}
 }
+
+// The tests below cover layouts without hit-test data (NoHitTesting, or layouts
+// cached by DrawText/TextWidth). Their LogAttrs are nil, so MoveCursorLeft
+// answers 0. Deletes must not turn that into "remove everything before the caret".
+
+func TestDeleteBackwardWithoutHitTestData(t *testing.T) {
+	l := Layout{Text: "héllo"}
+	r := DeleteBackward("héllo", l, 6)
+	if r.NewText != "héll" || r.CursorPos != 5 || r.DeletedText != "o" {
+		t.Errorf("got %q cursor %d deleted %q", r.NewText, r.CursorPos, r.DeletedText)
+	}
+	// Caret after the 2-byte "é".
+	r = DeleteBackward("héllo", l, 3)
+	if r.NewText != "hllo" || r.CursorPos != 1 {
+		t.Errorf("got %q cursor %d", r.NewText, r.CursorPos)
+	}
+}
+
+func TestDeleteBackwardWithoutHitTestDataGraphemeCluster(t *testing.T) {
+	// "a" + U+0301 COMBINING ACUTE ACCENT + "b": the first cluster is 3 bytes.
+	text := "a\u0301b"
+	r := DeleteBackward(text, Layout{}, 3)
+	if r.NewText != "b" || r.CursorPos != 0 {
+		t.Errorf("got %q cursor %d", r.NewText, r.CursorPos)
+	}
+	// Text before the cluster must survive. Without hit-test data the old
+	// MoveCursorLeft answer was 0, so this case used to delete text[0:4].
+	text = "xa\u0301b"
+	r = DeleteBackward(text, Layout{}, 4)
+	if r.NewText != "xb" || r.CursorPos != 1 || r.DeletedText != "a\u0301" {
+		t.Errorf("got %q cursor %d deleted %q", r.NewText, r.CursorPos, r.DeletedText)
+	}
+}
+
+func TestDeleteForwardWithoutHitTestDataMidCluster(t *testing.T) {
+	text := "a\u0301b"
+	// Caret inside the first cluster: only the rest of that cluster goes.
+	r := DeleteForward(text, Layout{}, 1)
+	if r.NewText != "ab" {
+		t.Errorf("mid-cluster: got %q, want %q", r.NewText, "ab")
+	}
+	r = DeleteForward(text, Layout{}, 0)
+	if r.NewText != "b" {
+		t.Errorf("at start: got %q, want %q", r.NewText, "b")
+	}
+}
+
+func TestDeleteForwardWithoutHitTestData(t *testing.T) {
+	r := DeleteForward("héllo", Layout{}, 1)
+	if r.NewText != "hllo" || r.DeletedText != "é" {
+		t.Errorf("got %q deleted %q", r.NewText, r.DeletedText)
+	}
+}
+
+func TestDeleteToWordBoundaryWithoutHitTestData(t *testing.T) {
+	r := DeleteToWordBoundary("hello world", Layout{}, 11)
+	if r.NewText != "hello world" || r.CursorPos != 11 || r.DeletedText != "" {
+		t.Errorf("got %q cursor %d deleted %q", r.NewText, r.CursorPos, r.DeletedText)
+	}
+}
+
+func TestDeleteToLineStartWithoutLines(t *testing.T) {
+	r := DeleteToLineStart("hello", Layout{}, 5)
+	if r.NewText != "hello" || r.CursorPos != 5 {
+		t.Errorf("got %q cursor %d", r.NewText, r.CursorPos)
+	}
+}
+
+func TestDeleteBackwardAtStartWithLayout(t *testing.T) {
+	r := DeleteBackward("Hello\nWorld", testLayout(), 0)
+	if r.NewText != "Hello\nWorld" {
+		t.Errorf("got %q", r.NewText)
+	}
+}

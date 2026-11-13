@@ -8,6 +8,14 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- **Deletes on layouts without hit-test data.** Backspace, Delete and word/line
+  deletes no longer remove the whole text before the caret when the layout was
+  built without hit-test data (`NoHitTesting`, or a layout cached by
+  `DrawText`/`TextWidth`). Backspace and Delete fall back to grapheme
+  segmentation, and word/line deletes do nothing.
+
 ## [v1.26.5] - 2026-11-13
 
 ### Fixed
