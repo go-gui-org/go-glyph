@@ -4,6 +4,7 @@ package glyph
 
 import (
 	"container/list"
+	"fmt"
 	"math"
 	"runtime/debug"
 	"slices"
@@ -491,6 +492,35 @@ func safeShape(buf *harfbuzz.Buffer, hb *harfbuzz.Font) (ok bool) {
 	}()
 	buf.Shape(hb, nil)
 	return true
+}
+
+// lockedCall runs fn with cf.mu held and reports whether it finished.
+// go-text can panic on defective font tables; the deferred Unlock runs
+// even then, so one bad glyph cannot leave the shared face locked (every
+// later color render or ink measurement of the face would deadlock).
+func (cf *cachedFace) lockedCall(fn func()) (ok bool) {
+	cf.mu.Lock()
+	defer cf.mu.Unlock()
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	fn()
+	return true
+}
+
+// guardGlyphLoad runs one glyph rasterization and turns a go-text panic
+// into an error, which the renderer negative-caches like any other load
+// failure instead of crashing the render thread.
+func guardGlyphLoad(load func() (LoadGlyphResult, error)) (
+	res LoadGlyphResult, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			res, err = LoadGlyphResult{}, fmt.Errorf("glyph: rasterizer panic: %v", r)
+		}
+	}()
+	return load()
 }
 
 // hasGlyphs reports whether the font can shape all of text with no

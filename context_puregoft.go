@@ -237,6 +237,9 @@ type faceInfo struct {
 	color bool // has a color-glyph table
 }
 
+// describeFace is font.Describe; a variable so tests can inject a panic.
+var describeFace = font.Describe
+
 // describeFontFaces reads the family/aspect and color-glyph flag of every
 // face in a font file, without building full faces. A plain font gives one
 // face; a collection (.ttc) gives one per member. It opens the file lazily
@@ -244,19 +247,26 @@ type faceInfo struct {
 // tables it needs (via ReadAt), rather than slurping the whole file —
 // discovery walks every system font, so this keeps startup I/O small.
 // Returns nil when the file cannot be opened or parsed.
-func describeFontFaces(path string) []faceInfo {
+func describeFontFaces(path string) (faces []faceInfo) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil
 	}
 	defer f.Close()
+	// go-text can panic on defective tables. Discovery walks every system
+	// font, so one broken file must drop only itself, not crash NewContext.
+	defer func() {
+		if recover() != nil {
+			faces = nil
+		}
+	}()
 	loaders, err := ot.NewLoaders(f)
 	if err != nil || len(loaders) == 0 {
 		return nil
 	}
-	faces := make([]faceInfo, 0, len(loaders))
+	faces = make([]faceInfo, 0, len(loaders))
 	for i, ld := range loaders {
-		desc, _ := font.Describe(ld, nil)
+		desc, _ := describeFace(ld, nil)
 		faces = append(faces, faceInfo{
 			path:  facePath(path, i),
 			index: i,

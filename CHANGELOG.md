@@ -10,6 +10,10 @@ and this project adheres to
 
 ### Fixed
 
+- **Malformed fonts no longer crash the process.** A font whose tables make the
+  parser panic no longer crashes font discovery, `AddFontFile`, or glyph
+  rendering. The font or glyph is skipped. A panic inside the color-glyph path
+  no longer leaves the shared face locked.
 - **Undo history cap and no-op mutations.** `UndoManager` now enforces
   `maxHistory` while typing, not only on flush and redo, and no longer records
   mutations that changed nothing. Before, such a mutation cleared the redo

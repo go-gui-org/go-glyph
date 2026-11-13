@@ -178,21 +178,23 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 		return e.CachedGlyph
 	}
 
-	var result LoadGlyphResult
-	var loadErr error
-	switch {
-	case isBox:
-		result, loadErr = loadBoxGlyphFT(r.atlas, boxM)
-	case byID:
-		result, loadErr = loadGlyphByIDFT(r.atlas, item.FontPath,
-			g.GlyphID, item, strokeWidth, bin, r.scaleFactor)
-	case strokeWidth > 0:
-		result, loadErr = loadStrokedGlyphFT(r.atlas, r.fontPaths, ch, runText,
-			targetRuneIdx, item, strokeWidth, bin, r.scaleFactor)
-	default:
-		result, loadErr = loadGlyphFT(r.atlas, r.fontPaths, ch, runText,
-			targetRuneIdx, item, bin, r.scaleFactor)
-	}
+	// A go-text panic on a defective font becomes a load error and is
+	// negative-cached below.
+	result, loadErr := guardGlyphLoad(func() (LoadGlyphResult, error) {
+		switch {
+		case isBox:
+			return loadBoxGlyphFT(r.atlas, boxM)
+		case byID:
+			return loadGlyphByIDFT(r.atlas, item.FontPath,
+				g.GlyphID, item, strokeWidth, bin, r.scaleFactor)
+		case strokeWidth > 0:
+			return loadStrokedGlyphFT(r.atlas, r.fontPaths, ch, runText,
+				targetRuneIdx, item, strokeWidth, bin, r.scaleFactor)
+		default:
+			return loadGlyphFT(r.atlas, r.fontPaths, ch, runText,
+				targetRuneIdx, item, bin, r.scaleFactor)
+		}
+	})
 	if loadErr != nil {
 		// Negative-cache the failure (Page -1) so a broken glyph is not
 		// re-rasterized every frame. The cap applies here too: without it a
