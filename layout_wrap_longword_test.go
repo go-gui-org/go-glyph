@@ -143,3 +143,93 @@ func TestMoveCursorUpKeepsDrawableIndex(t *testing.T) {
 		t.Fatalf("walked %d lines, want the whole wrapped paragraph", stops)
 	}
 }
+
+// TestCursorPosAtCharWrapBoundaryUsesNextLine guards the caret position at a
+// soft wrap that consumes no space (WrapChar, CJK breaks). Line 0 ends at
+// byte 3 and line 1 starts at byte 3. The movement functions treat that byte
+// as the start of line 1, so GetCursorPos must report line 1's Y and Height
+// instead of drawing the caret at the left edge of line 0.
+func TestCursorPosAtCharWrapBoundaryUsesNextLine(t *testing.T) {
+	l := Layout{
+		Text: "abcdef",
+		Lines: []Line{
+			{StartIndex: 0, Length: 3, Rect: Rect{X: 0, Y: 0, Width: 30, Height: 20}},
+			{StartIndex: 3, Length: 3, Rect: Rect{X: 0, Y: 20, Width: 30, Height: 20}},
+		},
+		CharRectByIndex: map[int]int{},
+		LogAttrByIndex:  map[int]int{},
+		Width:           30,
+		Height:          40,
+	}
+	for i := 0; i < 6; i++ {
+		y := float32(0)
+		if i >= 3 {
+			y = 20
+		}
+		l.CharRects = append(l.CharRects, CharRect{
+			Rect:  Rect{X: float32(i%3) * 10, Y: y, Width: 10, Height: 20},
+			Index: i,
+		})
+		l.CharRectByIndex[i] = i
+	}
+	for i := 0; i <= 6; i++ {
+		l.LogAttrs = append(l.LogAttrs, LogAttr{IsCursorPosition: true})
+		l.LogAttrByIndex[i] = i
+	}
+
+	cp, ok := l.GetCursorPos(3)
+	if !ok {
+		t.Fatal("GetCursorPos(3) not ok")
+	}
+	if cp.X != 0 || cp.Y != 20 || cp.Height != 20 {
+		t.Errorf("GetCursorPos(3) = %+v, want X=0 Y=20 Height=20", cp)
+	}
+	cp, ok = l.GetCursorPos(6)
+	if !ok || cp.X != 30 || cp.Y != 20 {
+		t.Errorf("GetCursorPos(6) = %+v ok=%v, want X=30 Y=20", cp, ok)
+	}
+	cp, ok = l.GetCursorPos(0)
+	if !ok || cp.Y != 0 {
+		t.Errorf("GetCursorPos(0) = %+v ok=%v, want Y=0", cp, ok)
+	}
+}
+
+// TestCursorPosAtCharWrapBoundaryRealLayout runs the same check against a
+// real WrapChar layout: every line that starts at the byte where the
+// previous one ended must put the caret on its own row.
+func TestCursorPosAtCharWrapBoundaryRealLayout(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+	l, err := ctx.LayoutText(strings.Repeat("x", 60), TextConfig{
+		Style: TextStyle{FontName: "Sans 20"},
+		Block: BlockStyle{Width: 120, Wrap: WrapChar},
+	})
+	if err != nil {
+		t.Fatalf("LayoutText: %v", err)
+	}
+	if len(l.Lines) < 2 {
+		t.Fatalf("got %d lines, want >= 2", len(l.Lines))
+	}
+	checked := 0
+	for k := 1; k < len(l.Lines); k++ {
+		prev, cur := l.Lines[k-1], l.Lines[k]
+		t.Logf("line %d: start=%d len=%d y=%v", k, cur.StartIndex, cur.Length, cur.Rect.Y)
+		if cur.StartIndex != prev.StartIndex+prev.Length {
+			continue
+		}
+		checked++
+		cp, ok := l.GetCursorPos(cur.StartIndex)
+		if !ok {
+			t.Fatalf("GetCursorPos(%d) not ok", cur.StartIndex)
+		}
+		if cp.Y != cur.Rect.Y {
+			t.Errorf("line %d: caret Y=%v, want %v", k, cp.Y, cur.Rect.Y)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no line pair shares a boundary byte")
+	}
+}
