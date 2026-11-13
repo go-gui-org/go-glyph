@@ -248,6 +248,15 @@ var describeFace = font.Describe
 // discovery walks every system font, so this keeps startup I/O small.
 // Returns nil when the file cannot be opened or parsed.
 func describeFontFaces(path string) (faces []faceInfo) {
+	// Only regular files can be fonts. os.Open on a FIFO blocks until a
+	// writer appears, so one named pipe called "x.ttf" in a font dir would
+	// hang discovery (and every NewContext waiting on its sync.Once) forever.
+	// os.Stat follows symlinks: symlinked fonts, common on Linux, still pass.
+	// A swap between Stat and Open is possible, but needs write access to the
+	// font directory.
+	if fi, err := os.Stat(path); err != nil || !fi.Mode().IsRegular() {
+		return nil
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return nil

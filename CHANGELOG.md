@@ -23,6 +23,9 @@ and this project adheres to
 
 ### Fixed
 
+- **Font discovery skips non-regular files.** A named pipe or other special
+  file with a font extension in a font directory no longer hangs `NewContext`.
+  `AddFontFile` on such a path now returns an error instead of blocking.
 - **Malformed fonts no longer crash the process.** A font whose tables make the
   parser panic no longer crashes font discovery, `AddFontFile`, or glyph
   rendering. The font or glyph is skipped. A panic inside the color-glyph path
