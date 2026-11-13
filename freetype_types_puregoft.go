@@ -369,6 +369,15 @@ func newFTFontFromPath(_ FTLibrary, path string, fontSize float64) ftFont {
 
 // openFTFont builds an ftFont from a cached face at the given pixel size.
 func openFTFont(path string, size float64) ftFont {
+	// The 26.6 scale is int32(size*64). A NaN, infinite or huge size would
+	// make that conversion implementation-defined (a negative scale on
+	// amd64). Callers pass resolved sizes, but newFTFontFromPath takes raw
+	// pixels, so clamp to the bound the rasterizer enforces.
+	if !(size > 0) {
+		size = 16
+	} else if size > maxRenderSize {
+		size = maxRenderSize
+	}
 	cf := loadCachedFace(path)
 	if cf == nil {
 		return ftFont{}

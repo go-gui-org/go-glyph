@@ -16,9 +16,11 @@ const (
 	MaxRichTextLength = 1 << 20
 	// MaxTextureDimension is the maximum texture size in pixels.
 	MaxTextureDimension = 16384
-	// MinFontSize is the minimum font size in points.
+	// MinFontSize is the smallest font size in points. Smaller sizes are
+	// clamped up to it.
 	MinFontSize = float32(0.1)
-	// MaxFontSize is the maximum font size in points.
+	// MaxFontSize is the largest font size in points. Larger sizes are
+	// clamped down to it.
 	MaxFontSize = float32(500.0)
 )
 
@@ -43,7 +45,8 @@ func ValidateTextInput(text string, maxLen int, location string) error {
 // ValidateSize validates a numeric size against min/max bounds.
 func ValidateSize(size, minVal, maxVal float32,
 	name, location string) error {
-	if size < minVal || size > maxVal {
+	// The negated form also rejects NaN, which fails every comparison.
+	if !(size >= minVal && size <= maxVal) {
 		return fmt.Errorf("%s %g out of range [%g, %g] at %s",
 			name, size, minVal, maxVal, location)
 	}

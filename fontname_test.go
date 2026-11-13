@@ -71,6 +71,13 @@ func TestResolveFontSize(t *testing.T) {
 		{TextStyle{Size: nan, FontName: "Sans 11"}, 11},
 		{TextStyle{Size: float32(math.Inf(1))}, 16},
 		{TextStyle{Size: -2}, 16},
+		{TextStyle{Size: 1e30}, MaxFontSize},
+		{TextStyle{Size: 600}, MaxFontSize},
+		{TextStyle{Size: 500}, 500},
+		{TextStyle{Size: 0.01}, MinFontSize},
+		// parseFontSize("1e9") returns 1e9 (a leading digit passes the fast
+		// path), so the font-name size is used and then clamped.
+		{TextStyle{FontName: "Sans 1e9"}, MaxFontSize},
 	}
 	for _, c := range cases {
 		if got := resolveFontSize(c.style); got != c.want {

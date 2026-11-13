@@ -8,6 +8,15 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- **Font sizes are clamped to `MinFontSize`–`MaxFontSize`.** Font sizes are now
+  clamped to `MinFontSize` (0.1) – `MaxFontSize` (500) on every backend. This
+  applies to `TextStyle.Size` and to sizes in font names. Infinite and NaN sizes
+  still fall back to the font-name size or 16. Before, sizes were unbounded, and
+  the native shaper could compute an out-of-range scale and return infinite
+  layout geometry. `ValidateSize` now rejects NaN.
+
 ### Fixed
 
 - **Malformed fonts no longer crash the process.** A font whose tables make the

@@ -16,6 +16,11 @@ import (
 // NaN, infinite, zero, and negative sizes count as "not set". A NaN size
 // would give the CSS string "NaNpx", which the canvas rejects without an
 // error, so the previous font would stay active and measure wrongly.
+//
+// The result is clamped to [MinFontSize, MaxFontSize]: invalid sizes fall
+// back as above, and out-of-range sizes are clamped, not rejected. Text stays
+// visible, and every caller stays far inside the range that the shaper's
+// int32 26.6 scale can hold.
 func resolveFontSize(style TextStyle) float32 {
 	size := style.Size
 	if !(size > 0) || math.IsInf(float64(size), 0) {
@@ -24,7 +29,7 @@ func resolveFontSize(style TextStyle) float32 {
 	if !(size > 0) {
 		size = 16
 	}
-	return size
+	return min(max(size, MinFontSize), MaxFontSize)
 }
 
 // cssFontSize is resolveFontSize as a float64, the unit the line-height
