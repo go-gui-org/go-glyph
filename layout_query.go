@@ -581,6 +581,10 @@ func (l *Layout) GetParagraphAtIndex(byteIndex int, text string) (int, int) {
 				paraStart = end
 			} else if paraEnd == len(text) && prevStart >= idx {
 				paraEnd = prevStart
+				// The first separator at or after idx fixes paraEnd, and
+				// paraStart only moves for separators before idx, so the rest
+				// of the text cannot change the result.
+				break
 			}
 		}
 		prevStart, prevEnd = i, end
