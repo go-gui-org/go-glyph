@@ -126,6 +126,65 @@ func TestUndoManagerHistoryLimit(t *testing.T) {
 	}
 }
 
+// Typing that never flushes must still respect maxHistory.
+func TestUndoManagerHistoryLimitWithoutFlush(t *testing.T) {
+	um := NewUndoManager(3)
+	s := ""
+	for range 10 {
+		r := InsertText(s, len(s), "x")
+		um.lastMutationTime = 0 // Force a non-coalescing push.
+		um.RecordMutation(r, "x", len(s), len(s))
+		s = r.NewText
+	}
+	if len(um.undoStack) > 3 {
+		t.Errorf("stack size = %d, want <= 3", len(um.undoStack))
+	}
+}
+
+// A mutation that changed nothing must not clear the redo stack.
+func TestUndoManagerNoOpMutationKeepsRedo(t *testing.T) {
+	um := NewUndoManager(10)
+	r := InsertText("", 0, "x")
+	um.RecordMutation(r, "x", 0, 0)
+	um.FlushPending()
+	if um.Undo("x") == nil {
+		t.Fatal("Undo returned nil")
+	}
+	if !um.CanRedo() {
+		t.Fatal("redo stack empty after Undo")
+	}
+
+	noop := DeleteBackward("", Layout{}, 0)
+	um.RecordMutation(noop, "", 0, 0)
+
+	if !um.CanRedo() {
+		t.Error("no-op mutation cleared the redo stack")
+	}
+	if um.UndoDepth() != 0 {
+		t.Errorf("UndoDepth = %d, want 0", um.UndoDepth())
+	}
+}
+
+// Trimming must drop the oldest op and keep order.
+func TestUndoManagerTrimReleasesOldest(t *testing.T) {
+	um := NewUndoManager(2)
+	s := ""
+	for _, ins := range []string{"a", "b", "c"} {
+		r := InsertText(s, len(s), ins)
+		um.lastMutationTime = 0
+		um.RecordMutation(r, ins, len(s), len(s))
+		um.FlushPending()
+		s = r.NewText
+	}
+	if len(um.undoStack) != 2 {
+		t.Fatalf("stack size = %d, want 2", len(um.undoStack))
+	}
+	if um.undoStack[0].InsertedText != "b" || um.undoStack[1].InsertedText != "c" {
+		t.Errorf("stack = %q, %q; want b, c",
+			um.undoStack[0].InsertedText, um.undoStack[1].InsertedText)
+	}
+}
+
 func TestUndoManagerCoalescing(t *testing.T) {
 	um := NewUndoManager(100)
 
