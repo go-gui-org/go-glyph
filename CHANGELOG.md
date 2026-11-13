@@ -15,6 +15,10 @@ and this project adheres to
   built without hit-test data (`NoHitTesting`, or a layout cached by
   `DrawText`/`TextWidth`). Backspace and Delete fall back to grapheme
   segmentation, and word/line deletes do nothing.
+- **Caret at a soft wrap that consumes no space.** With `WrapChar` or a CJK
+  break, the caret at the start of a wrapped line was drawn at the left edge of
+  the line above. It now sits on the line it moves to, as the cursor movement
+  functions already assume.
 
 ## [v1.26.5] - 2026-11-13
 

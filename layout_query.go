@@ -298,10 +298,20 @@ func (l *Layout) lineEndPos(byteIndex int) (CursorPosition, bool) {
 	return CursorPosition{}, false
 }
 
+// lineForByteIndex returns the line that holds byteIndex. At a soft-wrap
+// boundary that consumed no space, the later line is preferred, matching
+// MoveCursorLineStart/End/Up/Down; the caret's X already comes from that
+// line's first character.
 func (l *Layout) lineForByteIndex(byteIndex int) (Line, bool) {
-	for _, line := range l.Lines {
+	for i, line := range l.Lines {
 		lineEnd := line.StartIndex + line.Length
 		if byteIndex >= line.StartIndex && byteIndex <= lineEnd {
+			// At a soft-wrap boundary that consumed no space, prefer the
+			// later line, matching MoveCursorLineStart/End/Up/Down.
+			if byteIndex == lineEnd && i+1 < len(l.Lines) &&
+				l.Lines[i+1].StartIndex == byteIndex {
+				continue
+			}
 			return line, true
 		}
 	}
