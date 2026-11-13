@@ -635,20 +635,27 @@ func renderColorGlyph(atlas *GlyphAtlas, path string, size float64, text string)
 	// internals that the next SetPpem invalidates, so decoding must use
 	// the copy, outside the lock. ppem is clamped to the uint16 range
 	// instead of wrapping on absurd sizes.
+	//
+	// lockedCall releases the lock even if go-text panics on a defective
+	// table, and reports that as failure (glyph not drawn).
 	ppem := uint16(min(size+0.5, 65535))
-	cf.mu.Lock()
-	cf.face.SetPpem(ppem, ppem)
-	gd := cf.face.GlyphData(gid)
 	var pngData []byte
-	if gb, ok := gd.(font.GlyphBitmap); ok && gb.Format == font.PNG &&
-		len(gb.Data) > 0 && len(gb.Data) <= maxEmbeddedBitmapBytes {
-		pngData = append([]byte(nil), gb.Data...)
+	var ext font.GlyphExtents
+	var extOK bool
+	if !cf.lockedCall(func() {
+		cf.face.SetPpem(ppem, ppem)
+		gd := cf.face.GlyphData(gid)
+		if gb, ok := gd.(font.GlyphBitmap); ok && gb.Format == font.PNG &&
+			len(gb.Data) > 0 && len(gb.Data) <= maxEmbeddedBitmapBytes {
+			pngData = append([]byte(nil), gb.Data...)
+		}
+		// The extents depend on the strike SetPpem chose, so they are read
+		// under the same lock. They are in font units, already converted
+		// from the strike's pixels and its origin offsets.
+		ext, extOK = cf.face.GlyphExtents(gid)
+	}) {
+		return nil, false
 	}
-	// The extents depend on the strike SetPpem chose, so they are read
-	// under the same lock. They are in font units, already converted from
-	// the strike's pixels and its origin offsets.
-	ext, extOK := cf.face.GlyphExtents(gid)
-	cf.mu.Unlock()
 	if pngData == nil {
 		return nil, false
 	}
