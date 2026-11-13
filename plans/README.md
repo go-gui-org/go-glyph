@@ -19,11 +19,47 @@ each need explicit approval from the maintainer. No plan gives that approval.
 | [005](005-font-panic-guards.md)            | Malformed fonts cannot crash or deadlock                   | P1       | S      | —          | DONE (merged #167) |
 | [006](006-font-size-sanitizer.md)          | Enforce MinFontSize/MaxFontSize in one size resolver       | P2       | S      | (005)      | DONE (merged #168) |
 | [007](007-doc-tools-module.md)             | Doc tools moved to `tools/docs` module                     | P2       | S      | —          | DONE (merged #169) |
+| [008](008-font-discovery-regular-files.md) | Font discovery opens only regular files (FIFO hang)        | P1       | S      | —          | TODO               |
+| [009](009-ci-race-detector.md)             | CI runs `-race`; concurrent shaping across Contexts tested | P2       | S      | —          | TODO               |
+| [010](010-lint-every-target.md)            | Lint wasm, windows, darwin and android targets             | P2       | S      | —          | TODO               |
+| [011](011-textsystem-use-after-free.md)    | TextSystem returns `ErrTextSystemFreed` after `Free`       | P3       | S      | —          | TODO               |
+| [012](012-block-indent-geometry.md)        | `Block.Indent` geometry; negative is a hanging indent      | P2       | M      | —          | TODO               |
+| [013](013-layout-cache-prune-throttle.md)  | Throttle layout-cache pruning; reuse eviction scratch      | P3       | S      | —          | TODO               |
+| [014](014-agents-md-accuracy.md)           | AGENTS.md matches the repo                                 | P3       | S      | (009, 010) | TODO               |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
 
+## Reconcile log
+
+- **2026-11-13, at `6d6a018`:** all 7 plans verified DONE. Done-criteria greps
+  and module checks hold on HEAD. `make prepush` passed on the same code (#170
+  gate). Two criteria were wrong and are now fixed: 004 grepped for the
+  `copy(..., undoStack[1:])` shift that the plan itself prescribes, and 007
+  counted `^tool ` lines, which a `tool ( ... )` block breaks. All deferred
+  findings below still stand. Later the same day, 7 of them were planned as
+  008–014.
+
 ## Dependency notes
+
+Plans 008–014 were written on 2026-11-13 against `6d6a018`, after a re-vet of
+the deferred findings. No new audit sweep was run.
+
+- 009 (CI race job) should land before anyone changes the shared face cache or
+  `hbPool`. If 009's concurrency test finds a race, it stops without a fix, and
+  a new fix plan follows.
+- 010 and 014 both document CI. 014 runs best last, so it can describe the
+  `test-race` job and `make lint-cross` if they have landed. It is soft
+  ordering: 014 checks for them.
+- 011 and 013 both edit `glyph.go` in different functions. Either order works.
+  Expect only a trivial rebase.
+- 012 changes visible layout for any caller that sets `Block.Indent`. go-gui's
+  RTF view does (`Indent: -HangingIndent`). Before tagging a release that
+  includes 012, run go-gui's tests against it.
+- 008, 011 and 012 add `### Fixed` bullets, 011 adds `### Added`, and 013 adds
+  `### Changed`. Expect CHANGELOG conflicts.
+
+Notes for 001–007:
 
 - No plan strictly needs another. Each one stands alone against `7234b0b`.
 - 001 and 004 work well together. 001 makes word and line deletes return a no-op
@@ -43,36 +79,26 @@ REJECTED (with one-line rationale)
 These came out of the same audit. They are listed here so the next run does not
 find them again.
 
-- **Layout-cache housekeeping is O(n) per frame.** `TextSystem.Commit` →
-  `pruneCache` walks the whole cache (up to 8192 entries) on every frame, and
-  `evictOldestLayouts` allocates a slice of n entries and sorts it
-  (`glyph.go:431-456`). Add a `DrawText`+`Commit` benchmark first. None exists
-  yet.
-- **`Block.Indent` is not part of wrap width, `Line.Rect.X`, or layout width.**
-  Lines overflow and the caret is offset. Both backends are affected, and no
-  test covers it (`layout_ft.go:984,1064`, `layout_wasm.go:397`).
+Planned on 2026-11-13 as 008–014 and removed from this list: font discovery
+FIFO, `-race` in CI and the shared-face question, lint on other targets,
+`TextSystem` after `Free`, `Block.Indent`, layout-cache pruning, and stale
+`AGENTS.md`.
+
 - **Vertical layouts:** the caret, selection and hit-testing all collapse to one
   bar the size of the whole column (`layout_query.go:236,638`).
-- **Layout-cache hits trust the 64-bit FNV key alone,** and the string fields in
-  the key have no length delimiters (`glyph.go:325,359`).
-- **Font discovery opens non-regular files,** so a FIFO named `.ttf` hangs every
-  `NewContext`. The cause is the process-wide `sync.Once`
-  (`context_puregoft.go:541`).
-- **`TextSystem` methods panic after `Free`** (`glyph.go:104,330`). The
-  accessibility announcer drops line changes that arrive during its debounce
-  (`accessibility/announcer.go:113`).
+- **The accessibility announcer drops line changes** that arrive during its
+  debounce (`accessibility/announcer.go:113`).
 - **The fallback cache is bounded by entry count, not bytes,** and long
   combining clusters are its keys (`context_puregoft.go:85-113`).
 - **go-text allocates table buffers sized from untrusted header fields** (a few
   hundred bytes can ask for 4 GiB). The fix belongs in the typesetting fork, or
   in a pre-parse size check.
-- **A shared `font.Face` is shaped without a lock** across Contexts, and CI runs
-  no `-race`. Investigate before changing anything.
-- **Stale docs.** `AGENTS.md` describes a `replace` directive, a `CGO_ENABLED=1`
-  requirement and `purego`, none of which exist. `docs/architecture.txt` and
-  `docs/plans/*` still describe the old Pango/cgo design.
-- **Lint never sees wasm/android/ios code** (`Makefile:58`). The wasm layout
-  path has no tests that run.
+- **Stale design docs.** `docs/architecture.txt` and `docs/plans/*` still
+  describe the old Pango/cgo design. (The `AGENTS.md` part is plan 014.)
+- **The wasm layout path has no tests that run.** Plan 010 only lints it.
+- **The WASM glyph cache may never age entries.** `cacheEntry.age` is unused on
+  wasm (`cache.go:17`, found while sizing plan 010). Check whether that cache
+  evicts at all.
 - **Direction options** for the maintainer to weigh:
   - a supported glyph-visibility/reveal API (go-gui misuses
     `PangoGlyphUnknownFlag` for this)
@@ -95,3 +121,11 @@ find them again.
   investigation (profile, or check consumer usage) before any plan.
 - `AddFontBytes` temp-file growth: low impact, and it falls under the "fonts
   from bytes" direction item.
+- Layout-cache key collisions (`glyph.go:355`), re-vetted 2026-11-13: not
+  practical. The variable-length strings are separated by fixed-width fields and
+  a separator. A false hit needs a 64-bit FNV collision that someone crafts with
+  embedded NUL bytes. With 8192 entries, an accidental collision has odds of
+  about 2^-38.
+- Fallback-cache byte bound: stays LOW. The cache is capped at 2^18 entries with
+  cloned cluster keys (`context_puregoft.go:85`). Only adversarial huge
+  combining clusters make it large.

@@ -297,7 +297,8 @@ module-graph check (Step 5), the regenerated API doc (Step 4), and the full
 ## Done criteria
 
 - [ ] `test -f tools/tools.go` fails (file deleted)
-- [ ] `grep -c '^tool ' tools/docs/go.mod` prints `2`
+- [ ] `GOWORK=off go -C tools/docs list tool` lists gomarkdoc and pkgsite (the
+      `tool` directives may be one `tool ( ... )` block)
 - [ ] `grep -nE 'gomarkdoc|pkgsite' go.mod` prints nothing
 - [ ] `go list -m all | grep -c -E 'gomarkdoc|pkgsite|go-git'` prints `0`
 - [ ] `grep -n '^# ' docs/api/API.md` prints exactly 5 headings
