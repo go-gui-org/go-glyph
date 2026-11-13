@@ -4,16 +4,11 @@ package glyph
 
 import "cmp"
 
-// parseSizeFromStyle returns the effective font size from a TextStyle.
+// parseSizeFromStyle returns the effective font size from a TextStyle. It is
+// the same resolver as resolveFontSize, kept under this name for the layout
+// call sites. One resolver means every backend clamps the same way.
 func parseSizeFromStyle(s TextStyle) float32 {
-	if s.Size > 0 {
-		return s.Size
-	}
-	sz := parseSizeFromFontName(s.FontName)
-	if sz > 0 {
-		return sz
-	}
-	return 16
+	return resolveFontSize(s)
 }
 
 // mergeStyles merges run style on top of base style.

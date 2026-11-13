@@ -1,6 +1,7 @@
 package glyph
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,6 +97,14 @@ func TestValidateSizeAboveMax(t *testing.T) {
 	err := ValidateSize(600.0, 0.1, 500.0, "font size", "test")
 	if err == nil || !strings.Contains(err.Error(), "out of range") {
 		t.Fatalf("expected range error, got: %v", err)
+	}
+}
+
+func TestValidateSizeRejectsNaN(t *testing.T) {
+	err := ValidateSize(float32(math.NaN()), MinFontSize, MaxFontSize,
+		"font size", "test")
+	if err == nil {
+		t.Fatal("expected error for NaN size")
 	}
 }
 
