@@ -202,7 +202,8 @@ exit 0.
 - [ ] `go test ./...` exits 0. The 3 new tests exist and pass.
 - [ ] `grep -n 'undoStack = append' undo.go` prints exactly 1 line (inside
       `pushUndo`)
-- [ ] `grep -n 'undoStack\[1:\]' undo.go` prints nothing
+- [ ] `grep -n 'undoStack = um.undoStack\[1:\]' undo.go` prints nothing (the
+      `copy(um.undoStack, um.undoStack[1:])` shift in `pushUndo` is expected)
 - [ ] `make lint` prints `0 issues.`
 - [ ] Only in-scope files modified
 - [ ] `plans/README.md` status row updated
