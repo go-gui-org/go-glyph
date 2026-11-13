@@ -1,4 +1,4 @@
-.PHONY: docs docs-serve check test-race coverage vet lint lint-bin nocgo \
+.PHONY: docs docs-serve doc-tools api-doc check test-race coverage vet lint lint-bin nocgo \
 	cross-build build-modules prepush
 
 # Repo-local bin for the pinned linter. The pinned VERSION itself lives in
@@ -12,13 +12,33 @@ LINT_BIN = $(LINT_DIR)/golangci-lint
 # sibling checkout; the gate should still validate what CI builds.
 LINT := GOWORK=off $(LINT_BIN)
 
-## docs: generate docs/api/API.md via gomarkdoc
-docs:
-	go generate ./...
+DOC_BIN_GOMARKDOC = $(LINT_DIR)/gomarkdoc
+DOC_BIN_PKGSITE   = $(LINT_DIR)/pkgsite
+
+## doc-tools: build the pinned gomarkdoc and pkgsite into .bin/ from
+## tools/docs/go.mod. Same pattern as the linter: the versions live in
+## that module so they stay out of go-glyph's published go.mod.
+$(DOC_BIN_GOMARKDOC) $(DOC_BIN_PKGSITE): tools/docs/go.mod tools/docs/go.sum
+	GOWORK=off GOOS= GOARCH= CGO_ENABLED=0 GOFLAGS= GOBIN=$(LINT_DIR) \
+	  go -C tools/docs install \
+	  github.com/princjef/gomarkdoc/cmd/gomarkdoc \
+	  golang.org/x/pkgsite/cmd/pkgsite
+
+doc-tools: $(DOC_BIN_GOMARKDOC) $(DOC_BIN_PKGSITE)
+
+## docs: run go generate (API doc and emoji table; the emoji step needs
+## network access)
+docs: doc-tools
+	GOMARKDOC=$(DOC_BIN_GOMARKDOC) go generate ./...
+
+## api-doc: regenerate docs/api/API.md only (no network, unlike `docs`,
+## whose go generate also refreshes the emoji table from unicode.org).
+api-doc: $(DOC_BIN_GOMARKDOC)
+	GOMARKDOC=$(DOC_BIN_GOMARKDOC) bash scripts/gen-docs.sh
 
 ## docs-serve: browse package docs locally via pkgsite
-docs-serve:
-	pkgsite -open .
+docs-serve: $(DOC_BIN_PKGSITE)
+	$(DOC_BIN_PKGSITE) -open .
 
 ## check: run tests, vet, and lint
 check: $(LINT_BIN)

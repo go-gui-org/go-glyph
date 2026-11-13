@@ -10,6 +10,10 @@ and this project adheres to
 
 ### Changed
 
+- **Doc tools moved to a separate module.** gomarkdoc and pkgsite now live in a
+  separate `tools/docs` module. go-glyph's `go.mod` no longer brings about 55
+  tool-only modules (go-git, viper, cobra, ...) into consumers' module graphs.
+  `docs/api/API.md` no longer documents example programs.
 - **Font sizes are clamped to `MinFontSize`–`MaxFontSize`.** Font sizes are now
   clamped to `MinFontSize` (0.1) – `MaxFontSize` (500) on every backend. This
   applies to `TextStyle.Size` and to sizes in font names. Infinite and NaN sizes
