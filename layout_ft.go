@@ -870,8 +870,10 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 		// face at a reduced size (same .ttf, so same face pointer); the size
 		// check keeps them out of the base run, otherwise they would be shaped
 		// with the base font and take a base-size advance while rendering
-		// small, leaving a gap after the glyph.
-		for rj < len(chars) && !chars[rj].isColor &&
+		// small, leaving a gap after the glyph. Inline objects end a run too:
+		// an object takes its declared width, not the placeholder glyph's
+		// shaped advance, so it must not be shaped with the text around it.
+		for rj < len(chars) && !chars[rj].isColor && !chars[rj].isObject &&
 			!isHardLineBreak(chars[rj].text) &&
 			charFonts[rj].face == f.face && charFonts[rj].size == f.size {
 			rj++

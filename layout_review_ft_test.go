@@ -3,6 +3,7 @@
 package glyph
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"unsafe"
@@ -319,4 +320,97 @@ func TestVisualOrder_NumbersInRTL(t *testing.T) {
 			t.Fatalf("order = %v, want %v", got, want)
 		}
 	}
+}
+
+// objRun builds a placeholder run for an inline object of width w.
+func objRun(id string, w float32) StyleRun {
+	return StyleRun{
+		Text: "\uFFFC",
+		Style: TextStyle{Object: &InlineObject{
+			ID: id, Width: w, Height: 20,
+		}},
+	}
+}
+
+// assertObjWidth checks the cluster at byte index b is w wide and returns it.
+func assertObjWidth(t *testing.T, l Layout, b int, w float64) Rect {
+	t.Helper()
+	r, ok := l.GetCharRect(b)
+	if !ok {
+		t.Fatalf("no CharRect at byte %d", b)
+	}
+	if math.Abs(float64(r.Width)-w) >= 0.5 {
+		t.Errorf("object at byte %d width = %v, want %v", b, r.Width, w)
+	}
+	return r
+}
+
+// An object that follows text in the same font keeps its declared width;
+// shaping must not replace it with the placeholder glyph's advance.
+func TestLayoutRichText_InlineObjectAfterTextKeepsWidth(t *testing.T) {
+	ctx := newReviewContext(t)
+	l, err := ctx.LayoutRichText(RichText{Runs: []StyleRun{
+		{Text: "ab"}, objRun("img", 50), {Text: "cd"},
+	}}, reviewCfg)
+	if err != nil {
+		t.Fatalf("LayoutRichText: %v", err)
+	}
+	r := assertObjWidth(t, l, 2, 50)
+	next, ok := l.GetCharRect(2 + len("\uFFFC"))
+	if !ok {
+		t.Fatal("no CharRect after object")
+	}
+	if next.X < r.X+r.Width-0.5 {
+		t.Errorf("text after object overlaps: X = %v, object end = %v",
+			next.X, r.X+r.Width)
+	}
+}
+
+// Same as above, but the placeholder is "x". The placeholder must be covered
+// by the run font; otherwise the script fallback gives it its own face and the
+// shaping run already splits there.
+func TestLayoutRichText_InlineObjectCoveredPlaceholderKeepsWidth(t *testing.T) {
+	ctx := newReviewContext(t)
+	obj := objRun("img", 50)
+	obj.Text = "x"
+	l, err := ctx.LayoutRichText(RichText{Runs: []StyleRun{
+		{Text: "ab"}, obj, {Text: "cd"},
+	}}, reviewCfg)
+	if err != nil {
+		t.Fatalf("LayoutRichText: %v", err)
+	}
+	r := assertObjWidth(t, l, 2, 50)
+	next, ok := l.GetCharRect(3)
+	if !ok {
+		t.Fatal("no CharRect after object")
+	}
+	if next.X < r.X+r.Width-0.5 {
+		t.Errorf("text after object overlaps: X = %v, object end = %v",
+			next.X, r.X+r.Width)
+	}
+}
+
+// Guards the path that already worked: object as the first cluster.
+func TestLayoutRichText_InlineObjectFirstKeepsWidth(t *testing.T) {
+	ctx := newReviewContext(t)
+	l, err := ctx.LayoutRichText(RichText{Runs: []StyleRun{
+		objRun("img", 50), {Text: "cd"},
+	}}, reviewCfg)
+	if err != nil {
+		t.Fatalf("LayoutRichText: %v", err)
+	}
+	assertObjWidth(t, l, 0, 50)
+}
+
+// Two objects in a row each keep their own width.
+func TestLayoutRichText_TwoAdjacentObjects(t *testing.T) {
+	ctx := newReviewContext(t)
+	l, err := ctx.LayoutRichText(RichText{Runs: []StyleRun{
+		{Text: "a"}, objRun("o1", 30), objRun("o2", 40), {Text: "b"},
+	}}, reviewCfg)
+	if err != nil {
+		t.Fatalf("LayoutRichText: %v", err)
+	}
+	assertObjWidth(t, l, 1, 30)
+	assertObjWidth(t, l, 1+len("\uFFFC"), 40)
 }
