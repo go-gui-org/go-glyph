@@ -19,6 +19,10 @@ and this project adheres to
   break, the caret at the start of a wrapped line was drawn at the left edge of
   the line above. It now sits on the line it moves to, as the cursor movement
   functions already assume.
+- **Inline object width after same-font text.** Inline objects in
+  `LayoutRichText` keep their declared `Width` on native backends when they
+  follow text in the same font. The placeholder glyph's advance replaced it
+  before, and following text overlapped the object.
 
 ## [v1.26.5] - 2026-11-13
 
