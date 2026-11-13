@@ -8,6 +8,20 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.26.5] - 2026-11-13
+
+### Fixed
+
+- **CR and CRLF are hard line breaks (#159).** Lone CR and CRLF pairs now break
+  lines like LF does. `GetParagraphAtIndex` also stops scanning once the
+  paragraph end is found instead of walking the whole text.
+
+### Changed
+
+- **Bump x/image, x/text, x/pkgsite and ebiten (#161).** `x/image` v0.48.0,
+  `x/text` v0.44.0, `x/pkgsite` v0.6.0 and `ebiten` v2.10.6, with transitive
+  `x/*` bumps and `go mod tidy` across all modules.
+
 ## [v1.26.4] - 2026-10-12
 
 ### Fixed
