@@ -222,10 +222,9 @@ func (l *Layout) GetCursorPos(byteIndex int) (CursorPosition, bool) {
 		return CursorPosition{}, false
 	}
 
-	// Try exact char rect. Skip '\n' — its glyph rect is at the
-	// start of the next line, but the cursor belongs at the end
-	// of the current line (handled by the line-based fallback).
-	if byteIndex >= len(l.Text) || l.Text[byteIndex] != '\n' {
+	// Try exact char rect. Skip hard line breaks: their cursor belongs at the
+	// end of the current line (handled by the line-based fallback).
+	if hardLineBreakLenAt(l.Text, byteIndex) == 0 {
 		if ri, ok := l.CharRectByIndex[byteIndex]; ok {
 			r := l.CharRects[ri].Rect
 			// The caret before a char sits on its leading edge: the
@@ -554,7 +553,8 @@ func (l *Layout) GetWordAtIndex(byteIndex int) (int, int) {
 }
 
 // GetParagraphAtIndex returns (start, end) byte indices for
-// paragraph containing index. Paragraph = text between \n\n.
+// paragraph containing index. Paragraphs are separated by two adjacent hard
+// line breaks; LF, CR and CRLF may be mixed.
 // text is normally l.Text; the parameter is kept for API compatibility.
 func (l *Layout) GetParagraphAtIndex(byteIndex int, text string) (int, int) {
 	if len(text) == 0 {
@@ -562,22 +562,33 @@ func (l *Layout) GetParagraphAtIndex(byteIndex int, text string) (int, int) {
 	}
 	idx := max(0, min(byteIndex, len(text)))
 
-	// Scan backwards for paragraph start.
 	paraStart := 0
-	for i := idx - 1; i >= 1; i-- {
-		if text[i] == '\n' && text[i-1] == '\n' {
-			paraStart = i + 1
-			break
-		}
-	}
-
-	// Scan forwards for paragraph end.
 	paraEnd := len(text)
-	for i := idx; i < len(text)-1; i++ {
-		if text[i] == '\n' && text[i+1] == '\n' {
-			paraEnd = i
-			break
+	prevStart, prevEnd := -1, -1
+	for i := 0; i < len(text); {
+		size := hardLineBreakLenAt(text, i)
+		if size == 0 {
+			prevStart, prevEnd = -1, -1
+			i++
+			continue
 		}
+		end := i + size
+		if prevEnd == i {
+			// Preserve the existing boundary convention: the paragraph before
+			// the separator ends at its first break, and the next starts after
+			// its second break.
+			if end <= idx {
+				paraStart = end
+			} else if paraEnd == len(text) && prevStart >= idx {
+				paraEnd = prevStart
+				// The first separator at or after idx fixes paraEnd, and
+				// paraStart only moves for separators before idx, so the rest
+				// of the text cannot change the result.
+				break
+			}
+		}
+		prevStart, prevEnd = i, end
+		i = end
 	}
 	return paraStart, paraEnd
 }

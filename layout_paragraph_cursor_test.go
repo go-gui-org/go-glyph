@@ -65,6 +65,140 @@ func TestNewlineBytesAreCaretStops(t *testing.T) {
 	}
 }
 
+func TestHardLineBreakFormsPreserveTextAndCursorBoundaries(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	for name, tc := range map[string]struct {
+		text      string
+		breakEnd  int
+		innerByte int
+	}{
+		"lf":   {text: "a\nb", breakEnd: 2, innerByte: -1},
+		"cr":   {text: "a\rb", breakEnd: 2, innerByte: -1},
+		"crlf": {text: "a\r\nb", breakEnd: 3, innerByte: 2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			l, err := ctx.LayoutText(tc.text, TextConfig{
+				Style: TextStyle{FontName: "Sans 20"},
+			})
+			if err != nil {
+				t.Fatalf("LayoutText: %v", err)
+			}
+			if l.Text != tc.text {
+				t.Fatalf("layout text = %q, want original %q", l.Text, tc.text)
+			}
+			if len(l.Lines) != 2 {
+				t.Fatalf("got %d lines, want 2", len(l.Lines))
+			}
+			if l.Lines[1].StartIndex != tc.breakEnd || !l.Lines[1].IsParagraphStart {
+				t.Errorf("second line = %+v, want start %d and paragraph start", l.Lines[1], tc.breakEnd)
+			}
+			if len(l.Glyphs) != 2 {
+				t.Errorf("got %d glyphs, want only the two visible characters", len(l.Glyphs))
+			}
+
+			if _, ok := l.GetCursorPos(1); !ok {
+				t.Error("hard line break is not a valid cursor position")
+			}
+			if tc.innerByte >= 0 {
+				if _, ok := l.GetCursorPos(tc.innerByte); ok {
+					t.Error("CRLF interior unexpectedly is a cursor position")
+				}
+			}
+			if got := l.MoveCursorRight(1); got != tc.breakEnd {
+				t.Errorf("MoveCursorRight(break) = %d, want %d", got, tc.breakEnd)
+			}
+			if got := l.MoveCursorLeft(tc.breakEnd); got != 1 {
+				t.Errorf("MoveCursorLeft(next line) = %d, want 1", got)
+			}
+			if got := DeleteForward(l.Text, l, 1); got.DeletedText != tc.text[1:tc.breakEnd] {
+				t.Errorf("DeleteForward deleted %q, want the complete break %q",
+					got.DeletedText, tc.text[1:tc.breakEnd])
+			}
+			if got := DeleteBackward(l.Text, l, tc.breakEnd); got.DeletedText != tc.text[1:tc.breakEnd] {
+				t.Errorf("DeleteBackward deleted %q, want the complete break %q",
+					got.DeletedText, tc.text[1:tc.breakEnd])
+			}
+		})
+	}
+}
+
+func TestMixedHardLineBreakForms(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	const text = "a\r\nb\rc\nd"
+	l, err := ctx.LayoutText(text, TextConfig{Style: TextStyle{FontName: "Sans 20"}})
+	if err != nil {
+		t.Fatalf("LayoutText: %v", err)
+	}
+	if len(l.Lines) != 4 {
+		t.Fatalf("got %d lines, want 4", len(l.Lines))
+	}
+	for i, want := range []int{0, 3, 5, 7} {
+		if got := l.Lines[i].StartIndex; got != want {
+			t.Errorf("line %d start = %d, want %d", i, got, want)
+		}
+	}
+}
+
+func TestRichTextCRLFSplitAcrossRuns(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	l, err := ctx.LayoutRichText(RichText{Runs: []StyleRun{
+		{Text: "a\r"},
+		{Text: "\nb"},
+	}}, TextConfig{Style: TextStyle{FontName: "Sans 20"}})
+	if err != nil {
+		t.Fatalf("LayoutRichText: %v", err)
+	}
+	if l.Text != "a\r\nb" {
+		t.Fatalf("layout text = %q, want original rich text", l.Text)
+	}
+	if len(l.Lines) != 2 || l.Lines[1].StartIndex != 3 {
+		t.Errorf("lines = %+v, want second line starting at byte 3", l.Lines)
+	}
+	if len(l.Glyphs) != 2 {
+		t.Errorf("got %d glyphs, want only the two visible characters", len(l.Glyphs))
+	}
+	if _, ok := l.GetCursorPos(2); ok {
+		t.Error("CRLF interior unexpectedly is a cursor position")
+	}
+}
+
+func TestGetParagraphAtIndexHardLineBreakForms(t *testing.T) {
+	var l Layout
+	for name, breaks := range map[string]string{
+		"lf":    "\n\n",
+		"cr":    "\r\r",
+		"crlf":  "\r\n\r\n",
+		"mixed": "\r\n\r",
+	} {
+		t.Run(name, func(t *testing.T) {
+			text := "a" + breaks + "b"
+			firstBreak := 1
+			b := 1 + len(breaks)
+			if start, end := l.GetParagraphAtIndex(0, text); start != 0 || end != firstBreak {
+				t.Errorf("first paragraph = (%d, %d), want (0, %d)", start, end, firstBreak)
+			}
+			if start, end := l.GetParagraphAtIndex(b, text); start != b || end != len(text) {
+				t.Errorf("second paragraph = (%d, %d), want (%d, %d)", start, end, b, len(text))
+			}
+		})
+	}
+}
+
 // TestParagraphRightArrowStepsLines verifies that moving right from the
 // last character of a paragraph visits the end-of-paragraph position and
 // the empty line before the next paragraph, instead of skipping straight

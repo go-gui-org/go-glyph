@@ -245,7 +245,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 		}
 		if isObject {
 			w = objWidth
-		} else if cl.text == "\n" || cl.text == "\r" {
+		} else if isHardLineBreak(cl.text) {
 			w = 0
 		} else {
 			m := ctx.ctx2d.Call("measureText", cl.text)
@@ -269,7 +269,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 	// takes the ligature's measured width and its whole draw span, the
 	// absorbed clusters take zero width and lose their caret stop.
 	shapeable := func(c charInfo) bool {
-		return !c.isObject && c.text != "\n" && c.text != "\r"
+		return !c.isObject && !isHardLineBreak(c.text)
 	}
 	for ri := 0; ri < len(chars); {
 		if !shapeable(chars[ri]) {
@@ -363,12 +363,11 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 	// allocate the buckets once instead of rehashing while filling.
 	charRectByIndex := make(map[int]int, len(chars))
 	layoutLines := make([]Line, 0, len(lines))
-	// +1: the end-of-text attr appended after the line loop must not force a
-	// regrowth copy of an exactly-sized slice. The newline attrs appended by
-	// the post-pass below add one entry per '\n' byte.
-	newlineAttrs := strings.Count(text, "\n")
-	logAttrs := make([]LogAttr, 0, len(chars)+1+newlineAttrs)
-	logAttrByIndex := make(map[int]int, len(chars)+1+newlineAttrs)
+	// Every cluster contributes exactly one attr, either in the line loop or
+	// in a post-pass for consumed spaces and hard breaks. +1 leaves room for
+	// the end-of-text attr without a regrowth copy.
+	logAttrs := make([]LogAttr, 0, len(chars)+1)
+	logAttrByIndex := make(map[int]int, len(chars)+1)
 
 	var totalWidth, totalHeight float64
 	lineY := float64(0)
@@ -469,7 +468,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 
 		for ci := li.startChar; ci < li.endChar; ci++ {
 			ch := chars[ci]
-			if ch.text == "\n" {
+			if isHardLineBreak(ch.text) {
 				continue
 			}
 
@@ -524,7 +523,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 				// ligature is not a caret stop: carets land only on
 				// ligature boundaries, same as the FreeType path.
 				IsCursorPosition: !ch.absorbed,
-				IsLineBreak:      ch.text == "\n",
+				IsLineBreak:      isHardLineBreak(ch.text),
 			})
 			logAttrByIndex[ch.byteI] = attrIdx
 			cx += ch.width
@@ -536,7 +535,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 		layoutLines = append(layoutLines, Line{
 			StartIndex:       startByteIdx,
 			Length:           lineLen,
-			IsParagraphStart: lineIdx == 0 || (li.startChar > 0 && chars[li.startChar-1].text == "\n"),
+			IsParagraphStart: lineIdx == 0 || (li.startChar > 0 && isHardLineBreak(chars[li.startChar-1].text)),
 			Rect: Rect{
 				X:      float32(alignOffset),
 				Y:      float32(lineY),
@@ -553,7 +552,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 	}
 	totalHeight = lineY
 
-	logAttrs = appendNewlineAttrs(text, logAttrs, logAttrByIndex)
+	logAttrs = appendHardLineBreakAttrs(text, logAttrs, logAttrByIndex)
 	logAttrs = appendWrapSpaceAttrs(lines, charText, charByte, logAttrs, logAttrByIndex)
 
 	endAttrIdx := len(logAttrs)
@@ -601,9 +600,8 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 	var charRects []CharRect
 	var items []Item
 	charRectByIndex := make(map[int]int, len(clusters))
-	newlineAttrs := strings.Count(text, "\n")
-	logAttrs := make([]LogAttr, 0, len(clusters)+1+newlineAttrs)
-	logAttrByIndex := make(map[int]int, len(clusters)+1+newlineAttrs)
+	logAttrs := make([]LogAttr, 0, len(clusters)+1)
+	logAttrByIndex := make(map[int]int, len(clusters)+1)
 
 	penY := fontAscent // start at first baseline
 
@@ -634,7 +632,7 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 	}
 
 	for _, cl := range clusters {
-		if cl.text == "\n" || cl.text == "\r" {
+		if isHardLineBreak(cl.text) {
 			continue
 		}
 
@@ -693,7 +691,7 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 		ctx.ctx2d.Set("font", cssFont)
 	}
 
-	logAttrs = appendNewlineAttrs(text, logAttrs, logAttrByIndex)
+	logAttrs = appendHardLineBreakAttrs(text, logAttrs, logAttrByIndex)
 	// End-of-text attr.
 	endIdx := len(logAttrs)
 	logAttrs = append(logAttrs, LogAttr{IsCursorPosition: true})

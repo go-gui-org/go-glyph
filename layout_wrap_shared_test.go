@@ -69,6 +69,49 @@ func TestWrapLines_HardNewline(t *testing.T) {
 	}
 }
 
+func TestWrapLines_HardLineBreakForms(t *testing.T) {
+	for name, clusters := range map[string][]string{
+		"lf":   {"a", "\n", "b"},
+		"cr":   {"a", "\r", "b"},
+		"crlf": {"a", "\r\n", "b"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			lines := wrapLines(nil, len(clusters), WrapNone, -1,
+				func(int) float64 { return 10 },
+				func(i int) string { return clusters[i] }, nil)
+			if len(lines) != 2 {
+				t.Fatalf("got %d lines, want 2: %+v", len(lines), lines)
+			}
+			if got := lines[0]; got.startChar != 0 || got.endChar != 1 || got.width != 10 {
+				t.Errorf("line 0 = %+v, want {0 1 10}", got)
+			}
+			if got := lines[1]; got.startChar != 2 || got.endChar != 3 || got.width != 10 {
+				t.Errorf("line 1 = %+v, want {2 3 10}", got)
+			}
+		})
+	}
+}
+
+func TestHardLineBreakAttrs(t *testing.T) {
+	text := "a\r\nb\rc\nd"
+	attrs := make([]LogAttr, 0, 3)
+	byIndex := make(map[int]int)
+	attrs = appendHardLineBreakAttrs(text, attrs, byIndex)
+
+	if len(attrs) != 3 {
+		t.Fatalf("got %d attrs, want 3", len(attrs))
+	}
+	for _, index := range []int{1, 4, 6} {
+		ai, ok := byIndex[index]
+		if !ok || !attrs[ai].IsCursorPosition || !attrs[ai].IsLineBreak {
+			t.Errorf("byte %d = (%d, %v), want cursor line-break attr", index, ai, ok)
+		}
+	}
+	if _, ok := byIndex[2]; ok {
+		t.Error("CRLF interior byte unexpectedly has a caret attr")
+	}
+}
+
 func TestLineBreakOpportunities(t *testing.T) {
 	text := "ab cd"
 	got := lineBreakOpportunities(nil, text, len(text), func(i int) int { return i })

@@ -190,7 +190,7 @@ func (ctx *Context) buildScriptFallbacks(clusters []graphemeCluster,
 	}
 
 	for ci, cl := range clusters {
-		if cl.text == "\n" || cl.text == "\r" {
+		if isHardLineBreak(cl.text) {
 			continue
 		}
 		// Emoji clusters prefer a color font even when the base font
@@ -640,7 +640,7 @@ func (ctx *Context) applyRichScriptFallbacks(clusters []graphemeCluster,
 	}
 
 	for ci, cl := range clusters {
-		if cl.text == "\n" || cl.text == "\r" {
+		if isHardLineBreak(cl.text) {
 			continue
 		}
 		base := overrides.idx[ci]
@@ -836,7 +836,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 	scale := float64(ctx.scaleFactor)
 	for ri := 0; ri < len(chars); {
 		ch := chars[ri]
-		if ch.text == "\n" || ch.text == "\r" {
+		if isHardLineBreak(ch.text) {
 			chars[ri].width = ch.xPad * scale
 			ri++
 			continue
@@ -872,7 +872,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 		// with the base font and take a base-size advance while rendering
 		// small, leaving a gap after the glyph.
 		for rj < len(chars) && !chars[rj].isColor &&
-			chars[rj].text != "\n" && chars[rj].text != "\r" &&
+			!isHardLineBreak(chars[rj].text) &&
 			charFonts[rj].face == f.face && charFonts[rj].size == f.size {
 			rj++
 		}
@@ -955,10 +955,10 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 		spacing := float64(cfg.Style.LetterSpacing) *
 			float64(ctx.scaleFactor)
 		for i := range len(chars) - 1 {
-			if chars[i].text == "\n" || chars[i].text == "\r" {
+			if isHardLineBreak(chars[i].text) {
 				continue
 			}
-			if chars[i+1].text == "\n" || chars[i+1].text == "\r" {
+			if isHardLineBreak(chars[i+1].text) {
 				continue
 			}
 			// Spacing goes between visual units. A ligature is one unit, so
@@ -1014,12 +1014,11 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 		// attr), so presize to allocate their buckets once instead of growing
 		// through several rehashes while filling.
 		charRectByIndex = make(map[int]int, len(chars))
-		// +1: the end-of-text attr appended after the line loop must not
-		// force a regrowth copy of an exactly-sized slice. The newline attrs
-		// appended by the post-pass below add one entry per '\n' byte.
-		newlineAttrs := strings.Count(text, "\n")
-		logAttrs = make([]LogAttr, 0, len(chars)+1+newlineAttrs)
-		logAttrByIndex = make(map[int]int, len(chars)+1+newlineAttrs)
+		// Every cluster contributes exactly one attr, either in the line loop
+		// or in a post-pass for consumed spaces and hard breaks. +1 leaves room
+		// for the end-of-text attr without a regrowth copy.
+		logAttrs = make([]LogAttr, 0, len(chars)+1)
+		logAttrByIndex = make(map[int]int, len(chars)+1)
 	}
 	// Exactly one Line per wrapped line, and at least one Item per line
 	// (more when font/color/style splits occur mid-line).
@@ -1046,7 +1045,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 		if li.endChar < li.startChar {
 			li.endChar = li.startChar
 		}
-		if (lineIdx == 0 || chars[li.startChar-1].text == "\n") &&
+		if (lineIdx == 0 || isHardLineBreak(chars[li.startChar-1].text)) &&
 			li.startChar < len(chars) {
 			paraDir = paragraphDirection(text[chars[li.startChar].byteI:])
 		}
@@ -1153,7 +1152,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 
 		processChar := func(ci int) {
 			ch := chars[ci]
-			if ch.text == "\n" {
+			if isHardLineBreak(ch.text) {
 				return
 			}
 
@@ -1268,7 +1267,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 			// order. applyWordAttrs fills them in once, below.
 			logAttrs = append(logAttrs, LogAttr{
 				IsCursorPosition: !ch.absorbed,
-				IsLineBreak:      ch.text == "\n",
+				IsLineBreak:      isHardLineBreak(ch.text),
 			})
 			logAttrByIndex[ch.byteI] = attrIdx
 			cx += ch.width
@@ -1291,7 +1290,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 			Length:     lineLen,
 			IsParagraphStart: lineIdx == 0 ||
 				(li.startChar > 0 &&
-					chars[li.startChar-1].text == "\n"),
+					isHardLineBreak(chars[li.startChar-1].text)),
 			Rect: Rect{
 				X:      float32(alignOffset * pixelScale),
 				Y:      float32(lineY * pixelScale),
@@ -1310,7 +1309,7 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 	totalHeight = lineY
 
 	if hitTest {
-		logAttrs = appendNewlineAttrs(text, logAttrs, logAttrByIndex)
+		logAttrs = appendHardLineBreakAttrs(text, logAttrs, logAttrByIndex)
 		logAttrs = appendWrapSpaceAttrs(lines, charText, charByte, logAttrs, logAttrByIndex)
 
 		endAttrIdx := len(logAttrs)
@@ -1367,9 +1366,8 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 	var charRects []CharRect
 	var items []Item
 	charRectByIndex := make(map[int]int, len(clusters))
-	newlineAttrs := strings.Count(text, "\n")
-	logAttrs := make([]LogAttr, 0, len(clusters)+1+newlineAttrs)
-	logAttrByIndex := make(map[int]int, len(clusters)+1+newlineAttrs)
+	logAttrs := make([]LogAttr, 0, len(clusters)+1)
+	logAttrByIndex := make(map[int]int, len(clusters)+1)
 
 	penY := fontAscent
 
@@ -1400,7 +1398,7 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 	}
 
 	for ci, cl := range clusters {
-		if cl.text == "\n" || cl.text == "\r" {
+		if isHardLineBreak(cl.text) {
 			continue
 		}
 
@@ -1454,7 +1452,7 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 	}
 	flush(len(text))
 
-	logAttrs = appendNewlineAttrs(text, logAttrs, logAttrByIndex)
+	logAttrs = appendHardLineBreakAttrs(text, logAttrs, logAttrByIndex)
 	endIdx := len(logAttrs)
 	logAttrs = append(logAttrs, LogAttr{IsCursorPosition: true})
 	logAttrByIndex[len(text)] = endIdx

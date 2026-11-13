@@ -34,6 +34,10 @@ func TestAnnouncerCharacter(t *testing.T) {
 		t.Errorf("newline = %q", got)
 	}
 	a.lastAnnouncementTime = 0
+	if got := a.AnnounceCharacter('\r'); got != "newline" {
+		t.Errorf("carriage return = %q", got)
+	}
+	a.lastAnnouncementTime = 0
 	if got := a.AnnounceCharacter('a'); got != "a" {
 		t.Errorf("'a' = %q", got)
 	}
