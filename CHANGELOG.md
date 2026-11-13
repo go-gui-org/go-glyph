@@ -10,6 +10,10 @@ and this project adheres to
 
 ### Fixed
 
+- **Undo history cap and no-op mutations.** `UndoManager` now enforces
+  `maxHistory` while typing, not only on flush and redo, and no longer records
+  mutations that changed nothing. Before, such a mutation cleared the redo
+  stack.
 - **Deletes on layouts without hit-test data.** Backspace, Delete and word/line
   deletes no longer remove the whole text before the caret when the layout was
   built without hit-test data (`NoHitTesting`, or a layout cached by

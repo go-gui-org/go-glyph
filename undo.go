@@ -117,6 +117,13 @@ func (um *UndoManager) coalesceOperation(op UndoOperation) {
 func (um *UndoManager) RecordMutation(result MutationResult,
 	inserted string, cursorBefore, anchorBefore int) {
 
+	// A mutation that neither removed nor inserted text (Backspace at
+	// offset 0, a delete with an empty range) changes nothing to undo;
+	// recording it would push an empty step and clear the redo stack.
+	if result.DeletedText == "" && inserted == "" {
+		return
+	}
+
 	now := time.Now().UnixMilli()
 	op := MutationToUndoOp(result, inserted, cursorBefore, anchorBefore)
 
@@ -125,7 +132,7 @@ func (um *UndoManager) RecordMutation(result MutationResult,
 		um.lastMutationTime = now
 	} else {
 		if um.coalescableOp != nil {
-			um.undoStack = append(um.undoStack, *um.coalescableOp)
+			um.pushUndo(*um.coalescableOp)
 			um.coalescableOp = nil
 		}
 		cp := op
@@ -135,13 +142,23 @@ func (um *UndoManager) RecordMutation(result MutationResult,
 	}
 }
 
+// pushUndo appends op to the undo stack, dropping the oldest entry
+// first when the stack is at maxHistory. The shift uses copy and clears
+// the vacated slot so a dropped op's strings are not kept alive by the
+// backing array.
+func (um *UndoManager) pushUndo(op UndoOperation) {
+	if len(um.undoStack) > 0 && len(um.undoStack) >= um.maxHistory {
+		n := copy(um.undoStack, um.undoStack[1:])
+		um.undoStack[n] = UndoOperation{}
+		um.undoStack = um.undoStack[:n]
+	}
+	um.undoStack = append(um.undoStack, op)
+}
+
 // FlushPending pushes pending coalescable op to undo stack.
 func (um *UndoManager) FlushPending() {
 	if um.coalescableOp != nil {
-		if len(um.undoStack) >= um.maxHistory {
-			um.undoStack = um.undoStack[1:]
-		}
-		um.undoStack = append(um.undoStack, *um.coalescableOp)
+		um.pushUndo(*um.coalescableOp)
 		um.coalescableOp = nil
 	}
 }
@@ -213,10 +230,7 @@ func (um *UndoManager) Redo(text string) *UndoResult {
 		newText = text[:op.RangeStart] + op.InsertedText + text[oldEnd:]
 	}
 
-	if len(um.undoStack) >= um.maxHistory {
-		um.undoStack = um.undoStack[1:]
-	}
-	um.undoStack = append(um.undoStack, op)
+	um.pushUndo(op)
 	return &UndoResult{
 		Text:   newText,
 		Cursor: op.CursorAfter,
