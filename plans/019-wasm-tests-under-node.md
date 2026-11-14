@@ -132,7 +132,9 @@ design" list says what it leaves out compared with CI.
 **In scope**:
 
 - `scripts/wasm-canvas-shim.cjs` (create).
-- `skip_wasm_test.go` (create): one helper.
+- `skip_on_wasm_helper_test.go` (create): one helper. Not `skip_wasm_test.go`:
+  Go reads a `_wasm` suffix as a GOARCH constraint, so the helper would vanish
+  on native.
 - `draw_transform_test.go`, `test_helpers_test.go`, `validation_test.go`: add
   one `skipOnWASM(...)` line at the top of each of the 10 tests in the table.
 - `Makefile`: the `test-wasm` target, `.PHONY`, and one new bullet in the
@@ -238,7 +240,8 @@ is not 10, or a name is not in the table, STOP.
 
 ### Step 3: Skip the 10 native-only tests on js
 
-Create `skip_wasm_test.go` (no build tag):
+Create `skip_on_wasm_helper_test.go` (no build tag; a `_wasm_test.go` name would
+be GOARCH-constrained):
 
 ```go
 package glyph
