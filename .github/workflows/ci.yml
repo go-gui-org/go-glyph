@@ -94,6 +94,38 @@ jobs:
           name: coverage
           path: coverage.out
 
+  test-race:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1-mesa-dev \
+            libsdl2-dev \
+            fonts-noto-cjk \
+            fonts-noto-color-emoji \
+            pkg-config
+
+      # The race detector needs cgo. Root module only: the examples and
+      # backend/ebitengine are build-only in CI, and backend tests need a
+      # display. Kept out of the macOS/Windows jobs because race mode costs
+      # 5-10x memory and macOS already runs with GOMEMLIMIT and -p 1.
+      - name: Test root module with the race detector
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...
+
   lint:
     runs-on: ubuntu-latest
 
