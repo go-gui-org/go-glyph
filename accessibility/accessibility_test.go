@@ -1,6 +1,9 @@
 package accessibility
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestEmojiNames(t *testing.T) {
 	tests := []struct {
@@ -99,6 +102,25 @@ func TestAnnouncerLineNumber(t *testing.T) {
 	got = a.AnnounceLineNumber(6)
 	if got != "line 6" {
 		t.Errorf("new line = %q", got)
+	}
+}
+
+// A line change that arrives during the debounce is dropped, but it must not be
+// marked as announced. The next call for the same line, after the debounce,
+// announces it.
+func TestAnnouncerLineNumberAfterDebounce(t *testing.T) {
+	a := NewAnnouncer()
+	a.lastAnnouncementTime = time.Now().UnixMilli() // inside the debounce
+	if got := a.AnnounceLineNumber(3); got != "" {
+		t.Fatalf("debounced call = %q, want empty", got)
+	}
+	a.lastAnnouncementTime = 0 // debounce over
+	if got := a.AnnounceLineNumber(3); got != "line 3" {
+		t.Errorf("after debounce = %q, want %q", got, "line 3")
+	}
+	a.lastAnnouncementTime = 0
+	if got := a.AnnounceLineNumber(3); got != "" {
+		t.Errorf("same line again = %q, want empty", got)
 	}
 }
 

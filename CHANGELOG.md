@@ -35,6 +35,10 @@ and this project adheres to
 
 ### Fixed
 
+- **Screen readers hear a line change that came during the debounce.**
+  `Announcer.AnnounceLineNumber` marked a line as announced even when the
+  debounce dropped the message, so that line was never read. It now marks the
+  line only when it posts the message.
 - **Caret, selection and click-to-caret work on vertical layouts.** On
   `OrientationVertical`, `GetCursorPos` returned a caret as tall as the whole
   column, `GetSelectionRects` covered the whole column, and `GetClosestOffset`
