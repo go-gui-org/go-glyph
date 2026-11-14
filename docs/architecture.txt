@@ -15,8 +15,8 @@
 ┌───────────┐ ┌───────────┐ ┌─────────────┐ ┌─────────────┐
 │  Context  │ │ Renderer  │ │ Layout Cache│ │ UndoManager │
 │           │ │           │ │    (LRU)    │ │             │
-│ Pango/FT2 │ │  Glyph    │ │             │ │  undo/redo  │
-│ shaping   │ │  atlas +  │ │  map[hash]  │ │  coalescing │
+│ go-text   │ │  Glyph    │ │             │ │  undo/redo  │
+│ HarfBuzz  │ │  atlas +  │ │  map[hash]  │ │  coalescing │
 │ font load │ │  cache    │ │  *cached    │ │             │
 └─────┬─────┘ └─────┬─────┘ └─────────────┘ └─────────────┘
       │             │
@@ -27,38 +27,48 @@
 │                     DrawBackend  (interface)                      │
 │   NewTexture · UpdateTexture · DeleteTexture · DrawTexturedQuad   │
 │   DrawFilledRect · DrawTexturedQuadTransformed · DPIScale         │
-└───┬───────┬───────────┬───────────┬───────────┬───────────┬───────┘
-    │       │           │           │           │           │
-    ▼       ▼           ▼           ▼           ▼           ▼
-┌────────┐┌────────┐┌──────────┐┌──────────┐┌────────┐
-│Ebiten- ││  GPU   ││   iOS    ││ Android  ││  Web   │
-│engine  ││        ││          ││          ││        │
-│        ││ Metal  ││  Metal   ││  GLES    ││ Canvas │
-│        ││ OpenGL ││  batch   ││  batch   ││  API   │
-└────────┘└────────┘└──────────┘└──────────┘└────────┘
+└───┬───────────┬───────────┬───────────┬───────────┬───────────────┘
+    │           │           │           │           │
+    ▼           ▼           ▼           ▼           ▼
+┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐
+│ Ebiten-  ││   GPU    ││   iOS    ││ Android  ││   Web    │
+│ engine   ││          ││          ││          ││          │
+│ (own     ││  Metal   ││  Metal   ││  GLES    ││  Canvas  │
+│ module)  ││  OpenGL  ││  batch   ││  batch   ││  API     │
+└──────────┘└──────────┘└──────────┘└──────────┘└──────────┘
 
 ═════════════════════════════════════════════════════════════════════════
 
  CONFIGURATION TYPES                   PLATFORM SELECTION
 ┌───────────────────────┐             ┌─────────────────────────────┐
-│ TextConfig            │             │ Build Constraints:          │
+│ TextConfig            │             │ Build constraints:          │
 │ ├─ TextStyle          │             │                             │
-│ │  ├─ FontName        │             │  default  → Pango/FT2/cgo   │
-│ │  ├─ Size/Color      │             │  ios      → iOS Metal       │
-│ │  ├─ Typeface        │             │  android  → Android GLES    │
-│ │  ├─ Underline       │             │  js       → WASM/Canvas     │
-│ │  ├─ StrokeWidth     │             │                             │
-│ │  └─ FontFeatures    │             │ Files swapped:              │
-│ ├─ BlockStyle         │             │  context.go / *_ios.go      │
-│ │  ├─ Align           │             │  renderer.go / *_wasm.go    │
-│ │  ├─ Wrap            │             │  pango.go / *_android.go    │
-│ │  ├─ Width/Indent    │             └─────────────────────────────┘
-│ │  └─ LineSpacing     │
-│ ├─ UseMarkup          │              SUPPORT PACKAGES
-│ ├─ Gradient           │             ┌─────────────────────────────┐
-│ └─ Orientation        │             │ ime/     → IME composition  │
-└───────────────────────┘             │ tools/   → utilities        │
-                                      │ examples/→ demos            │
+│ │  ├─ FontName        │             │  linux, darwin, windows     │
+│ │  ├─ Size/Color      │             │  (android, ios included)    │
+│ │  ├─ Typeface        │             │    → go-text/typesetting,   │
+│ │  ├─ Underline       │             │      pure Go, no cgo        │
+│ │  ├─ StrokeWidth     │             │  js && wasm → Canvas2D      │
+│ │  └─ FontFeatures    │             │                             │
+│ ├─ BlockStyle         │             │ Files swapped:              │
+│ │  ├─ Align           │             │  context_puregoft.go /      │
+│ │  ├─ Wrap            │             │    context_wasm.go          │
+│ │  ├─ Width/Indent    │             │  renderer_common.go /       │
+│ │  └─ LineSpacing     │             │    renderer_wasm.go         │
+│ ├─ UseMarkup          │             │  layout_ft.go /             │
+│ ├─ Gradient           │             │    layout_wasm.go           │
+│ └─ Orientation        │             │  discover_<os>.go           │
+└───────────────────────┘             └─────────────────────────────┘
+
+                                       SUPPORT PACKAGES
+                                      ┌─────────────────────────────┐
+                                      │ accessibility/ → screen     │
+                                      │                  readers    │
+                                      │ ime/      → IME composition │
+                                      │ internal/genemoji/ → emoji  │
+                                      │                  table gen  │
+                                      │ tools/lint, tools/docs      │
+                                      │           → pinned tools    │
+                                      │ examples/ → demos           │
                                       └─────────────────────────────┘
 
  DATA FLOW
@@ -67,6 +77,6 @@
      │                                                        ▲
      ▼                                                        │
  Context ──shape──▶ Layout ──render──▶ Renderer ──draw──▶ Backend
- (Pango)           (glyphs,           (atlas,             (GPU/CPU
-                    lines,             cache)              textures)
+ (go-text or       (glyphs,           (atlas,             (GPU/CPU
+  Canvas2D)         lines,             cache)              textures)
                     rects)

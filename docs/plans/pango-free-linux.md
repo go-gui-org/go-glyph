@@ -1,5 +1,10 @@
 # Plan: Pango-free Linux text backend (FreeType+HarfBuzz)
 
+> **Historical (shipped, then superseded).** This plan moved Linux from Pango to
+> cgo FreeType+HarfBuzz. Later the native path moved again, to pure-Go
+> `go-text/typesetting` with no cgo. File names and steps here do not match the
+> code. For the current design, read `CLAUDE.md` and `docs/architecture.txt`.
+
 Tracks go-gui-org/go-glyph#10.
 
 ## Goal
