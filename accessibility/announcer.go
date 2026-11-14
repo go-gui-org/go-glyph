@@ -105,15 +105,16 @@ func (a *Announcer) AnnounceLineBoundary(b LineBoundary) string {
 	return msg
 }
 
-// AnnounceLineNumber announces "line N" on line change.
+// AnnounceLineNumber announces "line N" on line change. The line is
+// recorded only when the message is posted, so a change that arrives
+// during the debounce is announced on a later call.
 func (a *Announcer) AnnounceLineNumber(line int) string {
-	if line == a.lastLine {
+	// The line check must stay first: shouldAnnounce starts a new debounce
+	// window, and an unchanged line must not do that.
+	if line == a.lastLine || !a.shouldAnnounce() {
 		return ""
 	}
 	a.lastLine = line
-	if !a.shouldAnnounce() {
-		return ""
-	}
 	msg := fmt.Sprintf("line %d", line)
 	a.post(msg)
 	return msg
