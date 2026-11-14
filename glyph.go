@@ -1,6 +1,7 @@
 package glyph
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -17,6 +18,10 @@ type cachedLayout struct {
 	// with it on first use.
 	hitTest bool
 }
+
+// ErrTextSystemFreed is returned by TextSystem methods called after Free.
+// Draw methods and Commit do nothing instead, since they return no error.
+var ErrTextSystemFreed = errors.New("glyph: TextSystem used after Free")
 
 // TextSystem is the main entry point for text rendering. It owns
 // the Context, Renderer, and a layout cache.
@@ -134,11 +139,17 @@ func (ts *TextSystem) TextHeight(text string, cfg TextConfig) (float32, error) {
 
 // FontHeight returns the font height (ascent + descent) in pixels.
 func (ts *TextSystem) FontHeight(cfg TextConfig) (float32, error) {
+	if ts.ctx == nil {
+		return 0, ErrTextSystemFreed
+	}
 	return ts.ctx.FontHeight(cfg)
 }
 
 // FontMetrics returns detailed font metrics.
 func (ts *TextSystem) FontMetrics(cfg TextConfig) (TextMetrics, error) {
+	if ts.ctx == nil {
+		return TextMetrics{}, ErrTextSystemFreed
+	}
 	return ts.ctx.FontMetrics(cfg)
 }
 
@@ -166,6 +177,9 @@ func (ts *TextSystem) Purge() {
 // AddFontFile registers a font file (TTF/OTF).
 // Clears the layout cache to prevent stale FT_Face pointers.
 func (ts *TextSystem) AddFontFile(path string) error {
+	if ts.ctx == nil {
+		return ErrTextSystemFreed
+	}
 	if err := ValidateFontPath(path, "AddFontFile"); err != nil {
 		return err
 	}
@@ -185,6 +199,10 @@ func (ts *TextSystem) AddFontFile(path string) error {
 // no-op under wasm (use the browser FontFace API instead).
 // Clears the layout cache to prevent stale FT_Face pointers.
 func (ts *TextSystem) AddFontBytes(data []byte) error {
+	// Check before writeTempFontFile so a freed system leaves no temp file.
+	if ts.ctx == nil {
+		return ErrTextSystemFreed
+	}
 	if len(data) == 0 {
 		return fmt.Errorf("glyph: empty font data in AddFontBytes")
 	}
@@ -207,6 +225,9 @@ func (ts *TextSystem) AddFontBytes(data []byte) error {
 // ResolveFontName returns the actual font family name that Pango
 // resolves for the given description string.
 func (ts *TextSystem) ResolveFontName(name string) (string, error) {
+	if ts.ctx == nil {
+		return "", ErrTextSystemFreed
+	}
 	return ts.ctx.ResolveFontName(name)
 }
 
@@ -218,11 +239,17 @@ func (ts *TextSystem) ResolveFontName(name string) (string, error) {
 // font catalog (wasm/Canvas2D).
 // Not safe for concurrent use — call from the main/UI thread.
 func (ts *TextSystem) ListFontFamilies() []string {
+	if ts.ctx == nil {
+		return nil
+	}
 	return ts.ctx.listFontFamilies()
 }
 
 // LayoutText computes a new Layout (bypasses cache).
 func (ts *TextSystem) LayoutText(text string, cfg TextConfig) (Layout, error) {
+	if ts.ctx == nil {
+		return Layout{}, ErrTextSystemFreed
+	}
 	if err := ValidateTextInput(text, MaxTextLength, "LayoutText"); err != nil {
 		return Layout{}, err
 	}
@@ -240,6 +267,9 @@ func (ts *TextSystem) LayoutTextCached(text string, cfg TextConfig) (Layout, err
 
 // LayoutRichText computes a Layout for multi-styled text.
 func (ts *TextSystem) LayoutRichText(rt RichText, cfg TextConfig) (Layout, error) {
+	if ts.ctx == nil {
+		return Layout{}, ErrTextSystemFreed
+	}
 	return ts.ctx.LayoutRichText(rt, cfg)
 }
 
@@ -313,6 +343,10 @@ func (ts *TextSystem) Context() *Context { return ts.ctx }
 // the data is rebuilt in place when a hit-testing caller asks for it.
 func (ts *TextSystem) getOrCreateLayout(text string, cfg TextConfig,
 	hitTest bool) (*cachedLayout, error) {
+	// Free sets ctx and cache to nil; both are used below, so stop here.
+	if ts.ctx == nil {
+		return nil, ErrTextSystemFreed
+	}
 	if err := ValidateTextInput(text, MaxTextLength, "getOrCreateLayout"); err != nil {
 		return nil, err
 	}

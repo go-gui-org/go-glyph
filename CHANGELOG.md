@@ -8,6 +8,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **`ErrTextSystemFreed`.** Returned by `TextSystem` methods called after
+  `Free`.
+
 ### Changed
 
 - **Doc tools moved to a separate module.** gomarkdoc and pkgsite now live in a
@@ -23,6 +28,9 @@ and this project adheres to
 
 ### Fixed
 
+- **`TextSystem` no longer panics after `Free`.** Measuring, layout and font
+  methods return `ErrTextSystemFreed`, and `ListFontFamilies` returns nil.
+  Before, they dereferenced the freed context.
 - **Shaping from several Contexts at once is race-free.** Two Contexts (for
   example, two go-gui windows) that lay out text with the same font on
   different goroutines no longer race on the font's internal caches. Shaped
