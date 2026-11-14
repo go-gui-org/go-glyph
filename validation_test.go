@@ -59,6 +59,7 @@ func TestValidatePathValid(t *testing.T) {
 }
 
 func TestValidatePathTraversal(t *testing.T) {
+	skipOnWASM(t, "no file system; ValidateFontPath is a no-op")
 	err := ValidateFontPath("/fonts/../etc/passwd", "test")
 	if err == nil || !strings.Contains(err.Error(), "path traversal") {
 		t.Fatalf("expected traversal error, got: %v", err)
@@ -66,6 +67,7 @@ func TestValidatePathTraversal(t *testing.T) {
 }
 
 func TestValidatePathNonexistent(t *testing.T) {
+	skipOnWASM(t, "no file system; ValidateFontPath is a no-op")
 	err := ValidateFontPath("/nonexistent/path/to/font.ttf", "test")
 	if err == nil || !strings.Contains(err.Error(), "not accessible") {
 		t.Fatalf("expected not-accessible error, got: %v", err)
@@ -73,6 +75,7 @@ func TestValidatePathNonexistent(t *testing.T) {
 }
 
 func TestValidatePathEmpty(t *testing.T) {
+	skipOnWASM(t, "no file system; ValidateFontPath is a no-op")
 	err := ValidateFontPath("", "test")
 	if err == nil || !strings.Contains(err.Error(), "empty font path") {
 		t.Fatalf("expected empty error, got: %v", err)

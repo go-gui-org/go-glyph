@@ -1,4 +1,4 @@
-.PHONY: docs docs-serve doc-tools api-doc check test-race coverage vet lint lint-cross lint-bin nocgo \
+.PHONY: docs docs-serve doc-tools api-doc check test-race test-wasm coverage vet lint lint-cross lint-bin nocgo \
 	cross-build build-modules prepush
 
 # Repo-local bin for the pinned linter. The pinned VERSION itself lives in
@@ -49,6 +49,16 @@ check: $(LINT_BIN)
 ## test-race: run tests with the Go race detector enabled
 test-race:
 	go test -race ./...
+
+## test-wasm: run the root, accessibility and ime tests as js/wasm under
+## node. go_js_wasm_exec (from GOROOT/lib/wasm) runs each test binary in
+## node; scripts/wasm-canvas-shim.cjs stands in for the browser's Canvas2D,
+## so the wasm layout path runs without a page. Needs node on PATH.
+test-wasm:
+	@command -v node >/dev/null || { echo "test-wasm: node is not on PATH"; exit 1; }
+	PATH="$$(go env GOROOT)/lib/wasm:$$PATH" \
+	  NODE_OPTIONS="--require $(CURDIR)/scripts/wasm-canvas-shim.cjs" \
+	  GOOS=js GOARCH=wasm CGO_ENABLED=0 go test -count=1 . ./accessibility ./ime
 
 ## coverage: run tests with coverage profile and open HTML report
 coverage:
@@ -127,4 +137,6 @@ build-modules:
 ##     iphonesimulator sysroot or an Android NDK clang
 ##   - the coverage artifact upload; CI enforces no threshold on it, so
 ##     there is nothing to gate locally
+##   - the js/wasm tests under node (`make test-wasm`), so prepush does not
+##     need node; CI's test-wasm job runs them
 prepush: test-race vet lint lint-cross nocgo cross-build build-modules

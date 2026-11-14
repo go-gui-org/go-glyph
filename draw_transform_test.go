@@ -22,6 +22,7 @@ func bgTestLayout() Layout {
 }
 
 func TestTransformedBackgroundRotates(t *testing.T) {
+	skipOnWASM(t, "draws on the page canvas, not through DrawBackend")
 	backend := newRecordingBackend()
 	r, err := NewRenderer(backend, 1.0)
 	if err != nil {
@@ -61,6 +62,7 @@ func TestTransformedBackgroundRotates(t *testing.T) {
 }
 
 func TestIdentityBackgroundUnchanged(t *testing.T) {
+	skipOnWASM(t, "draws on the page canvas, not through DrawBackend")
 	backend := newRecordingBackend()
 	r, err := NewRenderer(backend, 1.0)
 	if err != nil {
@@ -85,6 +87,7 @@ func TestIdentityBackgroundUnchanged(t *testing.T) {
 }
 
 func TestTransformedDecorationRotates(t *testing.T) {
+	skipOnWASM(t, "draws on the page canvas, not through DrawBackend")
 	backend := newRecordingBackend()
 	r, err := NewRenderer(backend, 1.0)
 	if err != nil {
@@ -173,6 +176,7 @@ func (b *fallbackBackend) DrawFilledRect(dst Rect, _ Color) {
 }
 
 func TestTransformedFillFallbackWithoutExtension(t *testing.T) {
+	skipOnWASM(t, "draws on the page canvas, not through DrawBackend")
 	backend := &fallbackBackend{mockBackend: *newMockBackend()}
 	r, err := NewRenderer(backend, 1.0)
 	if err != nil {

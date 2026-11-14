@@ -193,6 +193,9 @@ jobs:
           CGO_ENABLED: "0"
         run: go vet ./...
 
+      - name: Test WASM packages under node
+        run: make test-wasm
+
   test-ios:
     runs-on: macos-latest
 
