@@ -32,6 +32,10 @@ and this project adheres to
 
 ### Fixed
 
+- **Drawing emoji from several Contexts at once is race-free.** Glyph rendering
+  now holds the shared font's lock when it reads glyph data. Before, a color
+  emoji drawn in one window could change the bitmap size that another window
+  read at the same time.
 - **`Block.Indent` geometry.** Indented lines now wrap inside `Block.Width`,
   and `Line.Rect.X`, the caret and `Layout.Width` include the indent. A negative
   indent is now a real hanging indent: the first line of each paragraph starts
