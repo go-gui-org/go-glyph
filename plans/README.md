@@ -22,11 +22,11 @@ each need explicit approval from the maintainer. No plan gives that approval.
 | [008](008-font-discovery-regular-files.md) | Font discovery opens only regular files (FIFO hang)        | P1       | S      | —          | DONE (merged #172) |
 | [015](015-shared-face-shaping-race.md)     | Concurrent shaping across Contexts is race-free            | P1       | S      | —          | DONE (merged #173) |
 | [009](009-ci-race-detector.md)             | CI runs `-race` (test now comes from 015)                  | P2       | S      | 015        | DONE (merged #174) |
-| [010](010-lint-every-target.md)            | Lint wasm, windows, darwin and android targets             | P2       | S      | —          | TODO               |
-| [011](011-textsystem-use-after-free.md)    | TextSystem returns `ErrTextSystemFreed` after `Free`       | P3       | S      | —          | TODO               |
-| [012](012-block-indent-geometry.md)        | `Block.Indent` geometry; negative is a hanging indent      | P2       | M      | —          | TODO               |
+| [010](010-lint-every-target.md)            | Lint wasm, windows, darwin and android targets             | P2       | S      | —          | DONE (merged #176) |
+| [011](011-textsystem-use-after-free.md)    | TextSystem returns `ErrTextSystemFreed` after `Free`       | P3       | S      | —          | DONE (merged #177) |
+| [012](012-block-indent-geometry.md)        | `Block.Indent` geometry; negative is a hanging indent      | P2       | M      | —          | DONE (merged #178) |
 | [013](013-layout-cache-prune-throttle.md)  | Throttle layout-cache pruning; reuse eviction scratch      | P3       | S      | —          | TODO               |
-| [014](014-agents-md-accuracy.md)           | AGENTS.md matches the repo                                 | P3       | S      | (009, 010) | TODO               |
+| [014](014-agents-md-accuracy.md)           | AGENTS.md matches the repo                                 | P3       | S      | (009, 010) | DONE (review OK)   |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
