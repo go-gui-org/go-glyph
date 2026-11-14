@@ -10,28 +10,28 @@ each need explicit approval from the maintainer. No plan gives that approval.
 
 ## Execution order & status
 
-| Plan                                       | Title                                                      | Priority | Effort | Depends on | Status                    |
-| ------------------------------------------ | ---------------------------------------------------------- | -------- | ------ | ---------- | ------------------------- |
-| [001](001-delete-without-hit-test-data.md) | Deletes never wipe text on layouts without hit-test data   | P1       | S      | —          | DONE (merged #163)        |
-| [002](002-caret-at-soft-wrap-boundary.md)  | Caret at a soft-wrap boundary drawn on the next line       | P1       | S      | —          | DONE (merged #164)        |
-| [003](003-inline-object-width-native.md)   | Inline objects keep their width on native                  | P1       | S      | —          | DONE (merged #165)        |
-| [004](004-undo-history-cap.md)             | Undo history capped on every push; no-op mutations ignored | P1       | S      | —          | DONE (merged #166)        |
-| [005](005-font-panic-guards.md)            | Malformed fonts cannot crash or deadlock                   | P1       | S      | —          | DONE (merged #167)        |
-| [006](006-font-size-sanitizer.md)          | Enforce MinFontSize/MaxFontSize in one size resolver       | P2       | S      | (005)      | DONE (merged #168)        |
-| [007](007-doc-tools-module.md)             | Doc tools moved to `tools/docs` module                     | P2       | S      | —          | DONE (merged #169)        |
-| [008](008-font-discovery-regular-files.md) | Font discovery opens only regular files (FIFO hang)        | P1       | S      | —          | DONE (merged #172)        |
-| [015](015-shared-face-shaping-race.md)     | Concurrent shaping across Contexts is race-free            | P1       | S      | —          | DONE (merged #173)        |
-| [009](009-ci-race-detector.md)             | CI runs `-race` (test now comes from 015)                  | P2       | S      | 015        | DONE (merged #174)        |
-| [010](010-lint-every-target.md)            | Lint wasm, windows, darwin and android targets             | P2       | S      | —          | DONE (merged #176)        |
-| [011](011-textsystem-use-after-free.md)    | TextSystem returns `ErrTextSystemFreed` after `Free`       | P3       | S      | —          | DONE (merged #177)        |
-| [012](012-block-indent-geometry.md)        | `Block.Indent` geometry; negative is a hanging indent      | P2       | M      | —          | DONE (merged #178)        |
-| [013](013-layout-cache-prune-throttle.md)  | Throttle layout-cache pruning; reuse eviction scratch      | P3       | S      | —          | DONE (merged #180)        |
-| [014](014-agents-md-accuracy.md)           | AGENTS.md matches the repo                                 | P3       | S      | (009, 010) | DONE (merged #179)        |
-| [016](016-render-path-face-lock.md)        | Emoji rendering from several Contexts is race-free         | P1       | S      | —          | DONE (merged #181)        |
-| [019](019-wasm-tests-under-node.md)        | js/wasm tests run under node in CI                         | P2       | S      | —          | DONE (merged #183)        |
-| [017](017-vertical-caret-selection.md)     | Caret, selection and closest offset on vertical layouts    | P2       | M      | (019)      | DONE (branch, not merged) |
-| [018](018-announcer-line-debounce.md)      | Debounced line change is announced later, not lost         | P3       | S      | —          | DONE (branch, not merged) |
-| [020](020-architecture-doc-refresh.md)     | `architecture.txt` shows go-text; old plans historical     | P3       | S      | —          | DONE (merged)             |
+| Plan                                       | Title                                                      | Priority | Effort | Depends on | Status             |
+| ------------------------------------------ | ---------------------------------------------------------- | -------- | ------ | ---------- | ------------------ |
+| [001](001-delete-without-hit-test-data.md) | Deletes never wipe text on layouts without hit-test data   | P1       | S      | —          | DONE (merged #163) |
+| [002](002-caret-at-soft-wrap-boundary.md)  | Caret at a soft-wrap boundary drawn on the next line       | P1       | S      | —          | DONE (merged #164) |
+| [003](003-inline-object-width-native.md)   | Inline objects keep their width on native                  | P1       | S      | —          | DONE (merged #165) |
+| [004](004-undo-history-cap.md)             | Undo history capped on every push; no-op mutations ignored | P1       | S      | —          | DONE (merged #166) |
+| [005](005-font-panic-guards.md)            | Malformed fonts cannot crash or deadlock                   | P1       | S      | —          | DONE (merged #167) |
+| [006](006-font-size-sanitizer.md)          | Enforce MinFontSize/MaxFontSize in one size resolver       | P2       | S      | (005)      | DONE (merged #168) |
+| [007](007-doc-tools-module.md)             | Doc tools moved to `tools/docs` module                     | P2       | S      | —          | DONE (merged #169) |
+| [008](008-font-discovery-regular-files.md) | Font discovery opens only regular files (FIFO hang)        | P1       | S      | —          | DONE (merged #172) |
+| [015](015-shared-face-shaping-race.md)     | Concurrent shaping across Contexts is race-free            | P1       | S      | —          | DONE (merged #173) |
+| [009](009-ci-race-detector.md)             | CI runs `-race` (test now comes from 015)                  | P2       | S      | 015        | DONE (merged #174) |
+| [010](010-lint-every-target.md)            | Lint wasm, windows, darwin and android targets             | P2       | S      | —          | DONE (merged #176) |
+| [011](011-textsystem-use-after-free.md)    | TextSystem returns `ErrTextSystemFreed` after `Free`       | P3       | S      | —          | DONE (merged #177) |
+| [012](012-block-indent-geometry.md)        | `Block.Indent` geometry; negative is a hanging indent      | P2       | M      | —          | DONE (merged #178) |
+| [013](013-layout-cache-prune-throttle.md)  | Throttle layout-cache pruning; reuse eviction scratch      | P3       | S      | —          | DONE (merged #180) |
+| [014](014-agents-md-accuracy.md)           | AGENTS.md matches the repo                                 | P3       | S      | (009, 010) | DONE (merged #179) |
+| [016](016-render-path-face-lock.md)        | Emoji rendering from several Contexts is race-free         | P1       | S      | —          | DONE (merged #181) |
+| [019](019-wasm-tests-under-node.md)        | js/wasm tests run under node in CI                         | P2       | S      | —          | DONE (merged #183) |
+| [017](017-vertical-caret-selection.md)     | Caret, selection and closest offset on vertical layouts    | P2       | M      | (019)      | DONE (merged #184) |
+| [018](018-announcer-line-debounce.md)      | Debounced line change is announced later, not lost         | P3       | S      | —          | DONE (merged #185) |
+| [020](020-architecture-doc-refresh.md)     | `architecture.txt` shows go-text; old plans historical     | P3       | S      | —          | DONE (merged #186) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
@@ -56,6 +56,16 @@ REJECTED (with one-line rationale)
   still stands. The render-path `GlyphData` calls at
   `bitmap_puregoft.go:338,366,827` still run without `cf.mu`, and
   `AnnounceLineNumber` still updates `lastLine` before the debounce check. No
+  plans are open.
+
+- **2026-11-14, at `16e7766`:** plans 016–020 verified DONE (merged #181, #184,
+  #185, #183, #186). Every done-criteria grep holds on HEAD. These tests pass:
+  `TestConcurrentRenderSharesFace` under `-race`, 9 `Vertical` tests, 2
+  `TestAnnouncerLineNumber` tests, and `make test-wasm` (3 `ok` lines). The
+  js/wasm `go vet` passes. `make prepush` was not run again; CI gated each
+  merge. The deferred findings still stand: the fallback cache is still capped
+  by entry count (`fallbackResolveCap = 1 << 18`), and `Renderer.cache` and
+  `pageKeys` in `renderer_wasm.go` are still only allocated and cleared. No
   plans are open.
 
 ## Dependency notes
