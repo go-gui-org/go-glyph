@@ -31,7 +31,7 @@ each need explicit approval from the maintainer. No plan gives that approval.
 | [019](019-wasm-tests-under-node.md)        | js/wasm tests run under node in CI                         | P2       | S      | —          | DONE (merged #183)        |
 | [017](017-vertical-caret-selection.md)     | Caret, selection and closest offset on vertical layouts    | P2       | M      | (019)      | DONE (branch, not merged) |
 | [018](018-announcer-line-debounce.md)      | Debounced line change is announced later, not lost         | P3       | S      | —          | DONE (branch, not merged) |
-| [020](020-architecture-doc-refresh.md)     | `architecture.txt` shows go-text; old plans historical     | P3       | S      | —          | TODO                      |
+| [020](020-architecture-doc-refresh.md)     | `architecture.txt` shows go-text; old plans historical     | P3       | S      | —          | DONE (merged)             |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
