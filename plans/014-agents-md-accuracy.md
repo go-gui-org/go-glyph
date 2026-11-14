@@ -170,8 +170,11 @@ command and path audit in Step 2, and the Prettier check.
 
 ## Done criteria
 
-- [ ] `grep -nE 'replace directive|forked|purego|CGO_ENABLED=1\)|Pure Go FreeType' AGENTS.md`
-      prints nothing
+- [ ] `grep -nE 'replace directive|forked|purego([^f]|$)|CGO_ENABLED=1\)|Pure Go FreeType' AGENTS.md`
+      prints nothing (`purego([^f]|$)` skips the `*_puregoft.go` file names that
+      Step 2 keeps)
+- Note (reconcile 2026-11-14): #180 renamed `AGENTS.md` to `CLAUDE.md` with the
+  same content. Run these checks against `CLAUDE.md` now.
 - [ ] `grep -c 'go.mod Gotcha' AGENTS.md` prints `0`
 - [ ] `grep -n 'make prepush' AGENTS.md` prints at least 1 line
 - [ ] `prettier --prose-wrap always --print-width 80 --check AGENTS.md` passes

@@ -25,8 +25,13 @@ each need explicit approval from the maintainer. No plan gives that approval.
 | [010](010-lint-every-target.md)            | Lint wasm, windows, darwin and android targets             | P2       | S      | —          | DONE (merged #176) |
 | [011](011-textsystem-use-after-free.md)    | TextSystem returns `ErrTextSystemFreed` after `Free`       | P3       | S      | —          | DONE (merged #177) |
 | [012](012-block-indent-geometry.md)        | `Block.Indent` geometry; negative is a hanging indent      | P2       | M      | —          | DONE (merged #178) |
-| [013](013-layout-cache-prune-throttle.md)  | Throttle layout-cache pruning; reuse eviction scratch      | P3       | S      | —          | DONE (review OK)   |
-| [014](014-agents-md-accuracy.md)           | AGENTS.md matches the repo                                 | P3       | S      | (009, 010) | DONE (review OK)   |
+| [013](013-layout-cache-prune-throttle.md)  | Throttle layout-cache pruning; reuse eviction scratch      | P3       | S      | —          | DONE (merged #180) |
+| [014](014-agents-md-accuracy.md)           | AGENTS.md matches the repo                                 | P3       | S      | (009, 010) | DONE (merged #179) |
+| [016](016-render-path-face-lock.md)        | Emoji rendering from several Contexts is race-free         | P1       | S      | —          | DONE (merged #181) |
+| [019](019-wasm-tests-under-node.md)        | js/wasm tests run under node in CI                         | P2       | S      | —          | TODO               |
+| [017](017-vertical-caret-selection.md)     | Caret, selection and closest offset on vertical layouts    | P2       | M      | (019)      | TODO               |
+| [018](018-announcer-line-debounce.md)      | Debounced line change is announced later, not lost         | P3       | S      | —          | TODO               |
+| [020](020-architecture-doc-refresh.md)     | `architecture.txt` shows go-text; old plans historical     | P3       | S      | —          | TODO               |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
@@ -40,8 +45,40 @@ REJECTED (with one-line rationale)
   counted `^tool ` lines, which a `tool ( ... )` block breaks. All deferred
   findings below still stand. Later the same day, 7 of them were planned as
   008–014.
+- **2026-11-14, at `4154f31`:** plans 008–015 verified DONE. All done-criteria
+  greps hold on HEAD. The focused tests pass: `SkipsFIFO`,
+  `TestTextSystemAfterFree`, `TestWrapLines|Indent` and `TestLayoutCache`.
+  `make prepush` and the `-race` runs were not run again. CI gated each merge.
+  One criterion was wrong and is now fixed: 014 grepped for `purego`, which also
+  matches the `*_puregoft.go` file names that the plan itself keeps. Also, #180
+  renamed `AGENTS.md` to `CLAUDE.md` with the same content, so 014's checks now
+  run against `CLAUDE.md`. Every deferred finding below was spot-checked and
+  still stands. The render-path `GlyphData` calls at
+  `bitmap_puregoft.go:338,366,827` still run without `cf.mu`, and
+  `AnnounceLineNumber` still updates `lastLine` before the debounce check. No
+  plans are open.
 
 ## Dependency notes
+
+Plans 016–020 were written on 2026-11-14 against `4154f31`, from the deferred
+findings. Each finding was confirmed first on a scratch copy of the repo (not
+the working tree). 016: a `-race` probe reported 3 races, and the planned lock
+fix gave 0. 017: measured caret, selection and closest-offset values on a
+vertical layout. 019: 316 tests passed and 10 failed under node with the shim.
+
+- No plan strictly needs another. Soft order: land 019 before 017. Then
+  `make test-wasm` also runs 017's shared query code on wasm. 017's new test
+  file is native-tagged, so it does not run there either way.
+- 016 is the only P1. It is a real data race in multi-window apps (go-gui makes
+  one Context per window).
+- 017 adds a public field, `CursorPosition.Width`. The maintainer approved it on
+  2026-11-14. It is backward-compatible for named-field literals (go-gui only
+  uses those). go-gui's caret drawing ignores `Width`, so vertical text in
+  go-gui still needs a go-gui change. go-gui does not use vertical text today.
+- 019 runs `make test-wasm` in CI only. The maintainer decided on 2026-11-14
+  that `prepush` must not need node.
+- 016, 017 and 018 add `### Fixed` bullets, and 017 adds `### Added`. Expect
+  CHANGELOG conflicts.
 
 Plans 008–014 were written on 2026-11-13 against `6d6a018`, after a re-vet of
 the deferred findings. No new audit sweep was run.
@@ -88,27 +125,19 @@ FIFO, `-race` in CI and the shared-face question, lint on other targets,
 `TextSystem` after `Free`, `Block.Indent`, layout-cache pruning, and stale
 `AGENTS.md`.
 
-- **Vertical layouts:** the caret, selection and hit-testing all collapse to one
-  bar the size of the whole column (`layout_query.go:236,638`).
-- **The accessibility announcer drops line changes** that arrive during its
-  debounce (`accessibility/announcer.go:113`).
+Planned on 2026-11-14 as 016–020 and removed from this list: the render-path
+race, vertical layouts, the announcer debounce, wasm tests, and stale design
+docs.
+
 - **The fallback cache is bounded by entry count, not bytes,** and long
   combining clusters are its keys (`context_puregoft.go:85-113`).
 - **go-text allocates table buffers sized from untrusted header fields** (a few
   hundred bytes can ask for 4 GiB). The fix belongs in the typesetting fork, or
   in a pre-parse size check.
-- **Stale design docs.** `docs/architecture.txt` and `docs/plans/*` still
-  describe the old Pango/cgo design. (The `AGENTS.md` part is plan 014.)
-- **The wasm layout path has no tests that run.** Plan 010 only lints it.
-- **The WASM glyph cache may never age entries.** `cacheEntry.age` is unused on
-  wasm (`cache.go:17`, found while sizing plan 010). Check whether that cache
-  evicts at all.
-- **Possible render-path race on the shared face** (found while writing 015, not
-  proven by a test). `bitmap_puregoft.go:338,366,827` call `cf.face.GlyphData`
-  without `cf.mu`. `GlyphData` tries bitmap strikes first, which read the ppem
-  that `bitmap_puregoft.go:646` sets under `cf.mu`. To confirm, run a
-  concurrent-render test (two Contexts drawing color emoji and outlines) under
-  `-race`. The likely fix is `cf.lockedCall` around those calls.
+- **Unused WASM glyph cache** (found 2026-11-14). `Renderer.cache` and
+  `pageKeys` in `renderer_wasm.go` are allocated but never written, because wasm
+  draws with `fillText`. This is dead state kept for struct parity. Cleanup is
+  optional.
 - **Direction options** for the maintainer to weigh:
   - a supported glyph-visibility/reveal API (go-gui misuses
     `PangoGlyphUnknownFlag` for this)
@@ -139,3 +168,6 @@ FIFO, `-race` in CI and the shared-face question, lint on other targets,
 - Fallback-cache byte bound: stays LOW. The cache is capped at 2^18 entries with
   cloned cluster keys (`context_puregoft.go:85`). Only adversarial huge
   combining clusters make it large.
+- "WASM glyph cache never ages entries" (re-vetted 2026-11-14): there is no
+  cache to age. WASM never writes `Renderer.cache` (`draw_wasm.go` draws with
+  Canvas2D `fillText`). See the deferred "unused WASM glyph cache" item.
