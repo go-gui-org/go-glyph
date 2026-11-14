@@ -154,6 +154,11 @@ jobs:
       - name: Run golangci-lint
         run: make lint
 
+      # Lints the GOOS targets the Ubuntu host never compiles (wasm,
+      # windows, darwin, android), with the same pinned linter.
+      - name: Run golangci-lint for other targets
+        run: make lint-cross
+
   test-wasm:
     runs-on: ubuntu-latest
 

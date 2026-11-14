@@ -70,7 +70,7 @@ const maxRenderSize = 1 << 20
 // the oversize path before downscaling to MaxGlyphSize. Beyond it the
 // glyph refuses (blank cell) instead of allocating tens of MB for one
 // glyph.
-const maxNaturalGlyphDim = 2048
+const maxNaturalGlyphDim = 2048 //nolint:unused // native-only; this file also builds for wasm
 
 // fitGlyphDims scales w0,h0 to fit within MaxGlyphSize, preserving
 // aspect. It returns the fitted dimensions and the applied scale.

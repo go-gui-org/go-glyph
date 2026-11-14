@@ -17,6 +17,8 @@ type layoutEquivCase struct {
 
 // runLayoutEquivCases runs shared table-driven layout invariant tests.
 // factory is ctx.LayoutText (platform-specific).
+//
+//nolint:unused // native runner only; the wasm suite does not call it
 func runLayoutEquivCases(t *testing.T, cases []layoutEquivCase,
 	factory func(string, TextConfig) (Layout, error)) {
 	t.Helper()
