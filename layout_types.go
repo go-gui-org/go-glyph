@@ -28,6 +28,11 @@ type Layout struct {
 	// bidi), which means every char is LTR.
 	charRTL []bool
 
+	// vertical is set by buildVerticalLayout. The layout is one column,
+	// top to bottom, so caret, selection and closest-offset queries use
+	// the Y axis.
+	vertical bool
+
 	Width        float32 // Logical width.
 	Height       float32 // Logical height.
 	VisualWidth  float32 // Ink width.
@@ -36,10 +41,15 @@ type Layout struct {
 }
 
 // CursorPosition represents the geometry for rendering a text cursor.
+//
+// On a horizontal layout, Width is 0: the caret is a vertical bar at X
+// from Y to Y+Height. On a vertical layout (OrientationVertical), the
+// caret is a horizontal bar at Y from X to X+Width, and Height is 0.
 type CursorPosition struct {
 	X      float32
 	Y      float32
 	Height float32
+	Width  float32
 }
 
 // LogAttr holds character classification for cursor/word boundaries.

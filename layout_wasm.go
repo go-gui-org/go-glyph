@@ -713,6 +713,7 @@ func (ctx *Context) buildVerticalLayout(clusters []graphemeCluster,
 	}}
 
 	result := Layout{
+		vertical:        true,
 		Text:            text,
 		Items:           items,
 		Glyphs:          allGlyphs,

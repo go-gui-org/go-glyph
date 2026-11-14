@@ -12,6 +12,9 @@ and this project adheres to
 
 - **`ErrTextSystemFreed`.** Returned by `TextSystem` methods called after
   `Free`.
+- **`CursorPosition.Width`.** It is 0 on horizontal layouts. On a vertical
+  layout the caret is a horizontal bar `Width` wide at `Y`, with `Height` 0.
+  Code that draws its own caret must check `Width`.
 
 ### Changed
 
@@ -32,6 +35,10 @@ and this project adheres to
 
 ### Fixed
 
+- **Caret, selection and click-to-caret work on vertical layouts.** On
+  `OrientationVertical`, `GetCursorPos` returned a caret as tall as the whole
+  column, `GetSelectionRects` covered the whole column, and `GetClosestOffset`
+  returned 0. They now follow the chars in the column.
 - **Drawing emoji from several Contexts at once is race-free.** Glyph rendering
   now holds the shared font's lock when it reads glyph data. Before, a color
   emoji drawn in one window could change the bitmap size that another window
