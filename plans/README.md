@@ -19,8 +19,9 @@ each need explicit approval from the maintainer. No plan gives that approval.
 | [005](005-font-panic-guards.md)            | Malformed fonts cannot crash or deadlock                   | P1       | S      | —          | DONE (merged #167) |
 | [006](006-font-size-sanitizer.md)          | Enforce MinFontSize/MaxFontSize in one size resolver       | P2       | S      | (005)      | DONE (merged #168) |
 | [007](007-doc-tools-module.md)             | Doc tools moved to `tools/docs` module                     | P2       | S      | —          | DONE (merged #169) |
-| [008](008-font-discovery-regular-files.md) | Font discovery opens only regular files (FIFO hang)        | P1       | S      | —          | TODO               |
-| [009](009-ci-race-detector.md)             | CI runs `-race`; concurrent shaping across Contexts tested | P2       | S      | —          | TODO               |
+| [008](008-font-discovery-regular-files.md) | Font discovery opens only regular files (FIFO hang)        | P1       | S      | —          | DONE (merged #172) |
+| [015](015-shared-face-shaping-race.md)     | Concurrent shaping across Contexts is race-free            | P1       | S      | —          | DONE (merged #173) |
+| [009](009-ci-race-detector.md)             | CI runs `-race` (test now comes from 015)                  | P2       | S      | 015        | DONE (merged #174) |
 | [010](010-lint-every-target.md)            | Lint wasm, windows, darwin and android targets             | P2       | S      | —          | TODO               |
 | [011](011-textsystem-use-after-free.md)    | TextSystem returns `ErrTextSystemFreed` after `Free`       | P3       | S      | —          | TODO               |
 | [012](012-block-indent-geometry.md)        | `Block.Indent` geometry; negative is a hanging indent      | P2       | M      | —          | TODO               |
@@ -45,9 +46,12 @@ REJECTED (with one-line rationale)
 Plans 008–014 were written on 2026-11-13 against `6d6a018`, after a re-vet of
 the deferred findings. No new audit sweep was run.
 
-- 009 (CI race job) should land before anyone changes the shared face cache or
-  `hbPool`. If 009's concurrency test finds a race, it stops without a fix, and
-  a new fix plan follows.
+- 015 then 009. The first run of 009 (2026-11-13, at `3d7b0fc`) stopped as its
+  plan said it should. Its concurrency test found 4 data races: `faceCovers` and
+  `safeShape` both write go-text's lazy caches on the one `*font.Face` that
+  every Context shares. 015 fixes them and owns the test. 009 now only adds the
+  CI job. Its first executor's `test-race` job YAML was never committed, so 009
+  writes it again.
 - 010 and 014 both document CI. 014 runs best last, so it can describe the
   `test-race` job and `make lint-cross` if they have landed. It is soft
   ordering: 014 checks for them.
@@ -99,6 +103,12 @@ FIFO, `-race` in CI and the shared-face question, lint on other targets,
 - **The WASM glyph cache may never age entries.** `cacheEntry.age` is unused on
   wasm (`cache.go:17`, found while sizing plan 010). Check whether that cache
   evicts at all.
+- **Possible render-path race on the shared face** (found while writing 015, not
+  proven by a test). `bitmap_puregoft.go:338,366,827` call `cf.face.GlyphData`
+  without `cf.mu`. `GlyphData` tries bitmap strikes first, which read the ppem
+  that `bitmap_puregoft.go:646` sets under `cf.mu`. To confirm, run a
+  concurrent-render test (two Contexts drawing color emoji and outlines) under
+  `-race`. The likely fix is `cf.lockedCall` around those calls.
 - **Direction options** for the maintainer to weigh:
   - a supported glyph-visibility/reveal API (go-gui misuses
     `PangoGlyphUnknownFlag` for this)

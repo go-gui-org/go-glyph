@@ -8,19 +8,25 @@
 > maintain the index.
 >
 > **Drift check (run first)**:
-> `git diff --stat 6d6a018..HEAD -- .github/workflows/ci.yml freetype_types_puregoft.go`
-> If any in-scope file changed since this plan was written, compare the "Current
-> state" excerpts against the live code before proceeding; on a mismatch, treat
-> it as a STOP condition.
+> `git diff --stat 682109e..HEAD -- .github/workflows/ci.yml Makefile` If any
+> in-scope file changed since this plan was written, compare the "Current state"
+> excerpts against the live code before proceeding; on a mismatch, treat it as a
+> STOP condition.
 
 ## Status
 
 - **Priority**: P2
 - **Effort**: S
 - **Risk**: LOW
-- **Depends on**: none
+- **Depends on**: 015 (shared-face shaping race fix). Must be DONE first.
 - **Category**: tests
-- **Planned at**: commit `6d6a018`, 2026-11-13
+- **Planned at**: commit `6d6a018`, 2026-11-13; refreshed at `682109e`
+- **Revised**: 2026-11-13. The first run of this plan found 4 data races in
+  shaping. Plan 015 fixes them and adds the test
+  `TestConcurrentContextsShareFaces` (in
+  `concurrent_contexts_puregoft_test.go`). This plan now only checks that the
+  test exists and passes, then adds the CI job. Do not create or edit the test
+  file.
 
 ## Why this matters
 
@@ -82,14 +88,9 @@ test-race:
 	go test -race ./...
 ```
 
-- `freetype_types_puregoft.go:108` — `var faceCache = newFaceLRU(...)`, shared
-  by every Context. `loadCachedFace(path)` (line 193) returns the same
-  `*cachedFace` to all callers. `cachedFace` (line 41) has
-  `mu sync.Mutex // guards ppem-dependent access to face (SetPpem+GlyphData)`
-  and an `hbPool` of HarfBuzz fonts. Shaping takes a pooled font and does not
-  hold `cf.mu`. The open question is whether shaping reads anything on the
-  shared `*font.Face` that another goroutine writes, for example `SetPpem` under
-  `cf.mu`.
+- `freetype_types_puregoft.go`: every Context shares one cached face per font
+  file. Plan 015 (merged as #173, commit `682109e`) fixed the shaping races on
+  it. This plan does not touch that file.
 
 - `TextSystem` is documented "Not safe for concurrent use" (`glyph.go:23-24`).
   That covers one `TextSystem`. Two separate `Context`s on two goroutines are
@@ -119,8 +120,9 @@ test-race:
 **In scope**:
 
 - `.github/workflows/ci.yml` — add one job, `test-race`
-- `concurrent_contexts_puregoft_test.go` (create; build tag
-  `linux || darwin || windows`)
+
+`concurrent_contexts_puregoft_test.go` already exists (plan 015). It is out of
+scope here: run it, do not edit it.
 
 **Out of scope**:
 
@@ -140,29 +142,18 @@ test-race:
 
 ## Steps
 
-### Step 1: Concurrent-shaping test
+### Step 1: Confirm the concurrent-shaping test from plan 015
 
-Create `concurrent_contexts_puregoft_test.go`
-(`//go:build linux || darwin || windows`, `package glyph`). Add
-`TestConcurrentContextsShareFaces`:
+Do not write a test. Plan 015 added `TestConcurrentContextsShareFaces` in
+`concurrent_contexts_puregoft_test.go`. It runs 4 Contexts on 4 goroutines over
+mixed scripts at two sizes.
 
-- Create 4 Contexts with `NewContext(1.0)`, each with `defer ctx.Free()`.
-- Start one goroutine per Context with `sync.WaitGroup`. Each goroutine runs 50
-  iterations of `ctx.LayoutText(s, cfg)` over a fixed list of strings that
-  covers Latin, a ligature (`"office"`), Arabic (`"مرحبا"`), CJK (`"漢字"`) and
-  an emoji (`"😀"`). Use `TextConfig{Style: TextStyle{FontName: "Sans 16"}}` and
-  alternate the size between 12 and 24 (`FontName: "Sans 12"` / `"Sans 24"`), so
-  the shared faces get different ppem values. Report errors with `t.Errorf`, not
-  `t.Fatal` (`t.Fatal` must not be called from a non-test goroutine).
-- After `wg.Wait()`, also check that one sequential `LayoutText` result equals
-  the same layout's `Width` from inside the goroutines (record one width per
-  goroutine). This catches corrupt shaping, not only races.
-- Doc comment: say this guards the shared `faceCache` / `hbPool` across Contexts
-  (one per window in go-gui), and that it is only meaningful under `-race`.
-
-**Verify**: `go test -race -run TestConcurrentContextsShareFaces -count=3 .` →
-`ok` and no `WARNING: DATA RACE` in the output. If a race is reported, go to the
-STOP conditions.
+**Verify**:
+`grep -n 'func TestConcurrentContextsShareFaces' concurrent_contexts_puregoft_test.go`
+prints 1 line. If it prints nothing, plan 015 has not landed: STOP.
+`go test -race -run TestConcurrentContextsShareFaces -count=3 .` → `ok`, and no
+`WARNING: DATA RACE` in the output. If a race is reported, go to the STOP
+conditions.
 
 ### Step 2: CI job
 
@@ -209,8 +200,8 @@ If neither works, say so in the report.
       and `grep -c 'DATA RACE'` on its output prints `0`
 - [ ] `grep -n 'go test -race' .github/workflows/ci.yml` prints 1 line
 - [ ] `make prepush` exits 0
-- [ ] Only `.github/workflows/ci.yml` and `concurrent_contexts_puregoft_test.go`
-      changed (`git status`, plus `plans/README.md`)
+- [ ] Only `.github/workflows/ci.yml` changed (`git status`, plus
+      `plans/README.md`)
 - [ ] `plans/README.md` status row updated
 
 ## STOP conditions
