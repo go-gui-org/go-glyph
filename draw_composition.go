@@ -63,13 +63,13 @@ func (r *Renderer) drawCompositionImpl(layout *Layout, x, y float32,
 		}
 	})
 
-	// Draw cursor at insertion point within preedit.
+	// Draw cursor at insertion point within preedit. A vertical layout
+	// gives a caret with Width > 0: a horizontal bar across the column.
 	if cp, ok := layout.GetCursorPos(cs.DocumentCursorPos()); ok {
-		r.emitFillRect(Rect{
-			X:      cp.X,
-			Y:      cp.Y,
-			Width:  2.0,
-			Height: cp.Height,
-		}, dimmed, x, y, combined, isIdentity)
+		caret := Rect{X: cp.X, Y: cp.Y, Width: 2.0, Height: cp.Height}
+		if cp.Width > 0 {
+			caret = Rect{X: cp.X, Y: cp.Y, Width: cp.Width, Height: 2.0}
+		}
+		r.emitFillRect(caret, dimmed, x, y, combined, isIdentity)
 	}
 }

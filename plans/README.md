@@ -28,8 +28,8 @@ each need explicit approval from the maintainer. No plan gives that approval.
 | [013](013-layout-cache-prune-throttle.md)  | Throttle layout-cache pruning; reuse eviction scratch      | P3       | S      | —          | DONE (merged #180)        |
 | [014](014-agents-md-accuracy.md)           | AGENTS.md matches the repo                                 | P3       | S      | (009, 010) | DONE (merged #179)        |
 | [016](016-render-path-face-lock.md)        | Emoji rendering from several Contexts is race-free         | P1       | S      | —          | DONE (merged #181)        |
-| [019](019-wasm-tests-under-node.md)        | js/wasm tests run under node in CI                         | P2       | S      | —          | DONE (branch, not merged) |
-| [017](017-vertical-caret-selection.md)     | Caret, selection and closest offset on vertical layouts    | P2       | M      | (019)      | TODO                      |
+| [019](019-wasm-tests-under-node.md)        | js/wasm tests run under node in CI                         | P2       | S      | —          | DONE (merged #183)        |
+| [017](017-vertical-caret-selection.md)     | Caret, selection and closest offset on vertical layouts    | P2       | M      | (019)      | DONE (branch, not merged) |
 | [018](018-announcer-line-debounce.md)      | Debounced line change is announced later, not lost         | P3       | S      | —          | TODO                      |
 | [020](020-architecture-doc-refresh.md)     | `architecture.txt` shows go-text; old plans historical     | P3       | S      | —          | TODO                      |
 

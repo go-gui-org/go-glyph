@@ -121,6 +121,9 @@ func (l *Layout) GetClosestOffset(x, y float32) int {
 	if len(l.Lines) == 0 {
 		return 0
 	}
+	if l.vertical {
+		return l.closestInColumn(y)
+	}
 
 	// Find closest line vertically.
 	closestLineIdx := 0
@@ -158,6 +161,9 @@ func (l *Layout) GetSelectionRects(start, end int) []Rect {
 func (l *Layout) appendSelectionRects(rects []Rect, start, end int) []Rect {
 	if start >= end || len(l.Lines) == 0 {
 		return rects
+	}
+	if l.vertical {
+		return l.appendVerticalSelectionRects(rects, start, end)
 	}
 	for _, line := range l.Lines {
 		lineEnd := line.StartIndex + line.Length
@@ -222,6 +228,10 @@ func (l *Layout) GetCursorPos(byteIndex int) (CursorPosition, bool) {
 		return CursorPosition{}, false
 	}
 
+	if l.vertical {
+		return l.verticalCursorPos(byteIndex), true
+	}
+
 	// Try exact char rect. Skip hard line breaks: their cursor belongs at the
 	// end of the current line (handled by the line-based fallback).
 	if hardLineBreakLenAt(l.Text, byteIndex) == 0 {
@@ -279,6 +289,100 @@ func (l *Layout) GetCursorPos(byteIndex int) (CursorPosition, bool) {
 		}, true
 	}
 	return CursorPosition{}, false
+}
+
+// verticalCursorPos returns the caret on a vertical layout: a horizontal
+// bar across the column at the top of the char at byteIndex. A byte with
+// no CharRect (a hard line break, which the vertical builder skips, or the
+// end of the text) gets the top of the next char, or the bottom of the
+// last char.
+func (l *Layout) verticalCursorPos(byteIndex int) CursorPosition {
+	col := Rect{Width: l.Width}
+	if len(l.Lines) > 0 {
+		col = l.Lines[0].Rect
+	}
+	at := func(y float32) CursorPosition {
+		return CursorPosition{X: col.X, Y: y, Width: col.Width}
+	}
+	if ri, ok := l.CharRectByIndex[byteIndex]; ok {
+		return at(l.CharRects[ri].Rect.Y)
+	}
+	for _, cr := range l.CharRects {
+		if cr.Index > byteIndex {
+			return at(cr.Rect.Y)
+		}
+	}
+	if n := len(l.CharRects); n > 0 {
+		last := l.CharRects[n-1].Rect
+		return at(last.Y + last.Height)
+	}
+	return at(col.Y)
+}
+
+// appendVerticalSelectionRects is appendSelectionRects for a vertical
+// layout: one rect across the column per run of selected chars, from the
+// first char's top to the last char's bottom. CharRects are in text order
+// on a vertical layout.
+func (l *Layout) appendVerticalSelectionRects(rects []Rect, start, end int) []Rect {
+	col := l.Lines[0].Rect
+	in := false
+	var minY, maxY float32
+	for _, cr := range l.CharRects {
+		if cr.Index < start || cr.Index >= end {
+			if in {
+				rects = append(rects, Rect{X: col.X, Y: minY, Width: col.Width,
+					Height: maxY - minY})
+				in = false
+			}
+			continue
+		}
+		bottom := cr.Rect.Y + cr.Rect.Height
+		if !in {
+			minY, maxY, in = cr.Rect.Y, bottom, true
+			continue
+		}
+		maxY = max(maxY, bottom)
+	}
+	if in {
+		rects = append(rects, Rect{X: col.X, Y: minY, Width: col.Width,
+			Height: maxY - minY})
+	}
+	return rects
+}
+
+// closestInColumn is GetClosestOffset for a vertical layout. It finds the
+// char nearest to y, then returns its index, or the next caret stop when y
+// is in the char's lower half.
+func (l *Layout) closestInColumn(y float32) int {
+	haveStops := len(l.cursorPositions) > 0
+	best, bestDist := -1, maxDistance
+	for ri, cr := range l.CharRects {
+		if haveStops && !l.isCursorStop(cr.Index) {
+			continue
+		}
+		var dist float32
+		switch top, bottom := cr.Rect.Y, cr.Rect.Y+cr.Rect.Height; {
+		case y < top:
+			dist = top - y
+		case y > bottom:
+			dist = y - bottom
+		}
+		if dist < bestDist {
+			best, bestDist = ri, dist
+		}
+	}
+	if best < 0 {
+		return 0
+	}
+	cr := l.CharRects[best]
+	if y <= cr.Rect.Y+cr.Rect.Height/2 {
+		return cr.Index
+	}
+	// The next caret stop after this char. cursorPositions is sorted.
+	if i := sort.SearchInts(l.cursorPositions, cr.Index+1); i < len(l.cursorPositions) {
+		return l.cursorPositions[i]
+	}
+	return len(l.Text)
 }
 
 // lineEndPos returns the caret geometry for a byte index that sits
