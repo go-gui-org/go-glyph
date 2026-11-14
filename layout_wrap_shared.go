@@ -9,6 +9,24 @@ import "github.com/rivo/uniseg"
 type lineInfo struct {
 	startChar, endChar int
 	width              float64
+	// paraStart is true when the line is the first of its paragraph: the
+	// layout's first line, or the line right after a hard break.
+	paraStart bool
+}
+
+// lineIndent is the start offset of a line under BlockStyle.Indent, with
+// Pango's meaning: a positive indent moves the first line of each
+// paragraph right; a negative one moves every other line right by
+// -indent (a hanging indent). The line's wrap width shrinks by the same
+// amount.
+func lineIndent(indent float64, paraStart bool) float64 {
+	switch {
+	case indent > 0 && paraStart:
+		return indent
+	case indent < 0 && !paraStart:
+		return -indent
+	}
+	return 0
 }
 
 // wrapLines splits n measured clusters into lines and appends them to dst.
@@ -21,12 +39,18 @@ type lineInfo struct {
 //
 // A word wrap at a space ends the line just before the space and drops the
 // space from both lines. The line's width is the width before the space.
-func wrapLines(dst []lineInfo, n int, mode WrapMode, wrapWidth float64,
+//
+// indent is BlockStyle.Indent in the same units as wrapWidth. It shrinks the
+// wrap width of the lines that lineIndent offsets. Each line records whether
+// it starts a paragraph in lineInfo.paraStart.
+func wrapLines(dst []lineInfo, n int, mode WrapMode, wrapWidth, indent float64,
 	width func(i int) float64, text func(i int) string,
 	canBreak []bool) []lineInfo {
 
 	lineStart := 0
 	lineW := 0.0
+	// paraStart is true while the current line starts a paragraph.
+	paraStart := true
 	// lastSpace is the last space on the current line and lastSpaceW the
 	// line width before it. lastBreak and lastBreakW are the same for the
 	// last UAX #14 opportunity that is not a space.
@@ -37,6 +61,7 @@ func wrapLines(dst []lineInfo, n int, mode WrapMode, wrapWidth float64,
 	// are already on it, so their widths are summed again.
 	restart := func(from, upTo int) {
 		lineStart = from
+		paraStart = false
 		lineW = 0
 		for j := from; j <= upTo; j++ {
 			lineW += width(j)
@@ -47,8 +72,9 @@ func wrapLines(dst []lineInfo, n int, mode WrapMode, wrapWidth float64,
 	for i := range n {
 		t := text(i)
 		if isHardLineBreak(t) {
-			dst = append(dst, lineInfo{lineStart, i, lineW})
+			dst = append(dst, lineInfo{lineStart, i, lineW, paraStart})
 			lineStart = i + 1
+			paraStart = true
 			lineW = 0
 			lastSpace, lastBreak = -1, -1
 			continue
@@ -63,10 +89,11 @@ func wrapLines(dst []lineInfo, n int, mode WrapMode, wrapWidth float64,
 
 		w := width(i)
 		newW := lineW + w
-		if wrapWidth > 0 && newW > wrapWidth && i > lineStart && mode != WrapNone {
+		if wrapWidth > 0 && newW > wrapWidth-lineIndent(indent, paraStart) &&
+			i > lineStart && mode != WrapNone {
 			if mode == WrapWord || mode == WrapWordChar {
 				if lastSpace >= lineStart {
-					dst = append(dst, lineInfo{lineStart, lastSpace, lastSpaceW})
+					dst = append(dst, lineInfo{lineStart, lastSpace, lastSpaceW, paraStart})
 					restart(lastSpace+1, i)
 					continue
 				}
@@ -76,14 +103,15 @@ func wrapLines(dst []lineInfo, n int, mode WrapMode, wrapWidth float64,
 				// line's, and vertical caret motion then has a fixed point
 				// it cannot move out of.
 				if lastBreak > lineStart {
-					dst = append(dst, lineInfo{lineStart, lastBreak, lastBreakW})
+					dst = append(dst, lineInfo{lineStart, lastBreak, lastBreakW, paraStart})
 					restart(lastBreak, i)
 					continue
 				}
 			}
 			if mode == WrapChar || mode == WrapWordChar {
-				dst = append(dst, lineInfo{lineStart, i, lineW})
+				dst = append(dst, lineInfo{lineStart, i, lineW, paraStart})
 				lineStart = i
+				paraStart = false
 				lineW = w
 				lastSpace, lastBreak = -1, -1
 				continue
@@ -91,7 +119,7 @@ func wrapLines(dst []lineInfo, n int, mode WrapMode, wrapWidth float64,
 		}
 		lineW = newW
 	}
-	return append(dst, lineInfo{lineStart, n, lineW})
+	return append(dst, lineInfo{lineStart, n, lineW, paraStart})
 }
 
 // isHardLineBreak reports whether s is one hard line-break grapheme. Unicode

@@ -983,7 +983,9 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 	if cfg.Block.Width > 0 {
 		wrapWidth = float64(cfg.Block.Width) * float64(ctx.scaleFactor)
 	}
+	indentUnits := float64(cfg.Block.Indent) * float64(ctx.scaleFactor)
 	lines := wrapLines(nil, len(chars), cfg.Block.Wrap, wrapWidth,
+		indentUnits,
 		func(i int) float64 { return chars[i].width }, charText, canBreakBefore)
 
 	// Build bidi char info once for all lines. Fully overwritten before use,
@@ -1053,20 +1055,17 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 		}
 
 		linePixelW := li.width
+		// Indent first: it narrows the width that alignment works inside.
+		indentPx := lineIndent(indentUnits, li.paraStart)
 		var alignOffset float64
 		if wrapWidth > 0 {
+			avail := wrapWidth - indentPx
 			switch cfg.Block.Align {
 			case AlignCenter:
-				alignOffset = (wrapWidth - linePixelW) / 2
+				alignOffset = (avail - linePixelW) / 2
 			case AlignRight:
-				alignOffset = wrapWidth - linePixelW
+				alignOffset = avail - linePixelW
 			}
-		}
-
-		indentPx := float64(0)
-		if lineIdx == 0 && cfg.Block.Indent != 0 {
-			indentPx = float64(cfg.Block.Indent) *
-				float64(ctx.scaleFactor)
 		}
 
 		startByteIdx := 0
@@ -1294,14 +1293,14 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster, text string, baseFon
 				(li.startChar > 0 &&
 					isHardLineBreak(chars[li.startChar-1].text)),
 			Rect: Rect{
-				X:      float32(alignOffset * pixelScale),
+				X:      float32((alignOffset + indentPx) * pixelScale),
 				Y:      float32(lineY * pixelScale),
 				Width:  float32(linePixelW * pixelScale),
 				Height: float32(lineHeight * pixelScale),
 			},
 		})
 
-		totalWidth = max(totalWidth, linePixelW)
+		totalWidth = max(totalWidth, indentPx+linePixelW)
 		lineY += lineHeight
 		if cfg.Block.LineSpacing > 0 && lineIdx < len(lines)-1 {
 			lineY += float64(cfg.Block.LineSpacing) *

@@ -87,7 +87,11 @@ type BlockStyle struct {
 	Wrap  WrapMode
 	// Width is the wrapping width. -1 = no wrapping.
 	Width float32
-	// Indent determines first-line indentation. Negative = hanging indent.
+	// Indent offsets lines from the block's left edge, in points, with
+	// Pango's meaning. Positive: the first line of each paragraph starts
+	// Indent to the right. Negative: every line except the first of each
+	// paragraph starts -Indent to the right (a hanging indent). The offset
+	// line's wrap width shrinks by the same amount. Vertical layouts ignore it.
 	Indent float32
 	// LineSpacing adds extra vertical space after each line except the last.
 	LineSpacing float32

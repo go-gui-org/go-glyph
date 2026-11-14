@@ -352,7 +352,9 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 	if cfg.Block.Width > 0 {
 		wrapWidth = float64(cfg.Block.Width)
 	}
+	indentUnits := float64(cfg.Block.Indent)
 	lines := wrapLines(nil, len(chars), cfg.Block.Wrap, wrapWidth,
+		indentUnits,
 		func(i int) float64 { return chars[i].width }, charText, canBreakBefore)
 
 	// Build Layout structures.
@@ -383,19 +385,17 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 		}
 
 		linePixelW := li.width
+		// Indent first: it narrows the width that alignment works inside.
+		indentPx := lineIndent(indentUnits, li.paraStart)
 		var alignOffset float64
 		if wrapWidth > 0 {
+			avail := wrapWidth - indentPx
 			switch cfg.Block.Align {
 			case AlignCenter:
-				alignOffset = (wrapWidth - linePixelW) / 2
+				alignOffset = (avail - linePixelW) / 2
 			case AlignRight:
-				alignOffset = wrapWidth - linePixelW
+				alignOffset = avail - linePixelW
 			}
-		}
-
-		indentPx := float64(0)
-		if lineIdx == 0 && cfg.Block.Indent != 0 {
-			indentPx = float64(cfg.Block.Indent)
 		}
 
 		startByteIdx := 0
@@ -537,14 +537,14 @@ func (ctx *Context) buildLayout(clusters []graphemeCluster,
 			Length:           lineLen,
 			IsParagraphStart: lineIdx == 0 || (li.startChar > 0 && isHardLineBreak(chars[li.startChar-1].text)),
 			Rect: Rect{
-				X:      float32(alignOffset),
+				X:      float32(alignOffset + indentPx),
 				Y:      float32(lineY),
 				Width:  float32(linePixelW),
 				Height: float32(lineHeight),
 			},
 		})
 
-		totalWidth = max(totalWidth, linePixelW)
+		totalWidth = max(totalWidth, indentPx+linePixelW)
 		lineY += lineHeight
 		if cfg.Block.LineSpacing > 0 && lineIdx < len(lines)-1 {
 			lineY += float64(cfg.Block.LineSpacing)
