@@ -34,12 +34,16 @@ var colorTableTags = []ot.Tag{
 
 // cachedFace holds a parsed go-text face plus the cheap-to-read
 // attributes the backend queries repeatedly. The parsed face is shared
-// across ftFont values; its mutable state is the bitmap ppem (set under
-// mu by the color-glyph path) and the extent cache GlyphExtents fills
-// (read under mu by capEm), so concurrent renders/measurements across
-// Contexts cannot corrupt each other's strike selection or measurements.
+// by every Context. Its mutable state is the bitmap ppem and its lazy
+// caches (cmap and glyph extents). Code that calls a face method that
+// fills a cache or sets ppem must hold mu. Today that is capEm, the
+// ink-extent read and the color-glyph path. Shaping does not use face.
+// It uses the private Faces in hbPool. Cmap checks done without mu must
+// use face.Cmap.Lookup, which only reads.
 type cachedFace struct {
-	mu    sync.Mutex // guards ppem-dependent access to face (SetPpem+GlyphData)
+	// mu guards every use of face that fills a cache or sets ppem (SetPpem,
+	// GlyphData, GlyphExtents, NominalGlyph). face.Cmap.Lookup needs no lock.
+	mu    sync.Mutex
 	face  *font.Face
 	upem  uint16
 	color bool
@@ -53,10 +57,10 @@ type cachedFace struct {
 	capMeasured bool
 	// hbPool recycles HarfBuzz shaping fonts. NewFont builds the face's
 	// shaping accelerators and is the single largest source of layout
-	// allocations, so rebuilding one per shape (per line) is wasteful. A Font
-	// carries lazy mutable state that Shape writes, so it cannot be shared
-	// concurrently; the pool hands each shape an exclusively-owned font that
-	// it returns when done, amortizing NewFont across shapes without a lock.
+	// allocations, so rebuilding one per shape (per line) is wasteful. Each
+	// pooled font owns a private font.Face, because the Face carries lazy
+	// caches that Shape writes. The pool hands each shape a font it owns
+	// alone, so shaping needs no lock.
 	hbPool sync.Pool
 }
 
@@ -67,7 +71,14 @@ type cachedFace struct {
 func (cf *cachedFace) getHB(scale int32) *harfbuzz.Font {
 	f, _ := cf.hbPool.Get().(*harfbuzz.Font)
 	if f == nil {
-		f = harfbuzz.NewFont(cf.face)
+		// A private Face per shaping font. font.Face keeps lazy caches
+		// (cmap, glyph extents) and the bitmap ppem, and Shape writes them.
+		// Every pooled font that wrapped cf.face shared those caches, so two
+		// Contexts shaping the same font raced. The *font.Font holds the
+		// parsed tables and is read-only after parse, so it is safe to share.
+		// The private Face also never sees the ppem the color path sets on
+		// cf.face, so shaped extents do not depend on render order.
+		f = harfbuzz.NewFont(font.NewFace(cf.face.Font))
 	}
 	f.XScale, f.YScale = scale, scale
 	return f
@@ -573,7 +584,9 @@ func faceCovers(face *font.Face, text string) bool {
 		if isDefaultIgnorable(r) {
 			continue
 		}
-		if _, ok := face.NominalGlyph(r); !ok {
+		// Cmap.Lookup only reads, while NominalGlyph writes the shared Face's
+		// cmap cache, and this runs without cf.mu.
+		if _, ok := face.Cmap.Lookup(r); !ok {
 			return false
 		}
 	}

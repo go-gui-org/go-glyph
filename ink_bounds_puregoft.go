@@ -119,5 +119,7 @@ func glyphGID(cf *cachedFace, text string, g Glyph) (font.GID, bool) {
 	if n == 0 || n != len(ch) || r == utf8.RuneError {
 		return 0, false
 	}
-	return cf.face.NominalGlyph(r)
+	// Cmap.Lookup only reads, while NominalGlyph writes the shared Face's
+	// cmap cache, and this runs without cf.mu.
+	return cf.face.Cmap.Lookup(r)
 }

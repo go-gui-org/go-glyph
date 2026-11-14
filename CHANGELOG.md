@@ -23,6 +23,10 @@ and this project adheres to
 
 ### Fixed
 
+- **Shaping from several Contexts at once is race-free.** Two Contexts (for
+  example, two go-gui windows) that lay out text with the same font on
+  different goroutines no longer race on the font's internal caches. Shaped
+  widths no longer depend on the size at which a color glyph was last drawn.
 - **Font discovery skips non-regular files.** A named pipe or other special
   file with a font extension in a font directory no longer hangs `NewContext`.
   `AddFontFile` on such a path now returns an error instead of blocking.
