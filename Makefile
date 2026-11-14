@@ -1,4 +1,4 @@
-.PHONY: docs docs-serve doc-tools api-doc check test-race coverage vet lint lint-bin nocgo \
+.PHONY: docs docs-serve doc-tools api-doc check test-race coverage vet lint lint-cross lint-bin nocgo \
 	cross-build build-modules prepush
 
 # Repo-local bin for the pinned linter. The pinned VERSION itself lives in
@@ -77,6 +77,17 @@ lint-bin: $(LINT_BIN)
 lint: $(LINT_BIN)
 	$(LINT) run . ./accessibility ./backend/gpu ./ime
 
+## lint-cross: lint the targets the host never compiles. Files are swapped
+## by build tag (*_wasm.go, discover_windows.go, ...), and golangci-lint
+## only sees files that build for its GOOS, so `make lint` on one OS leaves
+## the others unlinted. backend/gpu needs cgo and iOS needs an Xcode
+## sysroot, so neither is here.
+lint-cross: $(LINT_BIN)
+	GOOS=js GOARCH=wasm CGO_ENABLED=0 $(LINT) run . ./accessibility ./ime
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 $(LINT) run . ./accessibility ./ime
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 $(LINT) run . ./accessibility ./ime
+	GOOS=android GOARCH=arm64 CGO_ENABLED=0 $(LINT) run . ./accessibility ./ime
+
 ## nocgo: the cgo-free gate CI enforces on the root package. The root is
 ## pure Go — only backend/ and the examples pull in C — and CI asserts that
 ## on both linux and android, so a stray cgo import must fail here.
@@ -106,8 +117,9 @@ build-modules:
 
 ## prepush: recommended full local validation before pushing (issue
 ## go-gui#314). Approximates the CI matrix from one host: race tests, vet,
-## lint, the cgo-free root gate, the js/wasm and android cross-builds, and
-## the separate-module builds. Aborts on the first failing target.
+## lint, lint-cross (lints every cgo-free target), the cgo-free root gate,
+## the js/wasm and android cross-builds, and the separate-module builds.
+## Aborts on the first failing target.
 ##
 ## Omissions vs CI, by design:
 ##   - the OS matrix (CI runs the suite on linux, windows and macOS)
@@ -115,4 +127,4 @@ build-modules:
 ##     iphonesimulator sysroot or an Android NDK clang
 ##   - the coverage artifact upload; CI enforces no threshold on it, so
 ##     there is nothing to gate locally
-prepush: test-race vet lint nocgo cross-build build-modules
+prepush: test-race vet lint lint-cross nocgo cross-build build-modules

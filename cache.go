@@ -14,9 +14,9 @@ func newMetricsCache(capacity int) metricsCache {
 // Untagged file so both the FreeType and WASM Renderer structs share it.
 type cacheEntry struct {
 	CachedGlyph
-	age uint64
+	age uint64 //nolint:unused // read by the native renderer; WASM shares the struct
 	// slot is the entry's index in its page's pageKeys list, so removing
 	// one key is O(1) instead of a scan of every key on the page. Unused
 	// for entries with no page (Page < 0) and on WASM.
-	slot int
+	slot int //nolint:unused // read by the native renderer; WASM shares the struct
 }
