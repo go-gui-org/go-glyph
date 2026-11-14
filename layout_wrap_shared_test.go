@@ -6,8 +6,8 @@ import "testing"
 
 // wrapFixed runs wrapLines over s with every cluster (one byte each here) 10
 // units wide, so expected line widths are easy to state.
-func wrapFixed(s string, wrapWidth float64, mode WrapMode, canBreak []bool) []lineInfo {
-	return wrapLines(nil, len(s), mode, wrapWidth,
+func wrapFixed(s string, wrapWidth, indent float64, mode WrapMode, canBreak []bool) []lineInfo {
+	return wrapLines(nil, len(s), mode, wrapWidth, indent,
 		func(int) float64 { return 10 },
 		func(i int) string { return s[i : i+1] },
 		canBreak)
@@ -17,7 +17,7 @@ func wrapFixed(s string, wrapWidth float64, mode WrapMode, canBreak []bool) []li
 // It used to record the width up to the overflowing cluster minus that
 // cluster, which counted the space and the start of the next word.
 func TestWrapLines_WordWrapWidthExcludesNextWord(t *testing.T) {
-	lines := wrapFixed("aa bbbb", 45, WrapWord, nil)
+	lines := wrapFixed("aa bbbb", 45, 0, WrapWord, nil)
 	if len(lines) != 2 {
 		t.Fatalf("got %d lines, want 2: %+v", len(lines), lines)
 	}
@@ -32,7 +32,7 @@ func TestWrapLines_WordWrapWidthExcludesNextWord(t *testing.T) {
 // The space itself can be the cluster that overflows. The line then ends at
 // that space and its width is everything before it.
 func TestWrapLines_OverflowOnSpace(t *testing.T) {
-	lines := wrapFixed("aaaa b", 45, WrapWord, nil)
+	lines := wrapFixed("aaaa b", 45, 0, WrapWord, nil)
 	if len(lines) != 2 {
 		t.Fatalf("got %d lines, want 2: %+v", len(lines), lines)
 	}
@@ -47,7 +47,7 @@ func TestWrapLines_OverflowOnSpace(t *testing.T) {
 // A UAX #14 opportunity (no space) splits the line before the opportunity.
 func TestWrapLines_BreakOpportunity(t *testing.T) {
 	canBreak := []bool{false, false, false, true, false, false}
-	lines := wrapFixed("aaabbb", 45, WrapWord, canBreak)
+	lines := wrapFixed("aaabbb", 45, 0, WrapWord, canBreak)
 	if len(lines) != 2 {
 		t.Fatalf("got %d lines, want 2: %+v", len(lines), lines)
 	}
@@ -60,7 +60,7 @@ func TestWrapLines_BreakOpportunity(t *testing.T) {
 }
 
 func TestWrapLines_HardNewline(t *testing.T) {
-	lines := wrapFixed("ab\ncd", -1, WrapWord, nil)
+	lines := wrapFixed("ab\ncd", -1, 0, WrapWord, nil)
 	if len(lines) != 2 {
 		t.Fatalf("got %d lines, want 2: %+v", len(lines), lines)
 	}
@@ -76,7 +76,7 @@ func TestWrapLines_HardLineBreakForms(t *testing.T) {
 		"crlf": {"a", "\r\n", "b"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			lines := wrapLines(nil, len(clusters), WrapNone, -1,
+			lines := wrapLines(nil, len(clusters), WrapNone, -1, 0,
 				func(int) float64 { return 10 },
 				func(i int) string { return clusters[i] }, nil)
 			if len(lines) != 2 {
@@ -120,5 +120,48 @@ func TestLineBreakOpportunities(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("canBreak = %v, want %v", got, want)
 		}
+	}
+}
+
+// Indent shrinks the wrap width of the offset lines (Pango semantics) and
+// each line records whether it starts a paragraph.
+func TestWrapLines_Indent(t *testing.T) {
+	tests := []struct {
+		indent float64
+		want   []lineInfo
+	}{
+		{0, []lineInfo{{0, 3, 30, true}, {4, 7, 30, false}}},
+		{20, []lineInfo{{0, 1, 10, true}, {2, 5, 30, false}, {6, 7, 10, false}}},
+		{-20, []lineInfo{{0, 3, 30, true}, {4, 5, 10, false}, {6, 7, 10, false}}},
+	}
+	for _, tc := range tests {
+		got := wrapFixed("a b c d", 45, tc.indent, WrapWord, nil)
+		if len(got) != len(tc.want) {
+			t.Errorf("indent %v: got %+v, want %+v", tc.indent, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("indent %v: line %d = %+v, want %+v",
+					tc.indent, i, got[i], tc.want[i])
+			}
+		}
+	}
+}
+
+// The line after a hard break starts a paragraph.
+func TestWrapLines_IndentHardBreakParaStart(t *testing.T) {
+	got := wrapFixed("a b\nc d", 45, 20, WrapWord, nil)
+	var found bool
+	for _, li := range got {
+		if li.startChar == 4 {
+			found = true
+			if !li.paraStart {
+				t.Errorf("line at 4 paraStart = false: %+v", got)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no line starts at cluster 4: %+v", got)
 	}
 }

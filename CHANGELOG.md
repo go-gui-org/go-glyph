@@ -28,6 +28,12 @@ and this project adheres to
 
 ### Fixed
 
+- **`Block.Indent` geometry.** Indented lines now wrap inside `Block.Width`,
+  and `Line.Rect.X`, the caret and `Layout.Width` include the indent. A negative
+  indent is now a real hanging indent: the first line of each paragraph starts
+  at 0 and the following lines start at `-Indent`. Before, the first line was
+  drawn left of the box. A positive indent now applies to the first line of
+  every paragraph, not only the layout's first line.
 - **`TextSystem` no longer panics after `Free`.** Measuring, layout and font
   methods return `ErrTextSystemFreed`, and `ListFontFamilies` returns nil.
   Before, they dereferenced the freed context.
