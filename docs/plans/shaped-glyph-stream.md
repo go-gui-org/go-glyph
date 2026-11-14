@@ -1,5 +1,9 @@
 # Shaped-glyph-stream refactor — formal implementation plan (pure-Go FT backend)
 
+> **Historical (shipped).** This refactor is done; see the CHANGELOG. The plan
+> shows the code as it was before the change. For the current design, read
+> `CLAUDE.md` and `docs/architecture.txt`.
+
 ## Locked decisions
 1. **Gate on `GlyphID != 0`.** One `Glyph` struct. FT layout populates `GlyphID`;
    renderer takes the by-GID path when set, else falls through to today's text path.
