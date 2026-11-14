@@ -89,6 +89,7 @@ func TestNewTextSystem(t *testing.T) {
 }
 
 func TestTextSystemDrawText(t *testing.T) {
+	skipOnWASM(t, "draws on the page canvas, not through DrawBackend")
 	backend := newRecordingBackend()
 	ts, err := NewTextSystem(backend)
 	if err != nil {
@@ -129,6 +130,7 @@ func TestTextSystemEmptyText(t *testing.T) {
 }
 
 func TestTextSystemAddFontFile(t *testing.T) {
+	skipOnWASM(t, "no file system; ValidateFontPath is a no-op")
 	backend := newRecordingBackend()
 	ts, err := NewTextSystem(backend)
 	if err != nil {
@@ -160,6 +162,7 @@ func TestTextSystemAddFontBytes(t *testing.T) {
 }
 
 func TestTextSystemPurge(t *testing.T) {
+	skipOnWASM(t, "fillText drawing never fills the glyph cache")
 	backend := newRecordingBackend()
 	ts, err := NewTextSystem(backend)
 	if err != nil {

@@ -19,6 +19,9 @@ go test -race ./...
 # Run tests on macOS (may need GOMEMLIMIT due to font parsing)
 GOMEMLIMIT=2GiB go test -p 1 ./...
 
+# Run the js/wasm tests under node (needs node; CI runs this in test-wasm)
+make test-wasm
+
 # Vet
 go vet ./...
 
@@ -214,7 +217,8 @@ also build.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs these jobs: `test` (Ubuntu),
 `test-race` (race detector), `lint` (golangci-lint and `make lint-cross`),
-`test-wasm`, `test-ios` (macOS simulator build and vet with `-tags ios`),
+`test-wasm` (builds and vets for js/wasm, then runs the tests under node with a
+Canvas2D shim), `test-ios` (macOS simulator build and vet with `-tags ios`),
 `test-android`, `test-windows` and `test-macos`. Each platform installs its own
 dependencies (SDL2, font packages, etc.). The ebitengine backend module is built
 on Linux (build only — requires a display to run) and tested on macOS and
