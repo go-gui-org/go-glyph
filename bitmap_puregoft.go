@@ -335,7 +335,14 @@ func renderRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift 
 		if !collectAll && buf.Info[i].Cluster != targetRuneIdx {
 			continue
 		}
-		gd := cf.face.GlyphData(buf.Info[i].Glyph)
+		// GlyphData reads the bitmap ppem that renderColorGlyph sets on the
+		// shared face under cf.mu, so the read takes the same lock. The
+		// outline segments it returns are new slices, safe to use after the
+		// lock is released.
+		var gd font.GlyphData
+		if !cf.lockedCall(func() { gd = cf.face.GlyphData(buf.Info[i].Glyph) }) {
+			return nil, false
+		}
 		if out, ok := gd.(font.GlyphOutline); ok && len(out.Segments) > 0 {
 			glyphs = append(glyphs, placedGlyph{
 				segs: out.Segments,
@@ -363,7 +370,11 @@ func renderGlyphByID(atlas *GlyphAtlas, path string, size, strokeWidth, subpixel
 	if cf == nil {
 		return nil
 	}
-	gd := cf.face.GlyphData(font.GID(gid))
+	// Same lock as renderRun: GlyphData reads the shared ppem.
+	var gd font.GlyphData
+	if !cf.lockedCall(func() { gd = cf.face.GlyphData(font.GID(gid)) }) {
+		return nil
+	}
 	out, ok := gd.(font.GlyphOutline)
 	if !ok || len(out.Segments) == 0 {
 		return nil
@@ -824,7 +835,11 @@ func renderCOLRGlyph(atlas *GlyphAtlas, path string, size float64, text string,
 	}
 	var cls []coloredLayer
 	for _, layer := range layers {
-		gd := cf.face.GlyphData(font.GID(layer.GlyphID))
+		// Same lock as renderRun: GlyphData reads the shared ppem.
+		var gd font.GlyphData
+		if !cf.lockedCall(func() { gd = cf.face.GlyphData(font.GID(layer.GlyphID)) }) {
+			return nil, false
+		}
 		out, ok := gd.(font.GlyphOutline)
 		if !ok || len(out.Segments) == 0 {
 			continue // empty/space layer contributes no ink

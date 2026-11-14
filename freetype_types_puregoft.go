@@ -37,12 +37,15 @@ var colorTableTags = []ot.Tag{
 // by every Context. Its mutable state is the bitmap ppem and its lazy
 // caches (cmap and glyph extents). Code that calls a face method that
 // fills a cache or sets ppem must hold mu. Today that is capEm, the
-// ink-extent read and the color-glyph path. Shaping does not use face.
+// ink-extent read and the color-glyph path. renderRun, renderGlyphByID and
+// renderCOLRGlyph also take it around GlyphData, because GlyphData reads the
+// ppem. Shaping does not use face.
 // It uses the private Faces in hbPool. Cmap checks done without mu must
 // use face.Cmap.Lookup, which only reads.
 type cachedFace struct {
 	// mu guards every use of face that fills a cache or sets ppem (SetPpem,
 	// GlyphData, GlyphExtents, NominalGlyph). face.Cmap.Lookup needs no lock.
+	// renderRun, renderGlyphByID and renderCOLRGlyph hold it around GlyphData.
 	mu    sync.Mutex
 	face  *font.Face
 	upem  uint16
