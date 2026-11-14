@@ -15,6 +15,10 @@ and this project adheres to
 
 ### Changed
 
+- **Layout-cache pruning is throttled.** `Commit` scans the layout cache for
+  expired entries at most every quarter of the eviction age (1.25 s by default),
+  not every frame. Cache eviction no longer allocates. An unused entry can now
+  live up to 25% longer than `evictionAge`.
 - **Doc tools moved to a separate module.** gomarkdoc and pkgsite now live in a
   separate `tools/docs` module. go-glyph's `go.mod` no longer brings about 55
   tool-only modules (go-git, viper, cobra, ...) into consumers' module graphs.

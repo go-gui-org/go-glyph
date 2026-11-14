@@ -35,6 +35,8 @@ type TextSystem struct {
 	evictionAge     int64    // Milliseconds. Default 5000.
 	maxCacheEntries int      // Max layout cache entries. Default 8192.
 	tempFontFiles   []string // Temp files backing AddFontBytes fonts.
+	lastPrune       int64    // Unix ms of the last full prune scan.
+	evictTimes      []int64  // Scratch for evictOldestLayouts, reused across calls.
 }
 
 // NewTextSystem creates a TextSystem with default atlas size (1024x1024).
@@ -462,11 +464,21 @@ func (ts *TextSystem) getCacheKey(text string, cfg TextConfig) uint64 {
 	return h
 }
 
+// pruneCache drops layouts unused for longer than evictionAge.
+//
+// Commit calls this every frame, but entries expire on a scale of seconds. A full scan
+// per frame wasted work that grew with the cache size (up to maxCacheEntries). So the
+// scan runs at most once per evictionAge/4. An entry can outlive evictionAge by at most
+// that quarter period.
 func (ts *TextSystem) pruneCache() {
 	if len(ts.cache) == 0 {
 		return
 	}
 	now := time.Now().UnixMilli()
+	if now-ts.lastPrune < ts.evictionAge/4 {
+		return
+	}
+	ts.lastPrune = now
 	for k, item := range ts.cache {
 		if now-item.lastAccess > ts.evictionAge {
 			delete(ts.cache, k)
@@ -483,11 +495,14 @@ func (ts *TextSystem) evictOldestLayouts() {
 	if n == 0 {
 		return
 	}
-	times := make([]int64, 0, n)
+	// Reuse one scratch slice. The cache sits at its cap in steady state, so this runs
+	// on every insert burst and a fresh slice would allocate each time.
+	times := ts.evictTimes[:0]
 	for _, item := range ts.cache {
 		times = append(times, item.lastAccess)
 	}
 	slices.Sort(times)
+	ts.evictTimes = times // Keep the grown slice for the next call.
 
 	targetDelete := n / 4
 	if targetDelete == 0 {

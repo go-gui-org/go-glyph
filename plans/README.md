@@ -25,7 +25,7 @@ each need explicit approval from the maintainer. No plan gives that approval.
 | [010](010-lint-every-target.md)            | Lint wasm, windows, darwin and android targets             | P2       | S      | —          | DONE (merged #176) |
 | [011](011-textsystem-use-after-free.md)    | TextSystem returns `ErrTextSystemFreed` after `Free`       | P3       | S      | —          | DONE (merged #177) |
 | [012](012-block-indent-geometry.md)        | `Block.Indent` geometry; negative is a hanging indent      | P2       | M      | —          | DONE (merged #178) |
-| [013](013-layout-cache-prune-throttle.md)  | Throttle layout-cache pruning; reuse eviction scratch      | P3       | S      | —          | TODO               |
+| [013](013-layout-cache-prune-throttle.md)  | Throttle layout-cache pruning; reuse eviction scratch      | P3       | S      | —          | DONE (review OK)   |
 | [014](014-agents-md-accuracy.md)           | AGENTS.md matches the repo                                 | P3       | S      | (009, 010) | DONE (review OK)   |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
