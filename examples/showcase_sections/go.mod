@@ -2,7 +2,7 @@ module github.com/go-gui-org/go-glyph/examples/showcase_sections
 
 go 1.26.0
 
-require github.com/go-gui-org/go-glyph v1.4.1
+require github.com/go-gui-org/go-glyph v1.27.0
 
 replace github.com/go-gui-org/go-glyph => ../..
 
