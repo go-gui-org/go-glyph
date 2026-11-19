@@ -24,6 +24,14 @@ func atlasAlpha(r *Renderer, cg CachedGlyph) []byte {
 // coverageLight curve, and dark text must keep the raw coverage. The two
 // must be separate cache entries, because one atlas raster cannot serve both.
 func TestCoverageCurveByTextColor(t *testing.T) {
+	// Stem darkening (on for macOS) gives each luminance bucket its own
+	// outline, so the light raster would not be the dark raster with the
+	// curve on top. This test is about the curve only; darkening has its own
+	// tests in darken_puregoft_test.go.
+	saved := stemDarkening
+	stemDarkening = false
+	defer func() { stemDarkening = saved }()
+
 	path, _, gid := resolveTestGlyph(t, "H")
 	r, err := NewRenderer(newMockBackend(), 1.0)
 	if err != nil {

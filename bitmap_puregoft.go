@@ -98,6 +98,7 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	paths := fontFallbackPaths(pathBuf[:0], renderFontPaths(fontPaths), family,
 		bold, italic)
 	subpixelShift := float64(subpixelBin) / 4.0
+	ro := rasterOpts{hint: hint, darken: stemDarkening, curve: curve}
 
 	var res *rasterResult
 
@@ -120,7 +121,7 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	if res == nil {
 		for _, fontPath := range paths {
 			r, rejected := renderMonoRun(atlas, fontPath, fontSize,
-				subpixelShift, ch, runText, targetRuneIdx, true, hint)
+				subpixelShift, ch, runText, targetRuneIdx, true, ro)
 			if !rejected {
 				res = r
 				covered = true
@@ -136,7 +137,7 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 			// into its own item.
 			r, rejected := renderMonoRun(atlas, fp,
 				fontSize*textFallbackFitScale(paths, fp), subpixelShift,
-				ch, runText, targetRuneIdx, true, hint)
+				ch, runText, targetRuneIdx, true, ro)
 			if !rejected {
 				res = r
 				covered = true
@@ -147,7 +148,7 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 
 	if !covered && res == nil && len(paths) > 0 {
 		res, _ = renderMonoRun(atlas, paths[0], fontSize, subpixelShift,
-			ch, runText, targetRuneIdx, false, hint)
+			ch, runText, targetRuneIdx, false, ro)
 	}
 
 	return insertRaster(atlas, res, curve)
@@ -183,6 +184,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	paths := fontFallbackPaths(pathBuf[:0], renderFontPaths(fontPaths), family,
 		bold, italic)
 	subpixelShift := float64(subpixelBin) / 4.0
+	ro := rasterOpts{hint: hint, darken: stemDarkening, curve: curve}
 	sw := float64(strokeWidth)
 
 	var res *rasterResult
@@ -190,7 +192,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	covered := false
 	for _, fontPath := range paths {
 		r, rejected := renderStrokedRun(atlas, fontPath, fontSize, sw,
-			subpixelShift, ch, runText, targetRuneIdx, true, hint)
+			subpixelShift, ch, runText, targetRuneIdx, true, ro)
 		if !rejected {
 			res = r
 			covered = true
@@ -202,7 +204,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 		for _, fp := range orderedTextFallbackPaths(ch) {
 			r, rejected := renderStrokedRun(atlas, fp,
 				fontSize*textFallbackFitScale(paths, fp), sw,
-				subpixelShift, ch, runText, targetRuneIdx, true, hint)
+				subpixelShift, ch, runText, targetRuneIdx, true, ro)
 			if !rejected {
 				res = r
 				covered = true
@@ -213,7 +215,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 
 	if !covered && res == nil && len(paths) > 0 {
 		res, _ = renderStrokedRun(atlas, paths[0], fontSize, sw,
-			subpixelShift, ch, runText, targetRuneIdx, false, hint)
+			subpixelShift, ch, runText, targetRuneIdx, false, ro)
 	}
 
 	return insertRaster(atlas, res, curve)
@@ -231,8 +233,9 @@ func loadGlyphByIDFT(atlas *GlyphAtlas, path string, gid uint32, item Item,
 	_, fontSize, _, _ := resolveFTFontParams(item.Style, scaleFactor)
 	fontSize *= itemFontScale(item)
 	subpixelShift := float64(subpixelBin) / 4.0
+	ro := rasterOpts{hint: hint, darken: stemDarkening, curve: curve}
 	res := renderGlyphByID(atlas, path, fontSize, float64(strokeWidth),
-		subpixelShift, gid, hint)
+		subpixelShift, gid, ro)
 	return insertRaster(atlas, res, curve)
 }
 
@@ -287,18 +290,18 @@ type placedGlyph struct {
 // renderMonoRun rasterizes filled outline glyphs (no stroke).
 func renderMonoRun(atlas *GlyphAtlas, path string, size, subpixelShift float64,
 	text string, runText string, targetRuneIdx int,
-	rejectNotdef bool, hint bool) (*rasterResult, bool) {
+	rejectNotdef bool, ro rasterOpts) (*rasterResult, bool) {
 	return renderRun(atlas, path, size, 0, subpixelShift, text, runText,
-		targetRuneIdx, rejectNotdef, hint)
+		targetRuneIdx, rejectNotdef, ro)
 }
 
 // renderStrokedRun rasterizes the stroke border of the outline glyphs at
 // the given stroke radius, using the pure-Go stroker.
 func renderStrokedRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift float64,
 	text string, runText string, targetRuneIdx int,
-	rejectNotdef bool, hint bool) (*rasterResult, bool) {
+	rejectNotdef bool, ro rasterOpts) (*rasterResult, bool) {
 	return renderRun(atlas, path, size, strokeWidth, subpixelShift, text, runText,
-		targetRuneIdx, rejectNotdef, hint)
+		targetRuneIdx, rejectNotdef, ro)
 }
 
 // renderRun shapes text with the given font and rasterizes the resulting
@@ -313,7 +316,7 @@ func renderStrokedRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixe
 // not rasterized.
 func renderRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift float64,
 	text string, runText string, targetRuneIdx int,
-	rejectNotdef bool, hint bool) (*rasterResult, bool) {
+	rejectNotdef bool, ro rasterOpts) (*rasterResult, bool) {
 
 	cf := loadCachedFace(path)
 	if cf == nil {
@@ -369,7 +372,7 @@ func renderRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift 
 		}
 		penX += float64(pos.XAdvance) / 64.0
 	}
-	return rasterizeGlyphs(atlas, cf, size, strokeWidth, glyphs, hint)
+	return rasterizeGlyphs(atlas, cf, size, strokeWidth, glyphs, ro)
 }
 
 // renderGlyphByID rasterizes a single glyph by its font-specific glyph id,
@@ -380,7 +383,7 @@ func renderRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift 
 // the glyph has no outline (a space, or a bitmap/color glyph handled by the
 // color paths).
 func renderGlyphByID(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift float64,
-	gid uint32, hint bool) *rasterResult {
+	gid uint32, ro rasterOpts) *rasterResult {
 
 	cf := loadCachedFace(path)
 	if cf == nil {
@@ -396,7 +399,7 @@ func renderGlyphByID(atlas *GlyphAtlas, path string, size, strokeWidth, subpixel
 		return nil
 	}
 	glyphs := []placedGlyph{{segs: out.Segments, penX: subpixelShift}}
-	res, _ := rasterizeGlyphs(atlas, cf, size, strokeWidth, glyphs, hint)
+	res, _ := rasterizeGlyphs(atlas, cf, size, strokeWidth, glyphs, ro)
 	return res
 }
 
@@ -409,7 +412,7 @@ func renderGlyphByID(atlas *GlyphAtlas, path string, size, strokeWidth, subpixel
 // When atlas is non-nil, scratch buffers from the atlas are reused to reduce
 // per-glyph allocations. When nil, buffers are freshly allocated (test path).
 func rasterizeGlyphs(atlas *GlyphAtlas, cf *cachedFace, size, strokeWidth float64,
-	glyphs []placedGlyph, hint bool) (*rasterResult, bool) {
+	glyphs []placedGlyph, ro rasterOpts) (*rasterResult, bool) {
 
 	if len(glyphs) == 0 {
 		return nil, false
@@ -424,12 +427,18 @@ func rasterizeGlyphs(atlas *GlyphAtlas, cf *cachedFace, size, strokeWidth float6
 	if !(strokeR >= 0) {
 		strokeR = 0
 	}
+	// Stem darkening moves the outline out before the hint finds the stems,
+	// so the hint snaps the heavier stems. A stroke has its own width and is
+	// not darkened.
+	if ro.darken && strokeR == 0 {
+		darkenGlyphs(glyphs, scale, size, ro.curve)
+	}
 	// Stem snapping (issue 191) runs per glyph, before the bounds pass, so
 	// the bounds, the fill and the stroke all use the same hinted outline.
 	// Large sizes keep the raw outline: a half-pixel blur on a wide stem is
 	// not visible. glyphs belongs to the caller's render call, so writing
 	// hx into it is safe.
-	if hint && size <= hintMaxSize {
+	if ro.hint && size <= hintMaxSize {
 		for i := range glyphs {
 			glyphs[i].hx = buildXHint(glyphs[i], scale, size)
 		}

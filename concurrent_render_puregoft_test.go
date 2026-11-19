@@ -56,8 +56,8 @@ func TestConcurrentRenderSharesFace(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for range iters {
-			renderGlyphByID(nil, path, 32, 0, 0, gid, true)
-			renderRun(nil, path, 32, 0, 0, emoji, "", 0, false, true)
+			renderGlyphByID(nil, path, 32, 0, 0, gid, rasterOpts{hint: true})
+			renderRun(nil, path, 32, 0, 0, emoji, "", 0, false, rasterOpts{hint: true})
 		}
 	}()
 	wg.Wait()

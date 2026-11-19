@@ -48,7 +48,7 @@ func rasterHintTest(t *testing.T, segs []font.Segment, size float64,
 	t.Helper()
 	cf := &cachedFace{upem: hintTestUpem}
 	res, _ := rasterizeGlyphs(nil, cf, size, 0,
-		[]placedGlyph{{segs: segs}}, hint)
+		[]placedGlyph{{segs: segs}}, rasterOpts{hint: hint})
 	if res == nil {
 		t.Fatal("rasterizeGlyphs returned nil")
 	}
@@ -255,7 +255,7 @@ func TestHintRealFontStemEveryBin(t *testing.T) {
 	const size = 13.75 // 11 px at 125%: stems fall between pixels
 	for bin := range SubpixelBins {
 		shift := float64(bin) / SubpixelBins
-		res := renderGlyphByID(nil, path, size, 0, shift, gid, true)
+		res := renderGlyphByID(nil, path, size, 0, shift, gid, rasterOpts{hint: true})
 		if res == nil {
 			t.Fatalf("bin %d: no raster", bin)
 		}
