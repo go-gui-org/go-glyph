@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Light text on a dark background no longer looks thin, dim and soft (#189). The
+  pure-Go raster path wrote raw glyph coverage. The old Windows GDI backend
+  applied gamma 1.8, and that step was lost in #37. Glyph coverage is now
+  corrected by the luminance of the text color: light text gets gamma 1.8,
+  mid-luminance text gets gamma 1.4, and dark text keeps raw coverage. The curve
+  is part of the glyph cache key, so the same glyph drawn dark and light uses
+  two atlas entries. Color glyphs and emoji are not changed. WASM is not
+  changed, because Canvas2D does its own gamma.
+
 ## [v1.27.0] - 2026-11-17
 
 ### Added
@@ -47,8 +60,8 @@ and this project adheres to
   now holds the shared font's lock when it reads glyph data. Before, a color
   emoji drawn in one window could change the bitmap size that another window
   read at the same time.
-- **`Block.Indent` geometry.** Indented lines now wrap inside `Block.Width`,
-  and `Line.Rect.X`, the caret and `Layout.Width` include the indent. A negative
+- **`Block.Indent` geometry.** Indented lines now wrap inside `Block.Width`, and
+  `Line.Rect.X`, the caret and `Layout.Width` include the indent. A negative
   indent is now a real hanging indent: the first line of each paragraph starts
   at 0 and the following lines start at `-Indent`. Before, the first line was
   drawn left of the box. A positive indent now applies to the first line of
@@ -57,11 +70,11 @@ and this project adheres to
   methods return `ErrTextSystemFreed`, and `ListFontFamilies` returns nil.
   Before, they dereferenced the freed context.
 - **Shaping from several Contexts at once is race-free.** Two Contexts (for
-  example, two go-gui windows) that lay out text with the same font on
-  different goroutines no longer race on the font's internal caches. Shaped
-  widths no longer depend on the size at which a color glyph was last drawn.
-- **Font discovery skips non-regular files.** A named pipe or other special
-  file with a font extension in a font directory no longer hangs `NewContext`.
+  example, two go-gui windows) that lay out text with the same font on different
+  goroutines no longer race on the font's internal caches. Shaped widths no
+  longer depend on the size at which a color glyph was last drawn.
+- **Font discovery skips non-regular files.** A named pipe or other special file
+  with a font extension in a font directory no longer hangs `NewContext`.
   `AddFontFile` on such a path now returns an error instead of blocking.
 - **Malformed fonts no longer crash the process.** A font whose tables make the
   parser panic no longer crashes font discovery, `AddFontFile`, or glyph

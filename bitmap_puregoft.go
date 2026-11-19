@@ -76,6 +76,10 @@ type rasterResult struct {
 	data      []byte
 	w, h      int
 	left, top int
+	// mono marks a white+alpha coverage mask (outline or box glyph).
+	// insertRaster applies the coverage curve only to mono rasters: a color
+	// glyph's alpha is real image data and must not be remapped.
+	mono bool
 }
 
 // loadGlyphFT rasterizes a grapheme cluster using the pure-Go pipeline.
@@ -87,7 +91,7 @@ type rasterResult struct {
 // recent Context (ftFontPathsSingleton).
 func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	ch string, runText string, targetRuneIdx int, item Item, subpixelBin int,
-	scaleFactor float32) (LoadGlyphResult, error) {
+	scaleFactor float32, curve coverageCurve) (LoadGlyphResult, error) {
 
 	family, fontSize, bold, italic := resolveFTFontParams(item.Style, scaleFactor)
 	var pathBuf [maxFallbackPaths]string
@@ -146,7 +150,7 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 			ch, runText, targetRuneIdx, false)
 	}
 
-	return insertRaster(atlas, res)
+	return insertRaster(atlas, res, curve)
 }
 
 // orderedTextFallbackPaths returns the fallback fonts covering ch in the
@@ -167,11 +171,11 @@ func orderedTextFallbackPaths(ch string) []string {
 func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	ch string, runText string, targetRuneIdx int, item Item,
 	strokeWidth float32, subpixelBin int,
-	scaleFactor float32) (LoadGlyphResult, error) {
+	scaleFactor float32, curve coverageCurve) (LoadGlyphResult, error) {
 
 	if strokeWidth <= 0 {
 		return loadGlyphFT(atlas, fontPaths, ch, runText, targetRuneIdx, item,
-			subpixelBin, scaleFactor)
+			subpixelBin, scaleFactor, curve)
 	}
 
 	family, fontSize, bold, italic := resolveFTFontParams(item.Style, scaleFactor)
@@ -212,7 +216,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 			subpixelShift, ch, runText, targetRuneIdx, false)
 	}
 
-	return insertRaster(atlas, res)
+	return insertRaster(atlas, res, curve)
 }
 
 // loadGlyphByIDFT rasterizes a single shaped glyph by its id using the exact
@@ -222,26 +226,35 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 // outline instead of filling it.
 func loadGlyphByIDFT(atlas *GlyphAtlas, path string, gid uint32, item Item,
 	strokeWidth float32, subpixelBin int,
-	scaleFactor float32) (LoadGlyphResult, error) {
+	scaleFactor float32, curve coverageCurve) (LoadGlyphResult, error) {
 
 	_, fontSize, _, _ := resolveFTFontParams(item.Style, scaleFactor)
 	fontSize *= itemFontScale(item)
 	subpixelShift := float64(subpixelBin) / 4.0
 	res := renderGlyphByID(atlas, path, fontSize, float64(strokeWidth),
 		subpixelShift, gid)
-	return insertRaster(atlas, res)
+	return insertRaster(atlas, res, curve)
 }
 
 // insertRaster uploads a rasterized bitmap to the atlas.
 // res.data may alias atlas scratch storage. InsertBitmap copies the
 // pixels at once, so the alias is safe as long as res goes straight
 // to InsertBitmap with no other render in between.
-func insertRaster(atlas *GlyphAtlas, res *rasterResult) (LoadGlyphResult, error) {
+//
+// For a mono raster, curve remaps the coverage first (see coverageCurve).
+// The remap is in place: res.data is either atlas scratch or a fresh
+// buffer that only this call reads, so changing it is safe.
+func insertRaster(atlas *GlyphAtlas, res *rasterResult,
+	curve coverageCurve) (LoadGlyphResult, error) {
+
 	if res == nil || res.w == 0 || res.h == 0 {
 		return LoadGlyphResult{}, nil
 	}
 	if _, err := checkAllocationSize(res.w, res.h, 4); err != nil {
 		return LoadGlyphResult{}, err
+	}
+	if res.mono {
+		applyCoverageCurve(res.data, curve)
 	}
 	bmp := Bitmap{
 		Width:    res.w,
@@ -502,7 +515,8 @@ func rasterizeGlyphs(atlas *GlyphAtlas, cf *cachedFace, size, strokeWidth float6
 			data[o+2] = 255
 			data[o+3] = a
 		}
-		return &rasterResult{data: data, w: w, h: h, left: left, top: -topEdge}, false
+		return &rasterResult{data: data, w: w, h: h, left: left, top: -topEdge,
+			mono: true}, false
 	}
 
 	alpha := image.NewAlpha(image.Rect(0, 0, w, h))
@@ -516,7 +530,8 @@ func rasterizeGlyphs(atlas *GlyphAtlas, cf *cachedFace, size, strokeWidth float6
 		data[o+2] = 255
 		data[o+3] = a
 	}
-	return &rasterResult{data: data, w: w, h: h, left: left, top: -topEdge}, false
+	return &rasterResult{data: data, w: w, h: h, left: left, top: -topEdge,
+		mono: true}, false
 }
 
 // rasterizeGlyphsOversize renders ink larger than MaxGlyphSize at its
@@ -556,7 +571,7 @@ func rasterizeGlyphsOversize(emit func(rz *vector.Rasterizer, offX, offY float64
 		return nil, false
 	}
 	return &rasterResult{data: out, w: dstW, h: dstH,
-		left: scaleOffset(left, s), top: scaleOffset(-topEdge, s)}, false
+		left: scaleOffset(left, s), top: scaleOffset(-topEdge, s), mono: true}, false
 }
 
 // downscaleGlyph shrinks a w0 x h0 RGBA buffer to fit MaxGlyphSize and

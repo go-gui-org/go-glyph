@@ -172,7 +172,7 @@ func TestGlyphCacheCapRespected(t *testing.T) {
 			FontPath: path,
 			Ascent:   float64(ascent),
 		}
-		r.getOrLoadGlyph("H", item, g, 0, 0)
+		r.getOrLoadGlyph("H", item, g, 0, 0, curveNone)
 		r.atlas.FrameCounter++ // distinct ages for LRU ordering
 	}
 
@@ -225,7 +225,7 @@ func TestGlyphCacheCapRespectedOnFailedLoads(t *testing.T) {
 	}
 
 	for ascent := 1; ascent <= 50; ascent++ {
-		cg := r.getOrLoadGlyph("H", failing(ascent), g, 0, 0)
+		cg := r.getOrLoadGlyph("H", failing(ascent), g, 0, 0, curveNone)
 		if cg != (CachedGlyph{}) {
 			t.Fatalf("ascent %d: failed load returned %+v, want zero value",
 				ascent, cg)
@@ -249,7 +249,7 @@ func TestGlyphCacheCapRespectedOnFailedLoads(t *testing.T) {
 
 	// Repeat call must hit the negative entry: zero value out, no growth.
 	before := len(r.cache)
-	if cg := r.getOrLoadGlyph("H", failing(1), g, 0, 0); cg != (CachedGlyph{}) {
+	if cg := r.getOrLoadGlyph("H", failing(1), g, 0, 0, curveNone); cg != (CachedGlyph{}) {
 		t.Errorf("negative-cache hit returned %+v, want zero value", cg)
 	}
 	if len(r.cache) != before {
@@ -279,7 +279,7 @@ func TestGlyphCacheAgeRefreshQuantized(t *testing.T) {
 	}
 	g := Glyph{GlyphID: gid, Index: 0, Codepoint: 1}
 
-	r.getOrLoadGlyph("H", item, g, 0, 0)
+	r.getOrLoadGlyph("H", item, g, 0, 0, curveNone)
 	if len(r.cache) != 1 {
 		t.Fatalf("expected exactly 1 cache entry, got %d", len(r.cache))
 	}
@@ -294,7 +294,7 @@ func TestGlyphCacheAgeRefreshQuantized(t *testing.T) {
 
 	// A hit inside the refresh window must not touch the stored age.
 	r.atlas.FrameCounter = insertAge + glyphAgeRefreshFrames - 1
-	r.getOrLoadGlyph("H", item, g, 0, 0)
+	r.getOrLoadGlyph("H", item, g, 0, 0, curveNone)
 	if got := entryAge(); got != insertAge {
 		t.Errorf("age refreshed too early: %d -> %d (within window)",
 			insertAge, got)
@@ -303,7 +303,7 @@ func TestGlyphCacheAgeRefreshQuantized(t *testing.T) {
 	// A hit at/after the staleness threshold must refresh to the current
 	// frame.
 	r.atlas.FrameCounter = insertAge + glyphAgeRefreshFrames
-	r.getOrLoadGlyph("H", item, g, 0, 0)
+	r.getOrLoadGlyph("H", item, g, 0, 0, curveNone)
 	if got := entryAge(); got != r.atlas.FrameCounter {
 		t.Errorf("age not refreshed at threshold: got %d, want %d",
 			got, r.atlas.FrameCounter)

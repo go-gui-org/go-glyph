@@ -106,7 +106,7 @@ func TestEmojiBitmapPlacement(t *testing.T) {
 		Descent:          21,
 		UseOriginalColor: true,
 	}
-	res, err := loadGlyphFT(atlas, nil, "\U0001F513", "", 0, item, 0, 1.0)
+	res, err := loadGlyphFT(atlas, nil, "\U0001F513", "", 0, item, 0, 1.0, curveNone)
 	if err != nil {
 		t.Fatalf("loadGlyphFT: %v", err)
 	}

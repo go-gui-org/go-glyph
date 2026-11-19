@@ -218,13 +218,13 @@ func TestLoadBoxGlyphFTInvalidDims(t *testing.T) {
 	defer atlas.Free()
 	for _, m := range []boxMetrics{{cp: 0x2500, cellW: 0, cellH: 10},
 		{cp: 0x2500, cellW: 10, cellH: -1}} {
-		res, err := loadBoxGlyphFT(atlas, m)
+		res, err := loadBoxGlyphFT(atlas, m, curveNone)
 		if err != nil || res != (LoadGlyphResult{}) {
 			t.Errorf("%dx%d: got (%+v, %v), want empty no-op", m.cellW, m.cellH, res, err)
 		}
 	}
 	huge := boxMetrics{cp: 0x2500, cellW: 1 << 20, cellH: 1 << 20}
-	if _, err := loadBoxGlyphFT(atlas, huge); err == nil {
+	if _, err := loadBoxGlyphFT(atlas, huge, curveNone); err == nil {
 		t.Error("huge cell: want allocation error")
 	}
 }
@@ -327,8 +327,8 @@ func TestByIDCacheKeyDistinguishesSize(t *testing.T) {
 	}
 	g := Glyph{GlyphID: gid, Index: 0, Codepoint: 1}
 
-	big := r.getOrLoadGlyph("H", item("Sans 40"), g, 0, 0)
-	small := r.getOrLoadGlyph("H", item("Sans 10"), g, 0, 0)
+	big := r.getOrLoadGlyph("H", item("Sans 40"), g, 0, 0, curveNone)
+	small := r.getOrLoadGlyph("H", item("Sans 10"), g, 0, 0, curveNone)
 
 	if big.Width == small.Width && big.Height == small.Height {
 		t.Errorf("40px and 10px glyphs share a cell (%dx%d): by-id cache key ignores font size",
@@ -388,7 +388,7 @@ func TestLoadGlyphByIDFT(t *testing.T) {
 	}
 	defer atlas.Free()
 
-	res, err := loadGlyphByIDFT(atlas, path, gid, Item{}, 0, 0, 1.0)
+	res, err := loadGlyphByIDFT(atlas, path, gid, Item{}, 0, 0, 1.0, curveNone)
 	if err != nil {
 		t.Fatalf("loadGlyphByIDFT: %v", err)
 	}
@@ -769,7 +769,7 @@ func TestLoadGlyphByIDNoInk(t *testing.T) {
 	}
 	defer atlas.Free()
 
-	res, err := loadGlyphByIDFT(atlas, path, gid, Item{}, 0, 0, 1.0)
+	res, err := loadGlyphByIDFT(atlas, path, gid, Item{}, 0, 0, 1.0, curveNone)
 	if err != nil {
 		t.Fatalf("loadGlyphByIDFT on a no-ink glyph errored: %v", err)
 	}
