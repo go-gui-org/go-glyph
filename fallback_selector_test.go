@@ -190,7 +190,7 @@ func TestRenderTextPathMatchesProbeFallback(t *testing.T) {
 	}
 
 	ensure := func(p string) ftFont {
-		return newFTFontFromPath(ctx.ftLib, p, 16)
+		return newFTFontFromPath(ctx.ftLib, p, 16, varSpec{})
 	}
 
 	for _, sym := range []string{"✓", "⏵", "中", "∑", "☀"} {

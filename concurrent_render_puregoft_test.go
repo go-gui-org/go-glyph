@@ -36,7 +36,7 @@ func TestConcurrentRenderSharesFace(t *testing.T) {
 	if cf == nil {
 		t.Fatalf("loadCachedFace(%q) = nil", path)
 	}
-	buf := shapeWith(cf, 32, emoji)
+	buf := shapeWith(cf, 32, varSpec{}, emoji)
 	if buf == nil || len(buf.Info) == 0 {
 		t.Fatalf("%q did not shape in %q", emoji, path)
 	}
@@ -56,8 +56,8 @@ func TestConcurrentRenderSharesFace(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for range iters {
-			renderGlyphByID(nil, path, 32, 0, 0, gid, true)
-			renderRun(nil, path, 32, 0, 0, emoji, "", 0, false, true)
+			renderGlyphByID(nil, path, 32, 0, 0, gid, rasterOpts{hint: true})
+			renderRun(nil, path, 32, 0, 0, emoji, "", 0, false, rasterOpts{hint: true})
 		}
 	}()
 	wg.Wait()

@@ -179,7 +179,7 @@ func (ctx *Context) buildScriptFallbacks(clusters []graphemeCluster,
 		fb, opened := fontByPath[path]
 		if !opened {
 			fit := fallbackFitScale(baseFont.cf, loadCachedFace(path))
-			fb = newFTFontFromPath(ctx.ftLib, path, fontSize*fit)
+			fb = newFTFontFromPath(ctx.ftLib, path, fontSize*fit, baseFont.vary)
 			fb.fit = fit
 			fontByPath[path] = fb
 			if fb.face != nil {
@@ -315,7 +315,9 @@ func (ctx *Context) emojiAdvance(text string, em float64) (float64, bool) {
 		if cov == nil || !cov.color || !cov.covers(text) {
 			continue
 		}
-		f := openFTFont(path, em)
+		// Color fonts draw from their base face (renderColorGlyph), so
+		// the advance comes from it too: no variations.
+		f := openFTFont(path, em, varSpec{})
 		buf := f.shape(text)
 		if buf == nil {
 			continue
@@ -620,17 +622,20 @@ func (ctx *Context) applyRichScriptFallbacks(clusters []graphemeCluster,
 	// Keyed by path AND size: rich text mixes sizes (headings, sub/
 	// superscript at 0.58×), and a fallback font's advances are shaped at its
 	// pixel size, so the same path at two sizes must be two distinct fonts.
+	// The variations of the run (vary) select the instance of a variable
+	// fallback, so they are part of the key too.
 	type fontKey struct {
 		path string
 		size float64
+		vary uint64
 	}
 	fontByKey := make(map[fontKey]ftFont)
 	var fontsToClose []ftFont
-	ensureFont := func(path string, size float64) ftFont {
-		k := fontKey{path, size}
+	ensureFont := func(path string, size float64, v varSpec) ftFont {
+		k := fontKey{path, size, v.hash()}
 		fb, opened := fontByKey[k]
 		if !opened {
-			fb = newFTFontFromPath(ctx.ftLib, path, size)
+			fb = newFTFontFromPath(ctx.ftLib, path, size, v)
 			fontByKey[k] = fb
 			if fb.face != nil {
 				fontsToClose = append(fontsToClose, fb)
@@ -660,7 +665,7 @@ func (ctx *Context) applyRichScriptFallbacks(clusters []graphemeCluster,
 		if !cached {
 			fontSize := runFont.size
 			path, isColor := ctx.probeFallback(cl.text, false,
-				func(p string) ftFont { return ensureFont(p, fontSize) })
+				func(p string) ftFont { return ensureFont(p, fontSize, runFont.vary) })
 			res = fbResolution{path: path, isColor: isColor}
 			ctx.cacheFallback(cl.text, res)
 		}
@@ -672,7 +677,7 @@ func (ctx *Context) applyRichScriptFallbacks(clusters []graphemeCluster,
 		// scaled size is part of fontKey, so two runs at different sizes keep
 		// their own faces.
 		fit := fallbackFitScale(runFont.cf, loadCachedFace(res.path))
-		fb := ensureFont(res.path, runFont.size*fit)
+		fb := ensureFont(res.path, runFont.size*fit, runFont.vary)
 		if fb.face == nil {
 			continue
 		}

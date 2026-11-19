@@ -235,7 +235,7 @@ func TestFallbackItemFontScaleMatchesAdvance(t *testing.T) {
 		}
 		_, baseSize, _, _ := resolveFTFontParams(item.Style, 1.0)
 		f := newFTFontFromPath(ctx.ftLib, item.FontPath,
-			baseSize*itemFontScale(item))
+			baseSize*itemFontScale(item), varSpecFor(item.Style, 1.0))
 		if f.face == nil {
 			t.Fatalf("fallback item font %q did not open", item.FontPath)
 		}

@@ -26,7 +26,7 @@ func TestOpenFTFontScaleBounded(t *testing.T) {
 		t.Skip("no installed fonts")
 	}
 	for _, size := range []float64{1e12, math.Inf(1), math.NaN()} {
-		f := openFTFont(path, size)
+		f := openFTFont(path, size, varSpec{})
 		if f.cf == nil {
 			t.Skipf("font %s did not load", path)
 		}
