@@ -6,13 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v1.28.0] - 2026-11-19
 
 ### Added
 
 - **`RendererConfig.DisableHinting`, `Renderer.SetHinting`,
   `TextSystem.SetHinting`.** Turn off the stem snapping described below. A
   change clears the glyph cache. No effect on WASM.
+
+- **Variable fonts follow `VariationAxes`, with automatic optical sizing
+  (#194).** Variable fonts drew their default instance at every size, and
+  `TextStyle.Features.VariationAxes` had no effect. `opsz` is now set to the
+  point size (px / scale factor), clamped to the axis and rounded to half
+  points, as CoreText and browsers do. A caller `opsz` in `VariationAxes`
+  replaces it. Each axis set gets a cached instance face sharing the parsed
+  font (at most 64 per font). The shaper gets the point size (HarfBuzz Ptem),
+  so the AAT `trak` table applies at the real size. The glyph cache key
+  includes `VariationAxes`. SF widths now match CoreText within 1%.
+
+- **Stems are darkened on macOS to match Core Graphics weight (#194).**
+  Before the fill, each glyph outline moves outward by a fraction of a pixel
+  (the `FT_Outline_EmboldenXY` method). The amount grows with the size (with
+  a cap) and with the luminance bucket of the text color. Advances do not
+  change, so layout does not change. Strokes are not darkened. macOS only.
 
 ### Fixed
 
@@ -34,6 +50,18 @@ and this project adheres to
   is part of the glyph cache key, so the same glyph drawn dark and light uses
   two atlas entries. Color glyphs and emoji are not changed. WASM is not
   changed, because Canvas2D does its own gamma.
+
+- **Windows line box uses OS/2 typo metrics when the font lacks
+  `USE_TYPO_METRICS` (#195).** Segoe UI's line box came from hhea
+  (2210/514 @ 2048 = 1.33 em), ~12% taller than SF on macOS. On Windows, the
+  line box is now built from the OS/2 typo metrics: the recommended line
+  height of the typo values (1.15 em floor), with the extra space split evenly
+  above and below (CSS half-leading). Leading is folded in, so
+  `FontMetrics().LineGap` reports 0 for those fonts. Typo values apply only
+  when ascent+descent >= 0.75 em and the typo line is shorter than hhea, so
+  placeholder or hostile values fall back instead of growing a line. Segoe UI
+  at 16 px: line advance 21.28 -> 18.40 px; bitmap emoji sized by
+  `Item.Ascent` renders ~23% smaller.
 
 ## [v1.27.0] - 2026-11-17
 
