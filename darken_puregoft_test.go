@@ -175,10 +175,13 @@ func TestStemDarkeningInk(t *testing.T) {
 		20: {763.16, 859.48, 939.23},
 		28: {1459.32, 1639.10, 1639.10},
 	}
-	const tolerance = 0.10
+	const tolerance = 0.08
 	for size, want := range coreGraphics {
 		for _, c := range []coverageCurve{curveNone, curveMid, curveLight} {
-			ro := rasterOpts{hint: true, darken: true, curve: c}
+			// vary as a Renderer at scale 1 sets it: the auto opsz instance,
+			// which is what Core Graphics draws.
+			ro := rasterOpts{hint: true, darken: true, curve: c,
+				vary: varSpec{scale: 1}}
 			res, _ := renderMonoRun(nil, path, size, 0, "Hamburgefonstiv", "", 0,
 				false, ro)
 			if res == nil {

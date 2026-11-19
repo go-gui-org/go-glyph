@@ -26,7 +26,7 @@ func TestShapeRecoversAATPanic(t *testing.T) {
 			continue
 		}
 		ran = true
-		f := newFTFontFromPath(FTLibrary{}, c.path, 16)
+		f := newFTFontFromPath(FTLibrary{}, c.path, 16, varSpec{})
 		if f.face == nil {
 			t.Fatalf("failed to load %s", c.path)
 		}
@@ -35,7 +35,7 @@ func TestShapeRecoversAATPanic(t *testing.T) {
 		// (ftFont.shape via hasGlyphs) and the render path (shapeWith).
 		_ = f.hasGlyphs(c.text)
 		if cf := loadCachedFace(c.path); cf != nil {
-			_ = shapeWith(cf, 16, c.text)
+			_ = shapeWith(cf, 16, varSpec{}, c.text)
 		}
 	}
 	if !ran {

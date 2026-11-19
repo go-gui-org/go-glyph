@@ -38,7 +38,7 @@ func TestLayoutRichTextEmojiUseOriginalColor(t *testing.T) {
 		if cov == nil || !cov.color || !cov.covers("\U0001F600") {
 			continue
 		}
-		f := newFTFontFromPath(ctx.ftLib, p, 16)
+		f := newFTFontFromPath(ctx.ftLib, p, 16, varSpec{})
 		ok := f.isColorFont() && f.hasGlyphs("\U0001F600")
 		f.close()
 		if ok {

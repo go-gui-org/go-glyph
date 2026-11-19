@@ -98,7 +98,8 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	paths := fontFallbackPaths(pathBuf[:0], renderFontPaths(fontPaths), family,
 		bold, italic)
 	subpixelShift := float64(subpixelBin) / 4.0
-	ro := rasterOpts{hint: hint, darken: stemDarkening, curve: curve}
+	ro := rasterOpts{hint: hint, darken: stemDarkening, curve: curve,
+		vary: varSpecFor(item.Style, scaleFactor)}
 
 	var res *rasterResult
 
@@ -184,7 +185,8 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	paths := fontFallbackPaths(pathBuf[:0], renderFontPaths(fontPaths), family,
 		bold, italic)
 	subpixelShift := float64(subpixelBin) / 4.0
-	ro := rasterOpts{hint: hint, darken: stemDarkening, curve: curve}
+	ro := rasterOpts{hint: hint, darken: stemDarkening, curve: curve,
+		vary: varSpecFor(item.Style, scaleFactor)}
 	sw := float64(strokeWidth)
 
 	var res *rasterResult
@@ -233,7 +235,8 @@ func loadGlyphByIDFT(atlas *GlyphAtlas, path string, gid uint32, item Item,
 	_, fontSize, _, _ := resolveFTFontParams(item.Style, scaleFactor)
 	fontSize *= itemFontScale(item)
 	subpixelShift := float64(subpixelBin) / 4.0
-	ro := rasterOpts{hint: hint, darken: stemDarkening, curve: curve}
+	ro := rasterOpts{hint: hint, darken: stemDarkening, curve: curve,
+		vary: varSpecFor(item.Style, scaleFactor)}
 	res := renderGlyphByID(atlas, path, fontSize, float64(strokeWidth),
 		subpixelShift, gid, ro)
 	return insertRaster(atlas, res, curve)
@@ -318,7 +321,7 @@ func renderRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift 
 	text string, runText string, targetRuneIdx int,
 	rejectNotdef bool, ro rasterOpts) (*rasterResult, bool) {
 
-	cf := loadCachedFace(path)
+	cf := loadFace(path, size, ro.vary)
 	if cf == nil {
 		return nil, false
 	}
@@ -327,7 +330,7 @@ func renderRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift 
 	if shapeText == "" || shapeText == text {
 		shapeText = text
 	}
-	buf := shapeWith(cf, size, shapeText)
+	buf := shapeWith(cf, size, ro.vary, shapeText)
 	defer releaseShapeBuffer(buf) // nil-safe
 	if buf == nil || len(buf.Info) == 0 {
 		return nil, false
@@ -385,7 +388,7 @@ func renderRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift 
 func renderGlyphByID(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift float64,
 	gid uint32, ro rasterOpts) *rasterResult {
 
-	cf := loadCachedFace(path)
+	cf := loadFace(path, size, ro.vary)
 	if cf == nil {
 		return nil
 	}
@@ -666,7 +669,7 @@ func renderColorGlyph(atlas *GlyphAtlas, path string, size float64, text string)
 		return nil, false
 	}
 
-	buf := shapeWith(cf, size, text)
+	buf := shapeWith(cf, size, varSpec{}, text)
 	defer releaseShapeBuffer(buf) // nil-safe
 	if buf == nil || len(buf.Info) == 0 {
 		return nil, false
@@ -843,7 +846,7 @@ func renderCOLRGlyph(atlas *GlyphAtlas, path string, size float64, text string,
 	if cf == nil || cf.face.COLR == nil || len(cf.face.CPAL) == 0 {
 		return nil, false
 	}
-	buf := shapeWith(cf, size, text)
+	buf := shapeWith(cf, size, varSpec{}, text)
 	defer releaseShapeBuffer(buf) // nil-safe
 	if buf == nil || len(buf.Info) == 0 {
 		return nil, false
@@ -1004,11 +1007,11 @@ func paletteColor(palette []tables.ColorRecord, idx uint16, fg color.NRGBA) colo
 // Info/Pos (skipping the release is safe but forgoes reuse). A nil return
 // means the size is unusable (see validRenderSize) or shaping produced
 // nothing; callers already nil-check.
-func shapeWith(cf *cachedFace, size float64, text string) *harfbuzz.Buffer {
+func shapeWith(cf *cachedFace, size float64, v varSpec, text string) *harfbuzz.Buffer {
 	if cf == nil || !validRenderSize(size) {
 		return nil
 	}
-	return shapeBuffer(cf, int32(math.Round(size*64)), text)
+	return shapeBuffer(cf, int32(math.Round(size*64)), v.ptem(size), text)
 }
 
 // clampBitmapDim keeps a bitmap dimension within the 1..MaxGlyphSize

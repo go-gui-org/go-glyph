@@ -191,6 +191,12 @@ var capHeightProbes = [...]rune{'H', 'M', 'X'}
 // race the color path's SetPpem+GlyphData pair on the same cachedFace, nor
 // another Context's measurement of the same face.
 func (cf *cachedFace) capEm() float64 {
+	// An instance measures on its base face. The raster side computes the fit
+	// from base faces (textFallbackFitScale), so layout must use the same cap
+	// height, or a fallback would shape and draw at two sizes.
+	if cf.base != nil {
+		return cf.base.capEm()
+	}
 	cf.mu.Lock()
 	defer cf.mu.Unlock()
 	if cf.capMeasured {

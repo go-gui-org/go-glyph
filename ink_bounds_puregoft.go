@@ -33,16 +33,20 @@ func (ctx *Context) LayoutInkBounds(layout *Layout) (Rect, bool) {
 	painted := false
 
 	for _, item := range layout.Items {
-		cf := loadCachedFace(item.FontPath)
-		if cf == nil || cf.face == nil {
-			return Rect{}, false
-		}
 		// Font units → logical pixels. Shaping ran at the device size
 		// (style size × DPI scale × the fallback cap-height fit), and the
 		// layout's coordinates were divided back by the DPI scale, so the
 		// logical em is the style size times the fit factor.
 		_, sizePx, _, _ := resolveFTFontParams(item.Style, ctx.scaleFactor)
-		em := sizePx * itemFontScale(item) / float64(ctx.scaleFactor)
+		sizePx *= itemFontScale(item)
+		// The instance layout shaped with, so the ink is that of the
+		// outlines the renderer draws.
+		cf := loadFace(item.FontPath, sizePx,
+			varSpecFor(item.Style, ctx.scaleFactor))
+		if cf == nil || cf.face == nil {
+			return Rect{}, false
+		}
+		em := sizePx / float64(ctx.scaleFactor)
 		unit := em / float64(nonZeroUpem(cf.upem))
 
 		penX, penY := item.X, item.Y

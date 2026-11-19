@@ -18,7 +18,7 @@ func TestEmojiRendersColor(t *testing.T) {
 	}
 	hasEmoji := false
 	for _, p := range ctx.fallbackPaths {
-		f := newFTFontFromPath(ctx.ftLib, p, 32)
+		f := newFTFontFromPath(ctx.ftLib, p, 32, varSpec{})
 		if f.isColorFont() && f.hasGlyphs("\U0001F600") {
 			hasEmoji = true
 		}

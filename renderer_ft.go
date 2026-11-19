@@ -104,6 +104,15 @@ func hashGlyphStyle(key uint64, item Item, bin, targetH int,
 	// rasters. Zero (the unscaled case) hashes as itself, so keys for items
 	// that predate the field are unchanged.
 	key = fnvHashF32(key, float32(item.FontScale))
+	// The variation axes select the instance of a variable font, so they
+	// change the outline. The auto opsz follows the size, which is keyed
+	// above.
+	if f := item.Style.Features; f != nil {
+		for _, a := range f.VariationAxes {
+			key = fnvHashString(key, a.Tag)
+			key = fnvHashF32(key, a.Value)
+		}
+	}
 	return key
 }
 

@@ -249,7 +249,7 @@ func TestSingleCodepoint(t *testing.T) {
 // only default-ignorable code points counts as covered (shapers drop them).
 func TestFaceCovers(t *testing.T) {
 	path, size, _ := resolveTestGlyph(t, "H") // installed font path
-	f := openFTFont(path, size)
+	f := openFTFont(path, size, varSpec{})
 	if f.face == nil {
 		t.Skipf("could not open face %q", path)
 	}
@@ -278,8 +278,8 @@ func TestPooledFontRescales(t *testing.T) {
 	if cf == nil {
 		t.Skipf("could not load face %q", path)
 	}
-	small := shapeWith(cf, 20, "H")
-	big := shapeWith(cf, 40, "H") // reuses the just-returned pooled font
+	small := shapeWith(cf, 20, varSpec{}, "H")
+	big := shapeWith(cf, 40, varSpec{}, "H") // reuses the just-returned pooled font
 	if small == nil || big == nil ||
 		len(small.Pos) != 1 || len(big.Pos) != 1 {
 		t.Skip("H did not shape to a single glyph in the default font")
@@ -307,7 +307,7 @@ func TestPooledShapeBufferReset(t *testing.T) {
 		t.Skipf("could not load face %q", path)
 	}
 
-	ltr := shapeWith(cf, 20, "HHH")
+	ltr := shapeWith(cf, 20, varSpec{}, "HHH")
 	if ltr == nil || len(ltr.Info) != 3 {
 		t.Skip("HHH did not shape to three glyphs in the default font")
 	}
@@ -319,7 +319,7 @@ func TestPooledShapeBufferReset(t *testing.T) {
 	// Arabic through the (likely recycled) buffer: stale content would leave
 	// more than one glyph; stale segment properties would keep LeftToRight,
 	// since GuessSegmentProperties only fills unset fields.
-	rtl := shapeWith(cf, 20, "\u0628") // ARABIC LETTER BEH
+	rtl := shapeWith(cf, 20, varSpec{}, "\u0628") // ARABIC LETTER BEH
 	if rtl == nil {
 		t.Fatal("shapeWith(Arabic) = nil, want buffer")
 	}
@@ -375,7 +375,7 @@ func BenchmarkMeasureString(b *testing.B) {
 	if len(paths) == 0 {
 		b.Skip("no font installed")
 	}
-	f := openFTFont(paths[0], size)
+	f := openFTFont(paths[0], size, varSpec{})
 	if f.face == nil {
 		b.Skipf("could not open face %q", paths[0])
 	}

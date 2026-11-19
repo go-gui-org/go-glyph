@@ -50,11 +50,13 @@ const (
 // darkenScale holds the per-bucket multiplier of the base amounts. Dark
 // text keeps raw coverage (curveNone) and so needs the full macOS amount.
 // Light text already gets heavier edges from its gamma curve, so it needs
-// less outline growth to reach the same ink.
+// less outline growth to reach the same ink. The values were fitted with
+// the auto optical size on (varfont_puregoft.go): the small-size designs are
+// heavier, so they need less darkening than the default instance did.
 var darkenScale = [...]float64{
-	curveNone:  0.65,
-	curveMid:   0.8,
-	curveLight: 0.85,
+	curveNone:  0.55,
+	curveMid:   0.6,
+	curveLight: 0.7,
 }
 
 // rasterOpts carries the per-load raster settings from the glyph loaders to
@@ -67,6 +69,8 @@ type rasterOpts struct {
 	// curve is the coverage curve of the text color. It selects the
 	// darkening amount. The curve itself is applied later, in insertRaster.
 	curve coverageCurve
+	// vary selects the instance of a variable font (see varfont_puregoft.go).
+	vary varSpec
 }
 
 // darkenAmount returns the outward move of an edge, in device px, for text

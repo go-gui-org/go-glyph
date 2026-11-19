@@ -65,13 +65,23 @@ type cachedFace struct {
 	// caches that Shape writes. The pool hands each shape a font it owns
 	// alone, so shaping needs no lock.
 	hbPool sync.Pool
+
+	// axes are the variation axes of a variable font (nil for a static font
+	// and for an instance). See varfont_puregoft.go.
+	axes []tables.VariationAxisRecord
+	// base is the face an instance was made from (nil for a base face).
+	base *cachedFace
+	// instMu guards instances, the instances of this base face by axis
+	// values. It is not mu, so making an instance does not wait for a raster.
+	instMu    sync.Mutex
+	instances map[instKey]*cachedFace
 }
 
 // getHB borrows a HarfBuzz font scaled to scale (26.6 px) from the pool,
 // building one on a miss. The caller owns it until putHB and may Shape with
 // it freely. scale is (re)applied on every borrow since a pooled font may
 // have last been used at another size.
-func (cf *cachedFace) getHB(scale int32) *harfbuzz.Font {
+func (cf *cachedFace) getHB(scale int32, ptem float32) *harfbuzz.Font {
 	f, _ := cf.hbPool.Get().(*harfbuzz.Font)
 	if f == nil {
 		// A private Face per shaping font. font.Face keeps lazy caches
@@ -81,9 +91,18 @@ func (cf *cachedFace) getHB(scale int32) *harfbuzz.Font {
 		// parsed tables and is read-only after parse, so it is safe to share.
 		// The private Face also never sees the ppem the color path sets on
 		// cf.face, so shaped extents do not depend on render order.
-		f = harfbuzz.NewFont(font.NewFace(cf.face.Font))
+		// An instance's coords go on the private Face too, or the shaper
+		// would use the advances of the default instance.
+		face := font.NewFace(cf.face.Font)
+		face.SetCoords(cf.face.Coords())
+		f = harfbuzz.NewFont(face)
 	}
 	f.XScale, f.YScale = scale, scale
+	// Ptem is the point size. The shaper reads it for the AAT trak table
+	// (size-dependent tracking, which SF has), and uses 12 pt when it is
+	// 0. A pooled font may have last shaped at another size, so it is set
+	// on every borrow too.
+	f.Ptem = ptem
 	return f
 }
 
@@ -327,6 +346,7 @@ func parseFace(path string) (cf *cachedFace, size int64) {
 		upem:  face.Upem(),
 		color: hasColorTable(ld),
 		sbix:  slices.Contains(ld.Tables(), sbixTag),
+		axes:  parseVarAxes(ld),
 	}, size
 }
 
@@ -357,6 +377,10 @@ type ftFont struct {
 	fit   float64
 	scale int32 // 26.6 shaping scale = round(size*64)
 	upem  uint16
+	// vary selected the instance of a variable font (cf is that instance).
+	// A fallback font opened for this font's text uses the same varSpec, as
+	// the renderer does from the item's style.
+	vary varSpec
 }
 
 // newFTFont creates a shaping font from a TextStyle, trying the
@@ -365,10 +389,11 @@ func newFTFont(_ FTLibrary, fontPaths map[string]string,
 	style TextStyle, scaleFactor float32) ftFont {
 
 	family, size, bold, italic := resolveFTFontParams(style, scaleFactor)
+	v := varSpecFor(style, scaleFactor)
 	var pathBuf [maxFallbackPaths]string
 	for _, path := range fontFallbackPaths(pathBuf[:0], fontPaths, family,
 		bold, italic) {
-		if f := openFTFont(path, size); f.face != nil {
+		if f := openFTFont(path, size, v); f.face != nil {
 			return f
 		}
 	}
@@ -376,13 +401,14 @@ func newFTFont(_ FTLibrary, fontPaths map[string]string,
 }
 
 // newFTFontFromPath creates a shaping font from a file path and size
-// (in physical pixels).
-func newFTFontFromPath(_ FTLibrary, path string, fontSize float64) ftFont {
-	return openFTFont(path, fontSize)
+// (in physical pixels), with the variations of v.
+func newFTFontFromPath(_ FTLibrary, path string, fontSize float64, v varSpec) ftFont {
+	return openFTFont(path, fontSize, v)
 }
 
 // openFTFont builds an ftFont from a cached face at the given pixel size.
-func openFTFont(path string, size float64) ftFont {
+// For a variable font, the face is the instance v selects at that size.
+func openFTFont(path string, size float64, v varSpec) ftFont {
 	// The 26.6 scale is int32(size*64). A NaN, infinite or huge size would
 	// make that conversion implementation-defined (a negative scale on
 	// amd64). Callers pass resolved sizes, but newFTFontFromPath takes raw
@@ -392,7 +418,7 @@ func openFTFont(path string, size float64) ftFont {
 	} else if size > maxRenderSize {
 		size = maxRenderSize
 	}
-	cf := loadCachedFace(path)
+	cf := loadFace(path, size, v)
 	if cf == nil {
 		return ftFont{}
 	}
@@ -406,6 +432,7 @@ func openFTFont(path string, size float64) ftFont {
 		scale: int32(math.Round(size * 64)),
 		path:  path,
 		cf:    cf,
+		vary:  v,
 	}
 }
 
@@ -422,7 +449,7 @@ func (f *ftFont) close() {
 // shaping font is borrowed from the face pool for the duration of the shape
 // only.
 func (f ftFont) shape(text string) *harfbuzz.Buffer {
-	return shapeBuffer(f.cf, f.scale, text)
+	return shapeBuffer(f.cf, f.scale, f.vary.ptem(f.size), text)
 }
 
 // shapeBufPool recycles HarfBuzz buffers across shapes. NewBuffer starts with
@@ -477,7 +504,7 @@ func releaseShapeBuffer(buf *harfbuzz.Buffer) {
 // to its pool after a clean shape; after a recovered panic both the font and
 // the buffer are discarded, since the panic may have left either corrupt
 // mid-shape.
-func shapeBuffer(cf *cachedFace, scale int32, text string) *harfbuzz.Buffer {
+func shapeBuffer(cf *cachedFace, scale int32, ptem float32, text string) *harfbuzz.Buffer {
 	if cf == nil || len(text) == 0 {
 		return nil
 	}
@@ -492,7 +519,7 @@ func shapeBuffer(cf *cachedFace, scale int32, text string) *harfbuzz.Buffer {
 		i++
 	}
 	buf.GuessSegmentProperties()
-	hb := cf.getHB(scale)
+	hb := cf.getHB(scale, ptem)
 	if !safeShape(buf, hb) {
 		return nil // discard hb AND buf: neither returns to its pool
 	}

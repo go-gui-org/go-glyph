@@ -37,7 +37,7 @@ func resolveTestGlyph(t *testing.T, ch string) (path string, size float64, gid u
 	if cf == nil {
 		t.Skipf("could not load face %q", path)
 	}
-	buf := shapeWith(cf, fontSize, ch)
+	buf := shapeWith(cf, fontSize, varSpec{}, ch)
 	if buf == nil || len(buf.Info) != 1 {
 		t.Skipf("%q did not shape to a single glyph", ch)
 	}
