@@ -91,7 +91,7 @@ type rasterResult struct {
 // recent Context (ftFontPathsSingleton).
 func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	ch string, runText string, targetRuneIdx int, item Item, subpixelBin int,
-	scaleFactor float32, curve coverageCurve) (LoadGlyphResult, error) {
+	scaleFactor float32, curve coverageCurve, hint bool) (LoadGlyphResult, error) {
 
 	family, fontSize, bold, italic := resolveFTFontParams(item.Style, scaleFactor)
 	var pathBuf [maxFallbackPaths]string
@@ -120,7 +120,7 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	if res == nil {
 		for _, fontPath := range paths {
 			r, rejected := renderMonoRun(atlas, fontPath, fontSize,
-				subpixelShift, ch, runText, targetRuneIdx, true)
+				subpixelShift, ch, runText, targetRuneIdx, true, hint)
 			if !rejected {
 				res = r
 				covered = true
@@ -136,7 +136,7 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 			// into its own item.
 			r, rejected := renderMonoRun(atlas, fp,
 				fontSize*textFallbackFitScale(paths, fp), subpixelShift,
-				ch, runText, targetRuneIdx, true)
+				ch, runText, targetRuneIdx, true, hint)
 			if !rejected {
 				res = r
 				covered = true
@@ -147,7 +147,7 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 
 	if !covered && res == nil && len(paths) > 0 {
 		res, _ = renderMonoRun(atlas, paths[0], fontSize, subpixelShift,
-			ch, runText, targetRuneIdx, false)
+			ch, runText, targetRuneIdx, false, hint)
 	}
 
 	return insertRaster(atlas, res, curve)
@@ -171,11 +171,11 @@ func orderedTextFallbackPaths(ch string) []string {
 func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	ch string, runText string, targetRuneIdx int, item Item,
 	strokeWidth float32, subpixelBin int,
-	scaleFactor float32, curve coverageCurve) (LoadGlyphResult, error) {
+	scaleFactor float32, curve coverageCurve, hint bool) (LoadGlyphResult, error) {
 
 	if strokeWidth <= 0 {
 		return loadGlyphFT(atlas, fontPaths, ch, runText, targetRuneIdx, item,
-			subpixelBin, scaleFactor, curve)
+			subpixelBin, scaleFactor, curve, hint)
 	}
 
 	family, fontSize, bold, italic := resolveFTFontParams(item.Style, scaleFactor)
@@ -190,7 +190,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	covered := false
 	for _, fontPath := range paths {
 		r, rejected := renderStrokedRun(atlas, fontPath, fontSize, sw,
-			subpixelShift, ch, runText, targetRuneIdx, true)
+			subpixelShift, ch, runText, targetRuneIdx, true, hint)
 		if !rejected {
 			res = r
 			covered = true
@@ -202,7 +202,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 		for _, fp := range orderedTextFallbackPaths(ch) {
 			r, rejected := renderStrokedRun(atlas, fp,
 				fontSize*textFallbackFitScale(paths, fp), sw,
-				subpixelShift, ch, runText, targetRuneIdx, true)
+				subpixelShift, ch, runText, targetRuneIdx, true, hint)
 			if !rejected {
 				res = r
 				covered = true
@@ -213,7 +213,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 
 	if !covered && res == nil && len(paths) > 0 {
 		res, _ = renderStrokedRun(atlas, paths[0], fontSize, sw,
-			subpixelShift, ch, runText, targetRuneIdx, false)
+			subpixelShift, ch, runText, targetRuneIdx, false, hint)
 	}
 
 	return insertRaster(atlas, res, curve)
@@ -226,13 +226,13 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 // outline instead of filling it.
 func loadGlyphByIDFT(atlas *GlyphAtlas, path string, gid uint32, item Item,
 	strokeWidth float32, subpixelBin int,
-	scaleFactor float32, curve coverageCurve) (LoadGlyphResult, error) {
+	scaleFactor float32, curve coverageCurve, hint bool) (LoadGlyphResult, error) {
 
 	_, fontSize, _, _ := resolveFTFontParams(item.Style, scaleFactor)
 	fontSize *= itemFontScale(item)
 	subpixelShift := float64(subpixelBin) / 4.0
 	res := renderGlyphByID(atlas, path, fontSize, float64(strokeWidth),
-		subpixelShift, gid)
+		subpixelShift, gid, hint)
 	return insertRaster(atlas, res, curve)
 }
 
@@ -279,23 +279,26 @@ type placedGlyph struct {
 	segs       []font.Segment
 	penX       float64
 	xOff, yOff float64
+	// hx snaps the glyph's vertical stems to whole device pixels (see
+	// buildXHint). The zero value is the identity map (no hinting).
+	hx xHint
 }
 
 // renderMonoRun rasterizes filled outline glyphs (no stroke).
 func renderMonoRun(atlas *GlyphAtlas, path string, size, subpixelShift float64,
 	text string, runText string, targetRuneIdx int,
-	rejectNotdef bool) (*rasterResult, bool) {
+	rejectNotdef bool, hint bool) (*rasterResult, bool) {
 	return renderRun(atlas, path, size, 0, subpixelShift, text, runText,
-		targetRuneIdx, rejectNotdef)
+		targetRuneIdx, rejectNotdef, hint)
 }
 
 // renderStrokedRun rasterizes the stroke border of the outline glyphs at
 // the given stroke radius, using the pure-Go stroker.
 func renderStrokedRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift float64,
 	text string, runText string, targetRuneIdx int,
-	rejectNotdef bool) (*rasterResult, bool) {
+	rejectNotdef bool, hint bool) (*rasterResult, bool) {
 	return renderRun(atlas, path, size, strokeWidth, subpixelShift, text, runText,
-		targetRuneIdx, rejectNotdef)
+		targetRuneIdx, rejectNotdef, hint)
 }
 
 // renderRun shapes text with the given font and rasterizes the resulting
@@ -310,7 +313,7 @@ func renderStrokedRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixe
 // not rasterized.
 func renderRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift float64,
 	text string, runText string, targetRuneIdx int,
-	rejectNotdef bool) (*rasterResult, bool) {
+	rejectNotdef bool, hint bool) (*rasterResult, bool) {
 
 	cf := loadCachedFace(path)
 	if cf == nil {
@@ -366,7 +369,7 @@ func renderRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift 
 		}
 		penX += float64(pos.XAdvance) / 64.0
 	}
-	return rasterizeGlyphs(atlas, cf, size, strokeWidth, glyphs)
+	return rasterizeGlyphs(atlas, cf, size, strokeWidth, glyphs, hint)
 }
 
 // renderGlyphByID rasterizes a single glyph by its font-specific glyph id,
@@ -377,7 +380,7 @@ func renderRun(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift 
 // the glyph has no outline (a space, or a bitmap/color glyph handled by the
 // color paths).
 func renderGlyphByID(atlas *GlyphAtlas, path string, size, strokeWidth, subpixelShift float64,
-	gid uint32) *rasterResult {
+	gid uint32, hint bool) *rasterResult {
 
 	cf := loadCachedFace(path)
 	if cf == nil {
@@ -393,7 +396,7 @@ func renderGlyphByID(atlas *GlyphAtlas, path string, size, strokeWidth, subpixel
 		return nil
 	}
 	glyphs := []placedGlyph{{segs: out.Segments, penX: subpixelShift}}
-	res, _ := rasterizeGlyphs(atlas, cf, size, strokeWidth, glyphs)
+	res, _ := rasterizeGlyphs(atlas, cf, size, strokeWidth, glyphs, hint)
 	return res
 }
 
@@ -406,7 +409,7 @@ func renderGlyphByID(atlas *GlyphAtlas, path string, size, strokeWidth, subpixel
 // When atlas is non-nil, scratch buffers from the atlas are reused to reduce
 // per-glyph allocations. When nil, buffers are freshly allocated (test path).
 func rasterizeGlyphs(atlas *GlyphAtlas, cf *cachedFace, size, strokeWidth float64,
-	glyphs []placedGlyph) (*rasterResult, bool) {
+	glyphs []placedGlyph, hint bool) (*rasterResult, bool) {
 
 	if len(glyphs) == 0 {
 		return nil, false
@@ -421,10 +424,20 @@ func rasterizeGlyphs(atlas *GlyphAtlas, cf *cachedFace, size, strokeWidth float6
 	if !(strokeR >= 0) {
 		strokeR = 0
 	}
+	// Stem snapping (issue 191) runs per glyph, before the bounds pass, so
+	// the bounds, the fill and the stroke all use the same hinted outline.
+	// Large sizes keep the raw outline: a half-pixel blur on a wide stem is
+	// not visible. glyphs belongs to the caller's render call, so writing
+	// hx into it is safe.
+	if hint && size <= hintMaxSize {
+		for i := range glyphs {
+			glyphs[i].hx = buildXHint(glyphs[i], scale, size)
+		}
+	}
 
 	// Map a font-unit point (Y up) to baseline-relative device px (Y down).
 	mapPt := func(g placedGlyph, fx, fy float32) (dx, dy float64) {
-		dx = g.penX + g.xOff + float64(fx)*scale
+		dx = g.hx.apply(g.penX + g.xOff + float64(fx)*scale)
 		dy = -float64(fy)*scale - g.yOff
 		return dx, dy
 	}

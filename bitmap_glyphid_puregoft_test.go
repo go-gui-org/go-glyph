@@ -54,11 +54,11 @@ func resolveTestGlyph(t *testing.T, ch string) (path string, size float64, gid u
 func TestRenderGlyphByIDMatchesShaped(t *testing.T) {
 	path, size, gid := resolveTestGlyph(t, "H")
 
-	byID := renderGlyphByID(nil, path, size, 0, 0, gid)
+	byID := renderGlyphByID(nil, path, size, 0, 0, gid, true)
 	if byID == nil {
 		t.Fatal("renderGlyphByID produced no ink for H")
 	}
-	shaped, _ := renderMonoRun(nil, path, size, 0, "H", "", 0, false)
+	shaped, _ := renderMonoRun(nil, path, size, 0, "H", "", 0, false, true)
 	if shaped == nil {
 		t.Fatal("renderMonoRun produced no ink for H")
 	}
@@ -81,11 +81,11 @@ func TestRenderGlyphByIDStrokedMatchesShaped(t *testing.T) {
 	path, size, gid := resolveTestGlyph(t, "H")
 	const sw = 1.5
 
-	byID := renderGlyphByID(nil, path, size, sw, 0, gid)
+	byID := renderGlyphByID(nil, path, size, sw, 0, gid, true)
 	if byID == nil {
 		t.Fatal("renderGlyphByID (stroked) produced no ink for H")
 	}
-	shaped, _ := renderStrokedRun(nil, path, size, sw, 0, "H", "", 0, false)
+	shaped, _ := renderStrokedRun(nil, path, size, sw, 0, "H", "", 0, false, true)
 	if shaped == nil {
 		t.Fatal("renderStrokedRun produced no ink for H")
 	}
@@ -108,7 +108,7 @@ func TestRenderGlyphByIDStrokedMatchesShaped(t *testing.T) {
 func TestRenderGlyphByIDHugeStrokeRefuses(t *testing.T) {
 	path, size, gid := resolveTestGlyph(t, "H")
 	for _, sw := range []float64{math.Inf(1), 1e300, 1e12} {
-		if got := renderGlyphByID(nil, path, size, sw, 0, gid); got != nil {
+		if got := renderGlyphByID(nil, path, size, sw, 0, gid, true); got != nil {
 			t.Errorf("strokeWidth %g: got %dx%d bitmap, want refusal",
 				sw, got.w, got.h)
 		}
@@ -130,7 +130,7 @@ func TestRenderGlyphByIDOversizeDownscales(t *testing.T) {
 			defer a.Free()
 			atlas = a
 		}
-		got := renderGlyphByID(atlas, path, 600, 0, 0, gid)
+		got := renderGlyphByID(atlas, path, 600, 0, 0, gid, true)
 		if got == nil {
 			t.Fatalf("atlas=%v: 600px H refused, want downscaled cell", atlasOn)
 		}
@@ -148,7 +148,7 @@ func TestRenderGlyphByIDOversizeDownscales(t *testing.T) {
 				len(got.data), got.w*got.h*4)
 		}
 	}
-	if got := renderGlyphByID(nil, path, 5000, 0, 0, gid); got != nil {
+	if got := renderGlyphByID(nil, path, 5000, 0, 0, gid, true); got != nil {
 		t.Errorf("5000px H: got %dx%d, want refusal past maxNaturalGlyphDim",
 			got.w, got.h)
 	}
@@ -158,12 +158,12 @@ func TestRenderGlyphByIDOversizeDownscales(t *testing.T) {
 // stroke width renders the plain filled glyph, the same as width 0.
 func TestRenderGlyphByIDBadStrokeRendersFilled(t *testing.T) {
 	path, size, gid := resolveTestGlyph(t, "H")
-	want := renderGlyphByID(nil, path, size, 0, 0, gid)
+	want := renderGlyphByID(nil, path, size, 0, 0, gid, true)
 	if want == nil {
 		t.Fatal("filled H produced no ink")
 	}
 	for _, sw := range []float64{-2, math.NaN(), math.Inf(-1)} {
-		got := renderGlyphByID(nil, path, size, sw, 0, gid)
+		got := renderGlyphByID(nil, path, size, sw, 0, gid, true)
 		if got == nil || got.w != want.w || got.h != want.h ||
 			!bytes.Equal(got.data, want.data) {
 			t.Errorf("strokeWidth %g: output differs from the filled glyph", sw)
@@ -176,7 +176,7 @@ func TestRenderGlyphByIDBadStrokeRendersFilled(t *testing.T) {
 func TestRenderGlyphByIDInvalidSizeRefuses(t *testing.T) {
 	path, _, gid := resolveTestGlyph(t, "H")
 	for _, s := range []float64{0, -12, math.NaN(), math.Inf(1)} {
-		if got := renderGlyphByID(nil, path, s, 0, 0, gid); got != nil {
+		if got := renderGlyphByID(nil, path, s, 0, 0, gid, true); got != nil {
 			t.Errorf("size %g: got %dx%d, want refusal", s, got.w, got.h)
 		}
 	}
@@ -388,7 +388,7 @@ func TestLoadGlyphByIDFT(t *testing.T) {
 	}
 	defer atlas.Free()
 
-	res, err := loadGlyphByIDFT(atlas, path, gid, Item{}, 0, 0, 1.0, curveNone)
+	res, err := loadGlyphByIDFT(atlas, path, gid, Item{}, 0, 0, 1.0, curveNone, true)
 	if err != nil {
 		t.Fatalf("loadGlyphByIDFT: %v", err)
 	}
@@ -769,7 +769,7 @@ func TestLoadGlyphByIDNoInk(t *testing.T) {
 	}
 	defer atlas.Free()
 
-	res, err := loadGlyphByIDFT(atlas, path, gid, Item{}, 0, 0, 1.0, curveNone)
+	res, err := loadGlyphByIDFT(atlas, path, gid, Item{}, 0, 0, 1.0, curveNone, true)
 	if err != nil {
 		t.Fatalf("loadGlyphByIDFT on a no-ink glyph errored: %v", err)
 	}

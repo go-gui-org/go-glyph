@@ -21,11 +21,17 @@ type Renderer struct {
 	// scratchRects holds per-clause selection rects in DrawComposition,
 	// reused so drawing the IME preedit each frame does not allocate.
 	scratchRects []Rect
+	// hint mirrors the native Renderer field. Canvas2D does its own
+	// hinting, so the WASM path only stores it.
+	hint bool
 }
 
 // RendererConfig configures the Renderer.
 type RendererConfig struct {
 	MaxGlyphCacheEntries int
+	// DisableHinting turns off stem snapping on the native path. The
+	// browser rasterizes WASM text, so this has no effect there.
+	DisableHinting bool
 }
 
 func NewRenderer(backend DrawBackend, scaleFactor float32) (*Renderer, error) {
@@ -56,6 +62,7 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32,
 		maxCacheEntries: maxEntries,
 		scaleFactor:     safeScale,
 		scaleInv:        1.0 / safeScale,
+		hint:            !cfg.DisableHinting,
 	}, nil
 }
 
@@ -78,6 +85,12 @@ func (r *Renderer) PurgeGlyphCache() {
 	clear(r.cache)
 	clear(r.pageKeys)
 	r.atlas.Reset()
+}
+
+// SetHinting stores the stem-snapping setting. It has no effect on the
+// WASM path, where the browser rasterizes text.
+func (r *Renderer) SetHinting(on bool) {
+	r.hint = on
 }
 
 func (r *Renderer) DrawLayout(layout Layout, x, y float32) {

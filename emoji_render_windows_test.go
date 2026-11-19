@@ -53,7 +53,7 @@ func TestEmojiRendersColorCOLR(t *testing.T) {
 		Descent:          8,
 		UseOriginalColor: true,
 	}
-	res, err := loadGlyphFT(atlas, nil, "\U0001F600", "", 0, item, 0, 1.0, curveNone)
+	res, err := loadGlyphFT(atlas, nil, "\U0001F600", "", 0, item, 0, 1.0, curveNone, true)
 	if err != nil {
 		t.Fatalf("loadGlyphFT: %v", err)
 	}
