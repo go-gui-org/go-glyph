@@ -20,3 +20,12 @@ func recommendedLineHeight(ascent, descent, leading, em float64) float64 {
 	}
 	return h
 }
+
+// typoLineBox returns the ascent and descent of a line box built from OS/2
+// typo metrics: the advance is recommendedLineHeight of the typo values, and
+// the space beyond asc+desc (line gap plus any floor) splits evenly above and
+// below, as CSS half-leading does. The leading is folded into the result.
+func typoLineBox(asc, desc, gap, em float64) (ascent, descent float64) {
+	half := (recommendedLineHeight(asc, desc, gap, em) - asc - desc) / 2
+	return asc + half, desc + half
+}

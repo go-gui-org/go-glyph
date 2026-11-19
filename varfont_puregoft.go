@@ -206,6 +206,7 @@ func (cf *cachedFace) newInstance(design []float32) (inst *cachedFace) {
 		upem:  cf.upem,
 		color: cf.color,
 		sbix:  cf.sbix,
+		typo:  cf.typo,
 		base:  cf,
 	}
 }
