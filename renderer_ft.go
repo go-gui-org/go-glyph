@@ -25,6 +25,7 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 		if item.HasStroke && item.Color.A == 0 {
 			continue
 		}
+		curve := fillCurve(item, false, curveNone) // once per item, not per glyph
 		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
 			if i < 0 || i >= len(layout.Glyphs) {
 				continue
@@ -43,7 +44,7 @@ func (r *Renderer) DrawLayoutPlaced(layout Layout,
 			if placement.Angle == 0 {
 				bin = r.computeSubpixelBin(placement.X, item.UseOriginalColor)
 			}
-			cgs[i] = r.getOrLoadGlyph(layout.Text, item, g, bin, 0)
+			cgs[i] = r.getOrLoadGlyph(layout.Text, item, g, bin, 0, curve)
 			r.touchPage(cgs[i])
 		}
 	}
@@ -107,9 +108,10 @@ func hashGlyphStyle(key uint64, item Item, bin, targetH int,
 }
 
 // getOrLoadGlyph retrieves from cache or rasterizes via FreeType.
-// strokeWidth > 0 requests a stroked (outline) glyph.
+// strokeWidth > 0 requests a stroked (outline) glyph. curve is the coverage
+// correction for the color the glyph will be tinted with (see curveFor).
 func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
-	bin int, strokeWidth float32) CachedGlyph {
+	bin int, strokeWidth float32, curve coverageCurve) CachedGlyph {
 
 	ch := glyphText(text, g)
 	if ch == "" {
@@ -162,6 +164,9 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 			key = fnvHashU64(key, uint64(targetRuneIdx))
 		}
 	}
+	// The curve changes the raster, so it is part of every key kind. Dark
+	// and light text of the same glyph are two atlas entries (issue #189).
+	key = fnvHashU64(key, uint64(curve))
 
 	if e, ok := r.cache[key]; ok {
 		// Refresh the LRU age only once it is glyphAgeRefreshFrames stale.
@@ -183,16 +188,16 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 	result, loadErr := guardGlyphLoad(func() (LoadGlyphResult, error) {
 		switch {
 		case isBox:
-			return loadBoxGlyphFT(r.atlas, boxM)
+			return loadBoxGlyphFT(r.atlas, boxM, curve)
 		case byID:
 			return loadGlyphByIDFT(r.atlas, item.FontPath,
-				g.GlyphID, item, strokeWidth, bin, r.scaleFactor)
+				g.GlyphID, item, strokeWidth, bin, r.scaleFactor, curve)
 		case strokeWidth > 0:
 			return loadStrokedGlyphFT(r.atlas, r.fontPaths, ch, runText,
-				targetRuneIdx, item, strokeWidth, bin, r.scaleFactor)
+				targetRuneIdx, item, strokeWidth, bin, r.scaleFactor, curve)
 		default:
 			return loadGlyphFT(r.atlas, r.fontPaths, ch, runText,
-				targetRuneIdx, item, bin, r.scaleFactor)
+				targetRuneIdx, item, bin, r.scaleFactor, curve)
 		}
 	})
 	if loadErr != nil {

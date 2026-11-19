@@ -29,9 +29,9 @@ func TestShapedNotdefCollapsesByID(t *testing.T) {
 	g1 := Glyph{GlyphID: 0, Shaped: true, Index: 0, Codepoint: 4}
 	g2 := Glyph{GlyphID: 0, Shaped: true, Index: 0, Codepoint: 4}
 
-	r.getOrLoadGlyph("\U00011100", item, g1, 0, 0) // Chakma letter aa
+	r.getOrLoadGlyph("\U00011100", item, g1, 0, 0, curveNone) // Chakma letter aa
 	after1 := len(r.cache)
-	r.getOrLoadGlyph("\U0001114C", item, g2, 0, 0) // different Chakma codepoint
+	r.getOrLoadGlyph("\U0001114C", item, g2, 0, 0, curveNone) // different Chakma codepoint
 	after2 := len(r.cache)
 
 	if after2 != after1 {
@@ -46,8 +46,8 @@ func TestShapedNotdefCollapsesByID(t *testing.T) {
 	u1 := Glyph{GlyphID: 0, Shaped: false, Index: 0, Codepoint: 4}
 	u2 := Glyph{GlyphID: 0, Shaped: false, Index: 0, Codepoint: 4}
 	before := len(r.cache)
-	r.getOrLoadGlyph("\U00011200", item, u1, 0, 0)
-	r.getOrLoadGlyph("\U00011201", item, u2, 0, 0)
+	r.getOrLoadGlyph("\U00011200", item, u1, 0, 0, curveNone)
+	r.getOrLoadGlyph("\U00011201", item, u2, 0, 0, curveNone)
 	if len(r.cache) < before+2 {
 		t.Errorf("unshaped text-path glyphs unexpectedly shared a cache entry "+
 			"(%d -> %d); text path must key per codepoint", before, len(r.cache))

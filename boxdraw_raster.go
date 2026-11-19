@@ -7,7 +7,9 @@ package glyph
 // cell box, with a zero left bearing and a top bearing that seats the cell
 // bottom on baseline+descent, so the emitted quad covers the cell and
 // nothing else.
-func loadBoxGlyphFT(atlas *GlyphAtlas, m boxMetrics) (LoadGlyphResult, error) {
+func loadBoxGlyphFT(atlas *GlyphAtlas, m boxMetrics,
+	curve coverageCurve) (LoadGlyphResult, error) {
+
 	if m.cellW < 1 || m.cellH < 1 {
 		return LoadGlyphResult{}, nil
 	}
@@ -39,5 +41,6 @@ func loadBoxGlyphFT(atlas *GlyphAtlas, m boxMetrics) (LoadGlyphResult, error) {
 		h:    m.cellH,
 		left: 0,
 		top:  m.top,
-	})
+		mono: true,
+	}, curve)
 }

@@ -35,7 +35,7 @@ func TestBoxGlyphIsCellSized(t *testing.T) {
 	r := newBoxTestRenderer(t)
 	item, g := boxTestItem("─")
 
-	cg := r.getOrLoadGlyph("─", item, g, 0, 0)
+	cg := r.getOrLoadGlyph("─", item, g, 0, 0, curveNone)
 	if cg.Width != 11 || cg.Height != 23 {
 		t.Fatalf("glyph is %dx%d, want 11x23", cg.Width, cg.Height)
 	}
@@ -54,7 +54,7 @@ func TestBoxGlyphCacheIgnoresBin(t *testing.T) {
 	before := len(r.cache)
 	var first CachedGlyph
 	for bin := range SubpixelBins {
-		cg := r.getOrLoadGlyph("│", item, g, bin, 0)
+		cg := r.getOrLoadGlyph("│", item, g, bin, 0, curveNone)
 		if bin == 0 {
 			first = cg
 		} else if cg != first {
@@ -129,14 +129,14 @@ func BenchmarkBoxGlyphSynthesis(b *testing.B) {
 	if !ok {
 		b.Fatal("metrics did not resolve")
 	}
-	if _, err := loadBoxGlyphFT(r.atlas, m); err != nil {
+	if _, err := loadBoxGlyphFT(r.atlas, m, curveNone); err != nil {
 		b.Fatal(err)
 	}
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		if _, err := loadBoxGlyphFT(r.atlas, m); err != nil {
+		if _, err := loadBoxGlyphFT(r.atlas, m, curveNone); err != nil {
 			b.Fatal(err)
 		}
 	}

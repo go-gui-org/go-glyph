@@ -21,8 +21,13 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 
 	hasGradient := gradient != nil && len(gradient.Stops) > 0
 	var ext gradientExtents
+	// gradCurve is the coverage curve for gradient-tinted fills. One curve
+	// serves the whole draw (from the mean stop color), so a gradient does
+	// not split one glyph into an atlas entry per color band.
+	gradCurve := curveNone
 	if hasGradient {
 		ext = layoutGradientExtents(&layout)
+		gradCurve = gradientCurve(gradient.Stops)
 	}
 
 	isIdentity := transform.IsIdentity()
@@ -68,6 +73,8 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		if !item.HasStroke || item.UseOriginalColor {
 			continue
 		}
+		// One curve per item: curveFor costs three pow calls, too much per glyph.
+		strokeCurve := curveFor(item.StrokeColor)
 		// Strokes use the same subpixel bin as the fill of the same
 		// glyph, so the outline and the fill snap to the same pixel.
 		cx := float32(item.X)
@@ -85,7 +92,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 			_, _, bin := r.computeDrawOrigin(
 				penX+cx+float32(g.XOffset), penY+cy-float32(g.YOffset))
 			strokes[i] = r.getOrLoadGlyph(layout.Text, item, g, bin,
-				item.StrokeWidth)
+				item.StrokeWidth, strokeCurve)
 			r.touchPage(strokes[i])
 			cx += float32(g.XAdvance)
 			cy -= float32(g.YAdvance)
@@ -95,6 +102,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 		if item.HasStroke && item.Color.A == 0 {
 			continue
 		}
+		curve := fillCurve(item, hasGradient, gradCurve) // once per item, not per glyph
 		cx := float32(item.X)
 		cy := float32(item.Y)
 		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
@@ -112,7 +120,7 @@ func (r *Renderer) drawLayoutImpl(layout Layout, x, y float32,
 			if item.UseOriginalColor {
 				bin = 0
 			}
-			fills[i] = r.getOrLoadGlyph(layout.Text, item, g, bin, 0)
+			fills[i] = r.getOrLoadGlyph(layout.Text, item, g, bin, 0, curve)
 			r.touchPage(fills[i])
 			cx += float32(g.XAdvance)
 			cy -= float32(g.YAdvance)
@@ -473,4 +481,21 @@ func clamp01(v float32) float32 {
 		return 0
 	}
 	return max(0, min(1, v))
+}
+
+// fillCurve returns the coverage curve for a fill glyph of item. It must
+// match the color the emit pass tints the quad with: the gradient color
+// when a gradient applies, white (no tint) for original-color glyphs, and
+// item.Color otherwise.
+func fillCurve(item Item, hasGradient bool, gradCurve coverageCurve) coverageCurve {
+	switch {
+	case item.UseOriginalColor:
+		// Color glyphs are not remapped. A mono fallback drawn for an emoji
+		// cluster keeps raw coverage too, as it did before issue #189.
+		return curveNone
+	case hasGradient:
+		return gradCurve
+	default:
+		return curveFor(item.Color)
+	}
 }
