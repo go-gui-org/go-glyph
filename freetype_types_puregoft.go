@@ -53,6 +53,9 @@ type cachedFace struct {
 	// sbix marks an Apple sbix bitmap font. CoreText draws its glyphs
 	// lower than the table's bearings say (see sbixBaselineDrop).
 	sbix bool
+	// typo holds the OS/2 typo metrics when the line box should come from
+	// them (see preferTypoLineBox); zero otherwise.
+	typo typoMetrics
 	// cap is the face's cap height in em units, measured lazily by capEm for
 	// the fallback fit scale; capMeasured distinguishes "not yet measured"
 	// from "measured, this face has no cap height".
@@ -346,8 +349,67 @@ func parseFace(path string) (cf *cachedFace, size int64) {
 		upem:  face.Upem(),
 		color: hasColorTable(ld),
 		sbix:  slices.Contains(ld.Tables(), sbixTag),
+		typo:  parseTypoLineBox(ld, face),
 		axes:  parseVarAxes(ld),
 	}, size
+}
+
+// typoMetrics are a face's OS/2 sTypoAscender, sTypoDescender (positive,
+// below the baseline) and sTypoLineGap in font units. ok is false when the
+// face has none worth using.
+type typoMetrics struct {
+	asc, desc, gap float64
+	ok             bool
+}
+
+// fsUseTypoMetrics is the OS/2 fsSelection USE_TYPO_METRICS bit.
+const fsUseTypoMetrics = 1 << 7
+
+// minTypoBoxEm is the smallest typo ascent+descent, in em, taken as real.
+// The spec asks for about 1 em; less marks placeholder values, which would
+// put the baseline far too high.
+const minTypoBoxEm = 0.75
+
+// parseTypoLineBox returns the face's typo metrics when preferTypoLineBox is
+// set and the face does not set USE_TYPO_METRICS (go-text already honors the
+// bit). Segoe UI is the motivating case: its hhea ascent is inflated to clear
+// stacked diacritics, making a 1.33 em line where the typo metrics give
+// 1.07 em (issue #195).
+func parseTypoLineBox(ld *ot.Loader, face *font.Face) typoMetrics {
+	if !preferTypoLineBox {
+		return typoMetrics{}
+	}
+	raw, err := ld.RawTable(ot.MustNewTag("OS/2"))
+	if err != nil {
+		return typoMetrics{}
+	}
+	os2, _, err := tables.ParseOs2(raw)
+	if err != nil {
+		return typoMetrics{}
+	}
+	hhea := math.Inf(1)
+	if ext, ok := face.FontHExtents(); ok {
+		hhea = float64(ext.Ascender) - float64(ext.Descender) + max(0, float64(ext.LineGap))
+	}
+	return typoFromOS2(os2, hhea, float64(nonZeroUpem(face.Upem())))
+}
+
+// typoFromOS2 returns the typo metrics of os2 when they are usable: the
+// face lacks USE_TYPO_METRICS, the box is at least minTypoBoxEm of upem,
+// and the typo line (asc+desc+gap) is shorter than hhea (font units). The
+// last bound means the switch only ever tightens a line, so broken or
+// hostile typo values cannot grow it past what hhea gave.
+func typoFromOS2(os2 tables.Os2, hhea, upem float64) typoMetrics {
+	if os2.FsSelection&fsUseTypoMetrics != 0 {
+		return typoMetrics{}
+	}
+	asc, desc := float64(os2.STypoAscender), -float64(os2.STypoDescender)
+	gap := max(0, float64(os2.STypoLineGap))
+	if asc <= 0 || desc < 0 || asc+desc < minTypoBoxEm*upem ||
+		!(asc+desc+gap < hhea) {
+		return typoMetrics{}
+	}
+	return typoMetrics{asc: asc, desc: desc, gap: gap, ok: true}
 }
 
 // hasColorTable reports whether the font's table directory contains a
@@ -893,6 +955,11 @@ func (f ftFont) metrics() (ascent, descent, leading float64) {
 		return 0, 0, 0
 	}
 	scale := f.size / float64(nonZeroUpem(f.upem))
+	if f.cf != nil && f.cf.typo.ok {
+		t := f.cf.typo
+		ascent, descent = typoLineBox(t.asc*scale, t.desc*scale, t.gap*scale, f.size)
+		return ascent, descent, 0
+	}
 	ext, ok := f.face.FontHExtents()
 	if !ok {
 		// Fonts lacking hhea/OS-2 typo metrics: approximate.
