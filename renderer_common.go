@@ -31,11 +31,20 @@ type Renderer struct {
 	// by useContextFonts. nil (a Renderer made without a TextSystem) falls
 	// back to the process-wide map; see renderFontPaths.
 	fontPaths map[string]string
+	// hint turns on x-axis stem snapping for outline glyphs (issue 191).
+	// It is on by default; RendererConfig.DisableHinting and SetHinting
+	// turn it off.
+	hint bool
 }
 
 // RendererConfig configures the Renderer.
 type RendererConfig struct {
 	MaxGlyphCacheEntries int
+	// DisableHinting turns off stem snapping. By default, vertical stems of
+	// outline glyphs at render sizes up to 48 px are moved to whole pixels,
+	// so they show as solid columns and not as two gray columns at
+	// fractional scales such as 125%. Advance widths do not change.
+	DisableHinting bool
 }
 
 func NewRenderer(backend DrawBackend, scaleFactor float32) (*Renderer, error) {
@@ -66,6 +75,7 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32,
 		maxCacheEntries: maxEntries,
 		scaleFactor:     safeScale,
 		scaleInv:        1.0 / safeScale,
+		hint:            !cfg.DisableHinting,
 	}, nil
 }
 
@@ -81,6 +91,17 @@ func (r *Renderer) Free() {
 	r.atlas.Free()
 	r.cache = nil
 	r.pageKeys = nil
+}
+
+// SetHinting turns stem snapping on or off (see
+// RendererConfig.DisableHinting). A change clears the glyph cache, because
+// the cached bitmaps were made with the old setting.
+func (r *Renderer) SetHinting(on bool) {
+	if r.hint == on {
+		return
+	}
+	r.hint = on
+	r.PurgeGlyphCache()
 }
 
 func (r *Renderer) Commit() {

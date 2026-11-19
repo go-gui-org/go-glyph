@@ -191,13 +191,13 @@ func (r *Renderer) getOrLoadGlyph(text string, item Item, g Glyph,
 			return loadBoxGlyphFT(r.atlas, boxM, curve)
 		case byID:
 			return loadGlyphByIDFT(r.atlas, item.FontPath,
-				g.GlyphID, item, strokeWidth, bin, r.scaleFactor, curve)
+				g.GlyphID, item, strokeWidth, bin, r.scaleFactor, curve, r.hint)
 		case strokeWidth > 0:
 			return loadStrokedGlyphFT(r.atlas, r.fontPaths, ch, runText,
-				targetRuneIdx, item, strokeWidth, bin, r.scaleFactor, curve)
+				targetRuneIdx, item, strokeWidth, bin, r.scaleFactor, curve, r.hint)
 		default:
 			return loadGlyphFT(r.atlas, r.fontPaths, ch, runText,
-				targetRuneIdx, item, bin, r.scaleFactor, curve)
+				targetRuneIdx, item, bin, r.scaleFactor, curve, r.hint)
 		}
 	})
 	if loadErr != nil {

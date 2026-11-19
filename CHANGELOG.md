@@ -8,7 +8,23 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **`RendererConfig.DisableHinting`, `Renderer.SetHinting`,
+  `TextSystem.SetHinting`.** Turn off the stem snapping described below. A
+  change clears the glyph cache. No effect on WASM.
+
 ### Fixed
+
+- Vertical stems are now sharp at fractional scales such as 125%, not spread
+  over two gray columns (#191). The pure-Go raster path did not align stems to
+  the pixel grid. Light x-axis hinting now finds the vertical stems of each
+  outline glyph and moves them to the pixel grid. A stem within 0.25 px of a
+  whole width is rounded to it. Any other stem keeps its width, so letters keep
+  their weight. Only its left edge moves to the grid. The rest of the outline
+  moves by linear interpolation. Only the bitmap changes: advance widths, layout
+  and caret positions stay the same. Hinting is on by default for render sizes
+  up to 48 px. Slanted (italic) stems, color glyphs and WASM are not changed.
 
 - Light text on a dark background no longer looks thin, dim and soft (#189). The
   pure-Go raster path wrote raw glyph coverage. The old Windows GDI backend

@@ -176,6 +176,15 @@ func (ts *TextSystem) Purge() {
 	}
 }
 
+// SetHinting turns stem snapping on or off for native outline text (see
+// RendererConfig.DisableHinting). It is on by default. A change clears the
+// glyph cache. It has no effect on WASM.
+func (ts *TextSystem) SetHinting(on bool) {
+	if ts.renderer != nil {
+		ts.renderer.SetHinting(on)
+	}
+}
+
 // AddFontFile registers a font file (TTF/OTF).
 // Clears the layout cache to prevent stale FT_Face pointers.
 func (ts *TextSystem) AddFontFile(path string) error {
