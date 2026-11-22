@@ -29,8 +29,13 @@ type Renderer struct {
 // RendererConfig configures the Renderer.
 type RendererConfig struct {
 	MaxGlyphCacheEntries int
-	// DisableHinting turns off stem snapping on the native path. The
+	// EnableHinting turns on stem snapping on the native path. The
 	// browser rasterizes WASM text, so this has no effect there.
+	EnableHinting bool
+	// DisableHinting turns off stem snapping. It wins over EnableHinting.
+	//
+	// Deprecated: hinting is off by default since v1.29.0, so this field
+	// is not needed. Use EnableHinting to turn hinting on.
 	DisableHinting bool
 }
 
@@ -62,7 +67,7 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32,
 		maxCacheEntries: maxEntries,
 		scaleFactor:     safeScale,
 		scaleInv:        1.0 / safeScale,
-		hint:            !cfg.DisableHinting,
+		hint:            cfg.EnableHinting && !cfg.DisableHinting,
 	}, nil
 }
 

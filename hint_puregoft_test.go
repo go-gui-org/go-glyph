@@ -268,21 +268,32 @@ func TestHintRealFontStemEveryBin(t *testing.T) {
 	}
 }
 
-// TestRendererDisableHinting checks the RendererConfig opt-out and the
-// SetHinting switch.
-func TestRendererDisableHinting(t *testing.T) {
-	r, err := NewRendererWithConfig(newMockBackend(), 1, 256, 256,
-		RendererConfig{DisableHinting: true})
-	if err != nil {
-		t.Fatal(err)
+// TestRendererHintingConfig checks the RendererConfig switches and
+// SetHinting. Hinting is off by default (go-gui#1334): the x-only snap
+// moves stems but not advances, so straight and curved letters in one word
+// look out of step (#198).
+func TestRendererHintingConfig(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  RendererConfig
+		want bool
+	}{
+		{"default", RendererConfig{}, false},
+		{"EnableHinting", RendererConfig{EnableHinting: true}, true},
+		{"DisableHinting", RendererConfig{DisableHinting: true}, false},
+		// The deprecated opt-out wins, so a caller that set it for v1.28.0
+		// keeps unhinted text whatever else it sets.
+		{"both", RendererConfig{EnableHinting: true, DisableHinting: true}, false},
 	}
-	defer r.Free()
-	if r.hint {
-		t.Error("DisableHinting: hint is on")
-	}
-	r.SetHinting(true)
-	if !r.hint {
-		t.Error("SetHinting(true): hint is off")
+	for _, tc := range cases {
+		r, err := NewRendererWithConfig(newMockBackend(), 1, 256, 256, tc.cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.hint != tc.want {
+			t.Errorf("%s: hint = %v, want %v", tc.name, r.hint, tc.want)
+		}
+		r.Free()
 	}
 
 	def, err := NewRenderer(newMockBackend(), 1)
@@ -290,7 +301,15 @@ func TestRendererDisableHinting(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer def.Free()
+	if def.hint {
+		t.Error("default Renderer: hint is on, want off")
+	}
+	def.SetHinting(true)
 	if !def.hint {
-		t.Error("default Renderer: hint is off, want on")
+		t.Error("SetHinting(true): hint is off")
+	}
+	def.SetHinting(false)
+	if def.hint {
+		t.Error("SetHinting(false): hint is on")
 	}
 }

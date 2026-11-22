@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`RendererConfig.EnableHinting`.** Turns on the stem snapping that v1.28.0
+  added (#191). `Renderer.SetHinting` and `TextSystem.SetHinting` still switch
+  it at run time.
+
+### Changed
+
+- **Stem hinting is off by default (go-gui-org/go-gui#1334).** v1.28.0 turned it
+  on. The snap moves only the x position of a stem and not the advances, so
+  straight and curved letters in one word look out of step and bowls lean
+  (#198). Text now keeps its exact outlines unless the caller asks for hinting.
+  To keep the v1.28.0 look, set `RendererConfig{EnableHinting: true}` or call
+  `TextSystem.SetHinting(true)`. go-gui sets the value for each window, so its
+  apps do not depend on this default.
+
+### Deprecated
+
+- **`RendererConfig.DisableHinting`.** Hinting is off by default, so the field
+  is not needed. It still works and wins over `EnableHinting`, so a caller that
+  set it for v1.28.0 keeps unhinted text.
+
 ## [v1.28.0] - 2026-11-19
 
 ### Added
