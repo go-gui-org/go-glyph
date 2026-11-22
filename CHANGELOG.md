@@ -23,7 +23,9 @@ and this project adheres to
   `SetHinting(true)` now snap stems only when the scale factor is fractional,
   such as 1.25 or 1.5, the case hinting was added for (#191). At a whole scale
   (1, 2) text keeps the raw outline, which looked better there
-  (go-gui-org/go-gui#1334).
+  (go-gui-org/go-gui#1334). Hinted text still has uneven letter spacing: the
+  snap moves the ink but not the advances, so a gap can be up to about 1 px off
+  the font's spacing. This is now a documented limit of `EnableHinting`.
 
 ## [v1.29.0] - 2026-11-22
 
