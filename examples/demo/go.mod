@@ -3,7 +3,7 @@ module github.com/go-gui-org/go-glyph/examples/demo
 go 1.26.0
 
 require (
-	github.com/go-gui-org/go-glyph v1.27.0
+	github.com/go-gui-org/go-glyph v1.29.1
 	github.com/go-gui-org/go-glyph/backend/ebitengine v1.0.0
 	github.com/hajimehoshi/ebiten/v2 v2.10.6
 )

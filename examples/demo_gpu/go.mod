@@ -3,7 +3,7 @@ module github.com/go-gui-org/go-glyph/examples/demo_gpu
 go 1.26.0
 
 require (
-	github.com/go-gui-org/go-glyph v1.27.0
+	github.com/go-gui-org/go-glyph v1.29.1
 	github.com/veandco/go-sdl2 v0.4.40
 )
 
