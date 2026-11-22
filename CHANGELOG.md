@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Hinted bowls no longer lean (#198).** With hinting on, a stem whose width
+  was not near a whole pixel kept its width and snapped only its left edge. In
+  an "o" the left wall then had a crisp outer edge and the right wall a crisp
+  inner edge, so the letter leaned. Both stem edges now snap: the width rounds
+  to whole pixels (at least 1) and the stem stays centered. Stems can draw
+  slightly thinner or heavier than the raw outline.
+
+### Changed
+
+- **Hinting runs only at fractional scales (#198).** `EnableHinting` and
+  `SetHinting(true)` now snap stems only when the scale factor is fractional,
+  such as 1.25 or 1.5, the case hinting was added for (#191). At a whole scale
+  (1, 2) text keeps the raw outline, which looked better there
+  (go-gui-org/go-gui#1334).
+
 ## [v1.29.0] - 2026-11-22
 
 ### Added

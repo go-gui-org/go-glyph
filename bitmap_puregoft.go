@@ -98,7 +98,7 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	paths := fontFallbackPaths(pathBuf[:0], renderFontPaths(fontPaths), family,
 		bold, italic)
 	subpixelShift := float64(subpixelBin) / 4.0
-	ro := rasterOpts{hint: hint, darken: stemDarkening, curve: curve,
+	ro := rasterOpts{hint: hintAtScale(hint, scaleFactor), darken: stemDarkening, curve: curve,
 		vary: varSpecFor(item.Style, scaleFactor)}
 
 	var res *rasterResult
@@ -185,7 +185,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	paths := fontFallbackPaths(pathBuf[:0], renderFontPaths(fontPaths), family,
 		bold, italic)
 	subpixelShift := float64(subpixelBin) / 4.0
-	ro := rasterOpts{hint: hint, darken: stemDarkening, curve: curve,
+	ro := rasterOpts{hint: hintAtScale(hint, scaleFactor), darken: stemDarkening, curve: curve,
 		vary: varSpecFor(item.Style, scaleFactor)}
 	sw := float64(strokeWidth)
 
@@ -235,7 +235,7 @@ func loadGlyphByIDFT(atlas *GlyphAtlas, path string, gid uint32, item Item,
 	_, fontSize, _, _ := resolveFTFontParams(item.Style, scaleFactor)
 	fontSize *= itemFontScale(item)
 	subpixelShift := float64(subpixelBin) / 4.0
-	ro := rasterOpts{hint: hint, darken: stemDarkening, curve: curve,
+	ro := rasterOpts{hint: hintAtScale(hint, scaleFactor), darken: stemDarkening, curve: curve,
 		vary: varSpecFor(item.Style, scaleFactor)}
 	res := renderGlyphByID(atlas, path, fontSize, float64(strokeWidth),
 		subpixelShift, gid, ro)

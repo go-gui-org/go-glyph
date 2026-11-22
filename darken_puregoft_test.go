@@ -178,9 +178,10 @@ func TestStemDarkeningInk(t *testing.T) {
 	const tolerance = 0.08
 	for size, want := range coreGraphics {
 		for _, c := range []coverageCurve{curveNone, curveMid, curveLight} {
-			// vary as a Renderer at scale 1 sets it: the auto opsz instance,
-			// which is what Core Graphics draws.
-			ro := rasterOpts{hint: true, darken: true, curve: c,
+			// vary and hint as a Renderer at scale 1 sets them: the auto opsz
+			// instance, which is what Core Graphics draws, and no hinting,
+			// because hinting runs only at fractional scales (#198).
+			ro := rasterOpts{hint: hintAtScale(true, 1), darken: true, curve: c,
 				vary: varSpec{scale: 1}}
 			res, _ := renderMonoRun(nil, path, size, 0, "Hamburgefonstiv", "", 0,
 				false, ro)
