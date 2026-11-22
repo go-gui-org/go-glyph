@@ -98,10 +98,11 @@ func TestHintSnapsStemToOnePixel(t *testing.T) {
 	}
 }
 
-// TestHintRoundsStemWidth checks the snapped width. A width within
-// hintWidthSnap of a whole number is rounded to it (all solid, no gray). A
-// hairline grows to one pixel. Any other width is kept: the left edge is
-// solid and only the right edge is gray.
+// TestHintRoundsStemWidth checks the snapped width. Every stem is rounded to
+// a whole number of pixels (all solid, no gray), and a hairline grows to one
+// pixel. Before #198 a width far from a whole pixel kept its raw width with
+// only the left edge snapped; that made bowls lean (see
+// TestHintBowlWallsAreSymmetric).
 func TestHintRoundsStemWidth(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -112,8 +113,8 @@ func TestHintRoundsStemWidth(t *testing.T) {
 		{"near 2px (2.2)", 0.3, 2.5, 2, 0},
 		{"near 3px (2.8)", 0.5, 3.3, 3, 0},
 		{"hairline 0.6px", 0.5, 1.1, 1, 0},
-		{"between (1.4)", 0.3, 1.7, 1, 1},
-		{"between (2.5)", 0.6, 3.1, 2, 1},
+		{"between (1.4)", 0.3, 1.7, 1, 0},
+		{"between (2.5)", 0.6, 3.1, 3, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -128,24 +129,80 @@ func TestHintRoundsStemWidth(t *testing.T) {
 	}
 }
 
-// TestHintKeepsStemWeight is the regression test for stems that looked too
-// thin: rounding a 1.4 px stem down to 1 px removed 30% of its ink, so 'l'
-// and 'i' looked thin next to stems rounded up. The total coverage of a
-// stem whose width is not near a whole pixel must stay within 5% of the
-// unhinted coverage.
-func TestHintKeepsStemWeight(t *testing.T) {
-	for _, w := range []float64{1.4, 1.5, 1.6, 2.4} {
-		segs := rectContour(nil, 0.3, 0.3+w, true)
-		sum := func(hint bool) (s int) {
-			for _, a := range midRowAlpha(rasterHintTest(t, segs, hintTestSize, hint)) {
-				s += int(a)
-			}
-			return s
+// inkRuns splits a row into its runs of ink (alpha > 5), left to right.
+func inkRuns(alpha []byte) [][]byte {
+	var runs [][]byte
+	start := -1
+	for c, a := range alpha {
+		switch {
+		case a > 5 && start < 0:
+			start = c
+		case a <= 5 && start >= 0:
+			runs = append(runs, alpha[start:c])
+			start = -1
 		}
-		raw, got := sum(false), sum(true)
-		if d := float64(got-raw) / float64(raw); d < -0.05 || d > 0.05 {
-			t.Errorf("w=%.1f: hinted ink %d vs raw %d (%+.0f%%), want within 5%%",
-				w, got, raw, d*100)
+	}
+	if start >= 0 {
+		runs = append(runs, alpha[start:])
+	}
+	return runs
+}
+
+// TestHintBowlWallsAreSymmetric is the regression test for #198: the "o" in
+// "Logging" had a dark right wall and a faint left wall, so it leaned. A bowl
+// is an outer contour with a counter inside it. Each wall pairs into a stem
+// (outer edge with inner edge). When only the left edge of each stem was
+// snapped, the left wall got a crisp outer edge and the right wall a crisp
+// inner edge, so the two walls did not mirror each other. The hinted walls
+// must be mirror images.
+func TestHintBowlWallsAreSymmetric(t *testing.T) {
+	for _, w := range []float64{1.2, 1.4, 1.6} {
+		// Outer box 0.3..6.3 px, counter w px in from each side. The
+		// counter runs the other way (cw=false), as a real counter does.
+		segs := rectContour(nil, 0.3, 6.3, true)
+		segs = rectContour(segs, 0.3+w, 6.3-w, false)
+		row := midRowAlpha(rasterHintTest(t, segs, hintTestSize, true))
+		runs := inkRuns(row)
+		if len(runs) != 2 {
+			t.Fatalf("w=%.1f: %d ink runs, want 2 walls (row %v)", w, len(runs), row)
+		}
+		left, right := runs[0], runs[1]
+		if len(left) != len(right) {
+			t.Errorf("w=%.1f: wall widths %d and %d differ (row %v)",
+				w, len(left), len(right), row)
+			continue
+		}
+		for i := range left {
+			d := int(left[i]) - int(right[len(right)-1-i])
+			if d < -3 || d > 3 {
+				t.Errorf("w=%.1f: walls are not mirror images: left %v right %v",
+					w, left, right)
+				break
+			}
+		}
+	}
+}
+
+// TestHintAtScale checks the scale gate (#198): hinting runs only at a
+// fractional scale. At a whole scale the reporter preferred the raw outline.
+func TestHintAtScale(t *testing.T) {
+	cases := []struct {
+		hint  bool
+		scale float32
+		want  bool
+	}{
+		{true, 1, false},
+		{true, 2, false},
+		{true, 1.25, true},
+		{true, 1.5, true},
+		{true, 1.75, true},
+		{false, 1.25, false},
+		{true, 0, false}, // sanitized to 1
+	}
+	for _, tc := range cases {
+		if got := hintAtScale(tc.hint, tc.scale); got != tc.want {
+			t.Errorf("hintAtScale(%v, %v) = %v, want %v",
+				tc.hint, tc.scale, got, tc.want)
 		}
 	}
 }

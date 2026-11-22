@@ -206,31 +206,22 @@ func buildXHint(g placedGlyph, scale, size float64) xHint {
 	return h
 }
 
-// hintWidthSnap is how close (px) a stem width must be to a whole number of
-// pixels to be rounded to it. A stem further from a whole width keeps its
-// raw width, so it keeps its ink: rounding 1.4 px down to 1 px removes 30% of
-// the ink and the letter looks thin next to a 1.6 px stem rounded up to 2.
-const hintWidthSnap = 0.25
-
 // snapStem returns the hinted left and right edges of a stem with raw left
 // edge l and width w (device px).
 //
-// A stem narrower than 1 px grows to 1 px, so hairlines stay visible. A
-// stem near a whole width is rounded to it and centered on the grid: it is
-// fully crisp. Any other stem keeps its width, and only its left edge moves
-// to the grid. The left column is then solid and only the right edge is
-// gray, so the stem is sharp on one side and keeps its weight.
+// The width is rounded to a whole number of pixels (at least 1, so a
+// hairline stays visible) and the stem is centered on its raw center, then
+// put on the grid. Both edges land on pixel boundaries, so the stem is solid
+// with no gray column.
+//
+// Before #198 a width far from a whole pixel kept its raw width and only the
+// left edge moved to the grid, to keep the stem's ink. That made bowls lean:
+// in an "o" the left wall got a crisp outer edge and the right wall a crisp
+// inner edge, so the two walls did not mirror each other. Both edges now snap.
+// The cost is weight: a 1.4 px stem draws as 1 px. That is the trade classic
+// x-stem hinting makes too.
 func snapStem(l, w float64) (sl, sr float64) {
-	sw := w
-	switch rw := math.Round(w); {
-	case w < 1:
-		sw = 1
-	case math.Abs(w-rw) <= hintWidthSnap:
-		sw = rw
-	default:
-		sl = math.Round(l)
-		return sl, sl + sw
-	}
+	sw := math.Max(1, math.Round(w))
 	sl = math.Round(l + (w-sw)/2)
 	return sl, sl + sw
 }
@@ -287,4 +278,15 @@ func outerContourClockwise(segs []font.Segment) bool {
 	closeContour()
 	// A positive shoelace sum is counter-clockwise in Y-up space.
 	return best <= 0
+}
+
+// hintAtScale reports whether a glyph loaded at scaleFactor gets stem hinting
+// when the renderer asks for it (hint). Hinting runs only at a fractional
+// scale such as 125% or 150% (#198), the case it was added for (issue 191).
+// At a whole scale the x-only snap moves ink but not advances, so spacing
+// looks uneven, and the go-gui#1334 reporter preferred the raw outline there.
+// An invalid scale counts as 1, as it does everywhere else (sanitizeScale).
+func hintAtScale(hint bool, scaleFactor float32) bool {
+	s := float64(sanitizeScale(scaleFactor))
+	return hint && s != math.Trunc(s)
 }

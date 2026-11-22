@@ -40,12 +40,14 @@ type Renderer struct {
 // RendererConfig configures the Renderer.
 type RendererConfig struct {
 	MaxGlyphCacheEntries int
-	// EnableHinting turns on stem snapping. Vertical stems of outline
-	// glyphs at render sizes up to 48 px then move to whole pixels, so they
-	// show as solid columns and not as two gray columns at fractional
-	// scales such as 125%. Advance widths do not change. Hinting is off by
-	// default: the snap moves only the stems and not the advances, so
-	// straight and curved letters in one word can look out of step (#198).
+	// EnableHinting turns on stem snapping at fractional scales such as
+	// 125% and 150%. Vertical stems of outline glyphs at render sizes up to
+	// 48 px then move to whole pixels, so they show as solid columns and
+	// not as two gray columns. At a whole scale (100%, 200%) it does
+	// nothing: there the raw outline looks better (#198). Advance widths do
+	// not change. Hinting is off by default: the snap moves only the stems
+	// and not the advances, so straight and curved letters in one word can
+	// look out of step (#198).
 	EnableHinting bool
 	// DisableHinting turns off stem snapping. It wins over EnableHinting.
 	//
