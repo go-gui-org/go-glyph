@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.29.1] - 2026-11-22
+
 ### Fixed
 
 - **Hinted bowls no longer lean (#198).** With hinting on, a stem whose width
