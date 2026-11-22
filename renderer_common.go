@@ -32,18 +32,25 @@ type Renderer struct {
 	// back to the process-wide map; see renderFontPaths.
 	fontPaths map[string]string
 	// hint turns on x-axis stem snapping for outline glyphs (issue 191).
-	// It is on by default; RendererConfig.DisableHinting and SetHinting
-	// turn it off.
+	// It is off by default; RendererConfig.EnableHinting and SetHinting
+	// turn it on.
 	hint bool
 }
 
 // RendererConfig configures the Renderer.
 type RendererConfig struct {
 	MaxGlyphCacheEntries int
-	// DisableHinting turns off stem snapping. By default, vertical stems of
-	// outline glyphs at render sizes up to 48 px are moved to whole pixels,
-	// so they show as solid columns and not as two gray columns at
-	// fractional scales such as 125%. Advance widths do not change.
+	// EnableHinting turns on stem snapping. Vertical stems of outline
+	// glyphs at render sizes up to 48 px then move to whole pixels, so they
+	// show as solid columns and not as two gray columns at fractional
+	// scales such as 125%. Advance widths do not change. Hinting is off by
+	// default: the snap moves only the stems and not the advances, so
+	// straight and curved letters in one word can look out of step (#198).
+	EnableHinting bool
+	// DisableHinting turns off stem snapping. It wins over EnableHinting.
+	//
+	// Deprecated: hinting is off by default since v1.29.0, so this field
+	// is not needed. Use EnableHinting to turn hinting on.
 	DisableHinting bool
 }
 
@@ -75,7 +82,7 @@ func NewRendererWithConfig(backend DrawBackend, scaleFactor float32,
 		maxCacheEntries: maxEntries,
 		scaleFactor:     safeScale,
 		scaleInv:        1.0 / safeScale,
-		hint:            !cfg.DisableHinting,
+		hint:            cfg.EnableHinting && !cfg.DisableHinting,
 	}, nil
 }
 
@@ -94,7 +101,7 @@ func (r *Renderer) Free() {
 }
 
 // SetHinting turns stem snapping on or off (see
-// RendererConfig.DisableHinting). A change clears the glyph cache, because
+// RendererConfig.EnableHinting). A change clears the glyph cache, because
 // the cached bitmaps were made with the old setting.
 func (r *Renderer) SetHinting(on bool) {
 	if r.hint == on {
