@@ -47,7 +47,9 @@ type RendererConfig struct {
 	// nothing: there the raw outline looks better (#198). Advance widths do
 	// not change. Hinting is off by default: the snap moves only the stems
 	// and not the advances, so straight and curved letters in one word can
-	// look out of step (#198).
+	// look out of step, and the gap between two letters can be up to about
+	// 1 px wider or narrower than the font's spacing (#198). This is a known
+	// limit: fixing it would make the layout depend on hinting.
 	EnableHinting bool
 	// DisableHinting turns off stem snapping. It wins over EnableHinting.
 	//
