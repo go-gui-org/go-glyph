@@ -137,7 +137,7 @@ func loadGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 			// rasterized here is the size it would be if it had been shaped
 			// into its own item.
 			r, rejected := renderMonoRun(atlas, fp,
-				fontSize*textFallbackFitScale(paths, fp), subpixelShift,
+				fontSize*textFallbackFitScale(paths, fp, gridCellEm(item.Style)), subpixelShift,
 				ch, runText, targetRuneIdx, true, ro)
 			if !rejected {
 				res = r
@@ -205,7 +205,7 @@ func loadStrokedGlyphFT(atlas *GlyphAtlas, fontPaths map[string]string,
 	if !covered && res == nil {
 		for _, fp := range orderedTextFallbackPaths(ch) {
 			r, rejected := renderStrokedRun(atlas, fp,
-				fontSize*textFallbackFitScale(paths, fp), sw,
+				fontSize*textFallbackFitScale(paths, fp, gridCellEm(item.Style)), sw,
 				subpixelShift, ch, runText, targetRuneIdx, true, ro)
 			if !rejected {
 				res = r

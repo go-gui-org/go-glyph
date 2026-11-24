@@ -8,6 +8,16 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- **CJK ideographs fill their two terminal cells (#207).** A grid caller (one
+  that sets `TextStyle.CellWidth`) now gets a fallback face with ideographs
+  sized so one ideograph is exactly two cells wide, clamped to 0.8×–1.3×.
+  Before, the face was sized to match the primary font's cap height, so an
+  ideograph filled only 80–85% of its box and a gap showed after each one.
+  Callers that do not set `CellWidth` keep the cap-height fit. Ghostty sizes CJK
+  fallbacks the same way.
+
 ## [v1.29.2] - 2026-11-22
 
 ### Changed
