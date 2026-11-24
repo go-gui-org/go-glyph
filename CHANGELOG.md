@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.29.3] - 2026-11-24
+
 ### Fixed
 
 - **CJK ideographs fill their two terminal cells (#207).** A grid caller (one
