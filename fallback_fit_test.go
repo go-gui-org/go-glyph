@@ -142,7 +142,7 @@ func TestFallbackFitScale(t *testing.T) {
 			base: face(0.9), fb: face(0.3), want: maxFitScale, wantExactly: true},
 	}
 	for _, tt := range tests {
-		got := fallbackFitScale(tt.base, tt.fb)
+		got := fallbackFitScale(tt.base, tt.fb, 0)
 		if tt.wantExactly {
 			if got != tt.want {
 				t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
@@ -153,6 +153,103 @@ func TestFallbackFitScale(t *testing.T) {
 			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
 		}
 	}
+}
+
+// TestFallbackFitScaleGrid covers the grid-caller fit (#207). With a cell width
+// declared, a fallback face that has ideographs is sized so one ideograph spans
+// exactly two cells. The cap-height fit leaves a gap after every ideograph,
+// because a Latin monospace cell is about 0.6 em and an ideograph is 1 em, so 2
+// cells (1.2 em) are wider than the glyph. A face with no ideograph, or a caller
+// with no cell width, keeps the cap-height fit.
+func TestFallbackFitScaleGrid(t *testing.T) {
+	face := func(cap, ic float64) *cachedFace {
+		return &cachedFace{cap: cap, capMeasured: true, ic: ic, icMeasured: true}
+	}
+	base := face(0.73, 0)
+	tests := []struct {
+		name   string
+		fb     *cachedFace
+		cellEm float64
+		want   float64
+	}{
+		{"ideograph fills two cells", face(0.714, 1.0), 0.6, 1.2},
+		{"no cell width keeps cap fit", face(0.671, 1.0), 0, 0.73 / 0.671},
+		{"no ideograph keeps cap fit", face(0.671, 0), 0.6, 0.73 / 0.671},
+		{"NaN cell width keeps cap fit", face(0.671, 1.0), math.NaN(), 0.73 / 0.671},
+		{"Inf cell width keeps cap fit", face(0.671, 1.0), math.Inf(1), 0.73 / 0.671},
+		{"already fills: deadband", face(0.714, 1.0), 0.501, 1},
+		{"clamped at the top", face(0.714, 1.0), 0.7, maxFitScale},
+		{"clamped at the bottom", face(0.714, 1.0), 0.3, minFitScale},
+	}
+	for _, tt := range tests {
+		got := fallbackFitScale(base, tt.fb, tt.cellEm)
+		if diff := got - tt.want; diff > 1e-9 || diff < -1e-9 {
+			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+// TestGridCellEm checks the cell-width-to-em conversion both fit paths share,
+// including the guards that return 0 (no grid fit) for unusable input.
+func TestGridCellEm(t *testing.T) {
+	tests := []struct {
+		name  string
+		style TextStyle
+		want  float64
+	}{
+		{"grid caller", TextStyle{Size: 20, CellWidth: 12}, 0.6},
+		{"no cell width", TextStyle{Size: 20}, 0},
+		{"negative cell width", TextStyle{Size: 20, CellWidth: -1}, 0},
+		{"NaN cell width", TextStyle{Size: 20, CellWidth: float32(math.NaN())}, 0},
+		{"Inf cell width", TextStyle{Size: 20, CellWidth: float32(math.Inf(1))}, 0},
+	}
+	for _, tt := range tests {
+		got := gridCellEm(tt.style)
+		if diff := got - tt.want; diff > 1e-6 || diff < -1e-6 {
+			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+// TestGridLayoutIdeographSpansTwoCells is the end-to-end check for #207: a grid
+// caller lays out an ideograph that only a fallback face covers, and its
+// advance must be two cells — or as close as the fit clamp allows, for a face
+// whose ideograph is far narrower than its em (Apple SD Gothic Neo: 0.865 em).
+// Before the fix the face was cap-height fitted and the advance fell short.
+// Skipped when no fallback face on the host covers U+4E2D.
+func TestGridLayoutIdeographSpansTwoCells(t *testing.T) {
+	ctx, err := NewContext(1.0)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	defer ctx.Free()
+
+	const size, cellW = 20.0, 12.0 // 0.6 em cell: a typical Latin monospace
+	cfg := TextConfig{Style: TextStyle{Size: size, CellWidth: cellW}}
+	layout, err := ctx.LayoutText("\u4E2D", cfg)
+	if err != nil {
+		t.Fatalf("LayoutText: %v", err)
+	}
+	for _, item := range layout.Items {
+		cf := loadCachedFace(item.FontPath)
+		if item.FontScale == 0 || cf == nil || cf.icEm() <= 0 {
+			continue
+		}
+		ic := cf.icEm()
+		fit := min(max(2*cellW/size/ic, minFitScale), maxFitScale)
+		if fit > 1-fitScaleDeadband && fit < 1+fitScaleDeadband {
+			fit = 1
+		}
+		want := size * ic * fit
+		for i := item.GlyphStart; i < item.GlyphStart+item.GlyphCount; i++ {
+			if adv := float64(layout.Glyphs[i].XAdvance); math.Abs(adv-want) > 0.05 {
+				t.Errorf("%s: ideograph advance %v, want %v (two cells %v, fit %v)",
+					item.FontPath, adv, want, 2*cellW, fit)
+			}
+		}
+		return
+	}
+	t.Skip("no scaled CJK fallback on this host; skipping")
 }
 
 // The zero value must read as "unscaled" so every non-fallback item, and any
@@ -196,10 +293,10 @@ func TestCapEmSystemFonts(t *testing.T) {
 		if c0 == 0 {
 			continue
 		}
-		if fit := fallbackFitScale(cf, cf); fit != 1 {
+		if fit := fallbackFitScale(cf, cf, 0); fit != 1 {
 			t.Errorf("%s: identity fit = %v, want 1", p, fit)
 		}
-		if fit := textFallbackFitScale([]string{p}, p); fit != 1 {
+		if fit := textFallbackFitScale([]string{p}, p, 0); fit != 1 {
 			t.Errorf("%s: text-path identity fit = %v, want 1", p, fit)
 		}
 		return // one measurable face is enough

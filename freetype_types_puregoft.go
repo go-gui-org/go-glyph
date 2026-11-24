@@ -61,6 +61,10 @@ type cachedFace struct {
 	// from "measured, this face has no cap height".
 	cap         float64
 	capMeasured bool
+	// ic is the face's ideograph advance in em units, measured lazily by
+	// icEm for the grid fit scale (#207); icMeasured works like capMeasured.
+	ic         float64
+	icMeasured bool
 	// hbPool recycles HarfBuzz shaping fonts. NewFont builds the face's
 	// shaping accelerators and is the single largest source of layout
 	// allocations, so rebuilding one per shape (per line) is wasteful. Each

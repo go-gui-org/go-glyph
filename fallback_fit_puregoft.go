@@ -2,7 +2,10 @@
 
 package glyph
 
-import "sort"
+import (
+	"math"
+	"sort"
+)
 
 // This file holds the two corrections that make a fallback glyph look like it
 // belongs next to the primary font's text:
@@ -22,6 +25,14 @@ import "sort"
 //     so its Latin and symbol glyphs sit far below the primary's cap height
 //     and read as "small". The face is opened at a size scaled by the cap
 //     height ratio instead, which is what kitty and WezTerm do.
+//
+//     A grid caller (a terminal, TextStyle.CellWidth > 0) is different. There
+//     an ideograph owns exactly two cells, and a Latin monospace cell is about
+//     0.6 em, so two cells are 1.2 em while the ideograph is 1 em. At the cap
+//     height size the ideograph fills only 80-85% of its box, and a gap shows
+//     after every one (#207). So for a grid caller a face that has ideographs
+//     is sized so one ideograph is two cells wide. Ghostty does the same
+//     (its ic_width normalization).
 //
 // Both are keyed off data already cached (the coverage cmap, the parsed face),
 // so neither adds a font parse to the layout path.
@@ -136,23 +147,57 @@ const (
 )
 
 // fallbackFitScale returns the multiplier to apply to the primary font's
-// pixel size when opening fallback face fb, so the fallback's capital letters
-// match the primary's. Returns 1 when either cap height is unknown (a face
-// with no 'H'/'M' — pure emoji, pure ideographic) or when the two already
-// agree within the deadband.
-func fallbackFitScale(base, fb *cachedFace) float64 {
+// pixel size when opening fallback face fb.
+//
+// cellEm is the grid cell width in em units of the primary size (gridCellEm),
+// or 0 for a caller that is not a grid. When it is set and fb has an
+// ideograph, the scale makes one ideograph exactly two cells wide. Otherwise
+// the scale makes the fallback's capital letters match the primary's.
+//
+// Returns 1 when the needed measurement is unknown (a face with no 'H'/'M' —
+// pure emoji, pure ideographic — on the cap path) or when the result is
+// already within the deadband.
+func fallbackFitScale(base, fb *cachedFace, cellEm float64) float64 {
 	if base == nil || fb == nil {
 		return 1
 	}
-	baseCap, fbCap := base.capEm(), fb.capEm()
-	if baseCap <= 0 || fbCap <= 0 {
-		return 1
+	var s float64
+	// The NaN/Inf check repeats cellEmAt's guard for callers that pass a
+	// computed cellEm directly: a NaN survives min/max and would reach the
+	// rasterizer as the font size.
+	if ic := fb.icEm(); cellEm > 0 && !math.IsInf(cellEm, 0) && ic > 0 {
+		// Grid fit: two cells over the ideograph advance. Does not depend on
+		// the base face, because the cell already describes it.
+		s = 2 * cellEm / ic
+	} else {
+		baseCap, fbCap := base.capEm(), fb.capEm()
+		if baseCap <= 0 || fbCap <= 0 {
+			return 1
+		}
+		s = baseCap / fbCap
 	}
-	s := baseCap / fbCap
 	if s > 1-fitScaleDeadband && s < 1+fitScaleDeadband {
 		return 1
 	}
 	return min(max(s, minFitScale), maxFitScale)
+}
+
+// gridCellEm returns style's cell width in em units of its font size, the
+// cellEm argument of fallbackFitScale. 0 means "not a grid caller": no cell
+// width, or a size or width that is not a finite positive number. The guard
+// matters because a NaN passes through min/max unchanged and would reach the
+// rasterizer as the font size.
+func gridCellEm(style TextStyle) float64 {
+	return cellEmAt(float64(style.CellWidth), float64(resolveFontSize(style)))
+}
+
+// cellEmAt is gridCellEm for a cell width and a font size that are already in
+// the same unit (both logical px, or both device px).
+func cellEmAt(cellW, size float64) float64 {
+	if !(cellW > 0) || !(size > 0) || math.IsInf(cellW, 0) || math.IsInf(size, 0) {
+		return 0
+	}
+	return cellW / size
 }
 
 // itemFontScale reads an item's fallback fit factor, treating the zero value
@@ -170,12 +215,48 @@ func itemFontScale(item Item) float64 {
 // resolved candidate list. primaryPaths[0] is the requested face; anything
 // after it is already a style/family degradation, so the first entry is the
 // right cap-height reference.
-func textFallbackFitScale(primaryPaths []string, fbPath string) float64 {
+//
+// cellEm is the item style's gridCellEm, so the text path picks the same grid
+// fit as the layout did.
+func textFallbackFitScale(primaryPaths []string, fbPath string, cellEm float64) float64 {
 	if len(primaryPaths) == 0 {
 		return 1
 	}
 	return fallbackFitScale(loadCachedFace(primaryPaths[0]),
-		loadCachedFace(fbPath))
+		loadCachedFace(fbPath), cellEm)
+}
+
+// icProbes are tried in order for the ideograph advance. U+6C34 (水) is the
+// probe Ghostty and CSS (the "ic" unit) use; U+4E2D (中) backs it up. Every
+// CJK face sets the same advance on all ideographs, so one hit is enough.
+var icProbes = [...]rune{0x6C34, 0x4E2D}
+
+// icEm returns the face's ideograph advance in em units, measured once and
+// memoized on the cached face (0 = measured and the face has no ideograph).
+// The locking and panic rules are the same as capEm.
+func (cf *cachedFace) icEm() float64 {
+	if cf.base != nil {
+		return cf.base.icEm()
+	}
+	cf.mu.Lock()
+	defer cf.mu.Unlock()
+	if cf.icMeasured {
+		return cf.ic
+	}
+	cf.icMeasured = true
+	defer func() { _ = recover() }()
+	upem := float64(nonZeroUpem(cf.upem))
+	for _, r := range icProbes {
+		gid, ok := cf.face.NominalGlyph(r)
+		if !ok {
+			continue
+		}
+		if a := float64(cf.face.HorizontalAdvance(gid)) / upem; a > 0 {
+			cf.ic = a
+			return cf.ic
+		}
+	}
+	return 0
 }
 
 // capHeightProbes are tried in order for the cap-height measurement. 'H' and

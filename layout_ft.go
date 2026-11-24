@@ -163,6 +163,8 @@ func (ctx *Context) buildScriptFallbacks(clusters []graphemeCluster,
 	}
 	fontSize := float64(parseSizeFromStyle(cfg.Style)) *
 		float64(ctx.scaleFactor)
+	// Grid callers (CellWidth set) fit ideograph faces to two cells (#207).
+	cellEm := gridCellEm(cfg.Style)
 
 	var overrides *fontOverrides
 	fontByPath := make(map[string]ftFont)
@@ -178,7 +180,7 @@ func (ctx *Context) buildScriptFallbacks(clusters []graphemeCluster,
 	ensureFont := func(path string) ftFont {
 		fb, opened := fontByPath[path]
 		if !opened {
-			fit := fallbackFitScale(baseFont.cf, loadCachedFace(path))
+			fit := fallbackFitScale(baseFont.cf, loadCachedFace(path), cellEm)
 			fb = newFTFontFromPath(ctx.ftLib, path, fontSize*fit, baseFont.vary)
 			fb.fit = fit
 			fontByPath[path] = fb
@@ -564,7 +566,8 @@ func (ctx *Context) LayoutRichText(rt RichText,
 	// tofu. LayoutText solves this in buildScriptFallbacks; the rich-text
 	// path needs the same probe, swapping the run's font for a covering
 	// fallback while keeping the run's size and authored style.
-	fbFonts = ctx.applyRichScriptFallbacks(clusters, overrides, baseFont)
+	fbFonts = ctx.applyRichScriptFallbacks(clusters, overrides, baseFont,
+		float64(cfg.Style.CellWidth)*float64(ctx.scaleFactor))
 
 	layout := ctx.buildLayout(clusters, text, baseFont, cfg, overrides)
 	ctx.scratch.clusters = recycleScratch(clusters)
@@ -612,8 +615,11 @@ func (ctx *Context) LayoutRichText(rt RichText,
 // matches the surrounding text. Returns the opened fallback fonts to close
 // after layout. Emoji clusters (isColor) are left alone: the renderer's color
 // path resolves those by text, not by a shaped glyph id.
+//
+// cellPx is the grid cell width in device px (0 when the caller is not a grid);
+// it selects the two-cell ideograph fit (see fallbackFitScale).
 func (ctx *Context) applyRichScriptFallbacks(clusters []graphemeCluster,
-	overrides *fontOverrides, baseFont ftFont) []ftFont {
+	overrides *fontOverrides, baseFont ftFont, cellPx float64) []ftFont {
 
 	if len(ctx.fallbackPaths) == 0 {
 		return nil
@@ -676,7 +682,10 @@ func (ctx *Context) applyRichScriptFallbacks(clusters []graphemeCluster,
 		// a heading scales off the heading rather than the body text. The
 		// scaled size is part of fontKey, so two runs at different sizes keep
 		// their own faces.
-		fit := fallbackFitScale(runFont.cf, loadCachedFace(res.path))
+		// A grid caller declares the cell once on cfg.Style (see mergeStyles),
+		// so the run's cell in em is that width over the run's own size.
+		fit := fallbackFitScale(runFont.cf, loadCachedFace(res.path),
+			cellEmAt(cellPx, runFont.size))
 		fb := ensureFont(res.path, runFont.size*fit, runFont.vary)
 		if fb.face == nil {
 			continue
