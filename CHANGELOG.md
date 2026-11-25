@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [v1.30.0] - 2026-11-25
+
 ### Added
 
 - **`Layout.LineEndCursorPos` (#206).** Returns the caret at the end of a line
