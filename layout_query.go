@@ -259,15 +259,13 @@ func (l *Layout) GetCursorPos(byteIndex int) (CursorPosition, bool) {
 	}
 
 	// Fallback: find containing line.
-	for _, line := range l.Lines {
+	for i, line := range l.Lines {
 		lineEnd := line.StartIndex + line.Length
 		if byteIndex >= line.StartIndex && byteIndex <= lineEnd {
 			if byteIndex == lineEnd {
-				return CursorPosition{
-					X:      line.Rect.X + line.Rect.Width,
-					Y:      line.Rect.Y,
-					Height: line.Rect.Height,
-				}, true
+				// The end of a line: trailing edge of its last char, so
+				// the left edge of a right-to-left line (issue 206).
+				return l.LineEndCursorPos(i)
 			}
 			if byteIndex == line.StartIndex {
 				return CursorPosition{
@@ -390,16 +388,73 @@ func (l *Layout) closestInColumn(y float32) int {
 // it: every other line end is a cursor position in its own right and is
 // answered before this.
 func (l *Layout) lineEndPos(byteIndex int) (CursorPosition, bool) {
-	for _, line := range l.Lines {
+	for i, line := range l.Lines {
 		if byteIndex == line.StartIndex+line.Length {
-			return CursorPosition{
-				X:      line.Rect.X + line.Rect.Width,
-				Y:      line.Rect.Y,
-				Height: line.Rect.Height,
-			}, true
+			return l.LineEndCursorPos(i)
 		}
 	}
 	return CursorPosition{}, false
+}
+
+// LineEndCursorPos returns the caret geometry at the end of line
+// Lines[lineIndex]. Returns ok=false if lineIndex is out of range.
+//
+// The caret sits on the trailing edge of the last char of the line, in
+// logical order: the right edge of a left-to-right char, the left edge of
+// a right-to-left char. So the end of a Hebrew line is at its left edge.
+// This is the same rule as the caret before a char, which uses the
+// leading edge of that char.
+//
+// Use this to draw the caret at the end of a soft-wrapped line. At a wrap
+// that consumed no space, GetCursorPos gives the start of the next line.
+//
+// On a vertical layout the caret is a horizontal bar, as from GetCursorPos.
+func (l *Layout) LineEndCursorPos(lineIndex int) (CursorPosition, bool) {
+	if lineIndex < 0 || lineIndex >= len(l.Lines) {
+		return CursorPosition{}, false
+	}
+	line := l.Lines[lineIndex]
+	if l.vertical {
+		// A vertical layout is one column, so its caret runs across
+		// the column. verticalCursorPos already answers a line end.
+		return l.verticalCursorPos(line.StartIndex + line.Length), true
+	}
+	return CursorPosition{
+		X:      l.lineEndX(line),
+		Y:      line.Rect.Y,
+		Height: line.Rect.Height,
+	}, true
+}
+
+// lineEndX returns the X of the caret at the end of line: the trailing
+// edge of the char with the highest byte index on the line. A hard line
+// break is not a visible char, so it is skipped. A line with no char
+// rect (an empty line) gives the right edge of the line rect; its width
+// is 0, so that is also its left edge.
+func (l *Layout) lineEndX(line Line) float32 {
+	// The rects of a line are in visual order, not logical order, so
+	// all of them are scanned for the highest byte index. This does
+	// not allocate.
+	lo, hi := l.lineRectRange(line)
+	best := -1
+	for ri := lo; ri < hi; ri++ {
+		idx := l.CharRects[ri].Index
+		if best >= 0 && idx <= l.CharRects[best].Index {
+			continue
+		}
+		if hardLineBreakLenAt(l.Text, idx) > 0 {
+			continue
+		}
+		best = ri
+	}
+	if best < 0 {
+		return line.Rect.X + line.Rect.Width
+	}
+	r := l.CharRects[best].Rect
+	if l.rectIsRTL(best) {
+		return r.X
+	}
+	return r.X + r.Width
 }
 
 // lineForByteIndex returns the line that holds byteIndex. At a soft-wrap
