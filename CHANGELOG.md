@@ -8,6 +8,21 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **`Layout.LineEndCursorPos` (#206).** Returns the caret at the end of a line
+  by line index. Use it to draw the caret at the end of a soft-wrapped line. It
+  uses the right-to-left data of the layout, which callers cannot get.
+
+### Fixed
+
+- **The caret at the end of right-to-left text is on the correct edge (#206).**
+  `GetCursorPos` at the end of a line now puts the caret on the trailing edge of
+  the last char of the line, in logical order. For a Hebrew line that is the
+  left edge. Before, it was always the right edge, so the start and the end of a
+  Hebrew word had the same caret. On a mixed line the caret follows the last
+  char: after `abc אבג` it is at the left edge of `ג`.
+
 ## [v1.29.3] - 2026-11-24
 
 ### Fixed
